@@ -1,6 +1,7 @@
 //! Type generation
 
-use crate::ir::{IR, TypeDef, TypeKind, FieldDef, VariantDef};
+use crate::ir::{IR, TypeDef, TypeKind, TypeRef, FieldDef, VariantDef};
+use std::collections::HashSet;
 
 /// Generate PlexusStreamItem and StreamMetadata - the core transport types
 fn generate_core_transport_types() -> String {
@@ -81,6 +82,56 @@ export class PlexusError extends Error {
 "#.to_string()
 }
 
+/// Collect all RefNamed type references from the IR
+fn collect_all_referenced_types(ir: &IR) -> HashSet<String> {
+    let mut refs = HashSet::new();
+
+    fn collect_from_type_ref(tr: &TypeRef, refs: &mut HashSet<String>) {
+        match tr {
+            TypeRef::RefNamed(name) => {
+                refs.insert(name.clone());
+            }
+            TypeRef::RefArray(inner) => collect_from_type_ref(inner, refs),
+            TypeRef::RefOptional(inner) => collect_from_type_ref(inner, refs),
+            _ => {}
+        }
+    }
+
+    fn collect_from_fields(fields: &[FieldDef], refs: &mut HashSet<String>) {
+        for field in fields {
+            collect_from_type_ref(&field.fd_type, refs);
+        }
+    }
+
+    // Collect from all method params and returns
+    for method in ir.ir_methods.values() {
+        collect_from_type_ref(&method.md_returns, &mut refs);
+        for param in &method.md_params {
+            collect_from_type_ref(&param.pd_type, &mut refs);
+        }
+    }
+
+    // Collect from all type definitions (nested refs)
+    for typedef in ir.ir_types.values() {
+        match &typedef.td_kind {
+            TypeKind::KindStruct { ks_fields } => {
+                collect_from_fields(ks_fields, &mut refs);
+            }
+            TypeKind::KindEnum { ke_variants, .. } => {
+                for variant in ke_variants {
+                    collect_from_fields(&variant.vd_fields, &mut refs);
+                }
+            }
+            TypeKind::KindAlias { ka_target } => {
+                collect_from_type_ref(ka_target, &mut refs);
+            }
+            TypeKind::KindPrimitive { .. } => {}
+        }
+    }
+
+    refs
+}
+
 /// Generate TypeScript types from IR
 pub fn generate_types(ir: &IR) -> String {
     let mut lines = vec![
@@ -92,14 +143,65 @@ pub fn generate_types(ir: &IR) -> String {
         "".to_string(),
     ];
 
+    // Core transport types that should not be generated from IR
+    let core_types: HashSet<String> = [
+        "PlexusStreamItem",
+        "PlexusStreamItem_Data",
+        "PlexusStreamItem_Progress",
+        "PlexusStreamItem_Error",
+        "PlexusStreamItem_Done",
+        "StreamMetadata",
+        "PlexusError",
+    ].iter().map(|s| s.to_string()).collect();
+
+    // Get all types defined in IR
+    let defined_types: HashSet<String> = ir.ir_types.keys().cloned().collect();
+
+    // Collect all referenced types
+    let referenced_types = collect_all_referenced_types(ir);
+
+    // Find missing types (referenced but not defined)
+    let missing_types: Vec<String> = referenced_types
+        .difference(&defined_types)
+        .filter(|name| !core_types.contains(*name))
+        .cloned()
+        .collect();
+
     // Sort types for deterministic output
     let mut type_names: Vec<_> = ir.ir_types.keys().collect();
     type_names.sort();
 
     for name in type_names {
+        // Skip core transport types
+        if core_types.contains(name) {
+            continue;
+        }
         let typedef = &ir.ir_types[name];
         lines.push(generate_typedef(typedef));
         lines.push("".to_string());
+    }
+
+    // Generate stub types for missing references
+    // These are types referenced in method signatures but not defined in IR
+    if !missing_types.is_empty() {
+        lines.push("// === Stub Types (referenced but not defined in schema) ===".to_string());
+        lines.push("// These types are referenced in method signatures but their full definition".to_string());
+        lines.push("// was not included in the IR. They are generated as type aliases to 'unknown'.".to_string());
+        lines.push("// TODO: Fix the IR generation to include these type definitions.".to_string());
+        lines.push("".to_string());
+
+        let mut sorted_missing: Vec<_> = missing_types.into_iter().collect();
+        sorted_missing.sort();
+
+        for name in &sorted_missing {
+            eprintln!("warning: type '{}' referenced but not defined in IR", name);
+        }
+
+        for name in sorted_missing {
+            lines.push(format!("/** Stub type - definition missing from IR */"));
+            lines.push(format!("export type {} = unknown;", to_pascal(&name)));
+            lines.push("".to_string());
+        }
     }
 
     lines.join("\n")
@@ -162,10 +264,17 @@ fn generate_discriminated_union(
         .map(|v| format!("{}_{}", to_pascal(name), to_pascal(&v.vd_name)))
         .collect();
 
+    // Handle empty variants - use `never` type for enums with no variants
+    let union_type = if variant_names.is_empty() {
+        "never".to_string()
+    } else {
+        variant_names.join(" | ")
+    };
+
     lines.push(format!(
         "export type {} = {};",
         to_pascal(name),
-        variant_names.join(" | ")
+        union_type
     ));
     lines.push("".to_string());
 

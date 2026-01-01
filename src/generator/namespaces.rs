@@ -162,7 +162,15 @@ fn collect_type_imports(methods: &[&MethodDef], _ir: &IR) -> Vec<String> {
 }
 
 fn generate_params(params: &[ParamDef]) -> String {
-    params
+    // Sort parameters: required first, then optional
+    // This is required by TypeScript syntax
+    let mut sorted_params = params.to_vec();
+    sorted_params.sort_by_key(|p| (
+        !p.pd_required,  // false (required) sorts before true (optional)
+        p.pd_name.clone() // tie-breaker: alphabetical
+    ));
+
+    sorted_params
         .iter()
         .map(|p| {
             let optional = if p.pd_required { "" } else { "?" };
@@ -179,6 +187,8 @@ fn generate_params_object(params: &[ParamDef]) -> String {
         return "{}".to_string();
     }
 
+    // Note: We don't need to sort here because we're using shorthand syntax
+    // and the order in the object literal doesn't matter
     let fields: Vec<String> = params
         .iter()
         .map(|p| {

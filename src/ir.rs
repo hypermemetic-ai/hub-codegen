@@ -11,6 +11,9 @@ use std::collections::HashMap;
 pub struct IR {
     /// IR format version
     pub ir_version: String,
+    /// Plexus hash for versioning (optional, computed from schema tree)
+    #[serde(default)]
+    pub ir_hash: Option<String>,
     /// Named type definitions (structs, enums, aliases)
     pub ir_types: HashMap<String, TypeDef>,
     /// Method definitions keyed by full path (e.g., "cone.chat")

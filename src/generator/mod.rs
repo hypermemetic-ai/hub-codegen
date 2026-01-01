@@ -3,6 +3,9 @@
 pub mod types;
 pub mod namespaces;
 pub mod rpc;
+pub mod transport;
+pub mod package;
+pub mod tests;
 
 use crate::ir::IR;
 use anyhow::Result;
@@ -49,9 +52,25 @@ pub fn generate(ir: &IR) -> Result<GenerationResult> {
     let namespace_files = namespaces::generate_namespaces(ir);
     files.extend(namespace_files);
 
+    // Generate WebSocket transport implementation (Layer 1 implementation)
+    let transport_content = transport::generate_transport();
+    files.insert("transport.ts".to_string(), transport_content);
+
     // Generate index
     let index = generate_index(ir);
     files.insert("index.ts".to_string(), index);
+
+    // Generate package.json
+    let package_json = package::generate_package_json(ir);
+    files.insert("package.json".to_string(), package_json);
+
+    // Generate tsconfig.json
+    let tsconfig = package::generate_tsconfig();
+    files.insert("tsconfig.json".to_string(), tsconfig);
+
+    // Generate smoke test
+    let smoke_test = tests::generate_smoke_test();
+    files.insert("test/smoke.test.ts".to_string(), smoke_test);
 
     Ok(GenerationResult { files, warnings })
 }
@@ -120,6 +139,9 @@ fn generate_index(ir: &IR) -> String {
         "".to_string(),
         "// RPC client interface (Layer 1)".to_string(),
         "export * from './rpc';".to_string(),
+        "".to_string(),
+        "// WebSocket transport (Layer 1 implementation)".to_string(),
+        "export * from './transport';".to_string(),
         "".to_string(),
         "// Typed client interfaces (Layer 2)".to_string(),
     ];

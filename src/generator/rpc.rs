@@ -9,6 +9,7 @@ pub fn generate_rpc_client() -> String {
 // This is Layer 1: raw RPC that returns PlexusStreamItem
 
 import type { PlexusStreamItem } from './types';
+import { PlexusError } from './types';
 
 /**
  * Raw RPC client interface for hub communication.
