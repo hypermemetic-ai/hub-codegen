@@ -61,6 +61,11 @@ pub enum TypeKind {
         #[serde(rename = "kpFormat")]
         kp_format: Option<String>,
     },
+    /// String enum (simple enum with string values)
+    KindStringEnum {
+        #[serde(rename = "kseValues")]
+        kse_values: Vec<String>,
+    },
 }
 
 /// Field in a struct

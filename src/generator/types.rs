@@ -126,6 +126,7 @@ fn collect_all_referenced_types(ir: &IR) -> HashSet<String> {
                 collect_from_type_ref(ka_target, &mut refs);
             }
             TypeKind::KindPrimitive { .. } => {}
+            TypeKind::KindStringEnum { .. } => {}
         }
     }
 
@@ -220,6 +221,9 @@ fn generate_typedef(typedef: &TypeDef) -> String {
         }
         TypeKind::KindPrimitive { kp_type, kp_format } => {
             generate_primitive_alias(&typedef.td_name, kp_type, kp_format.as_deref(), &typedef.td_description)
+        }
+        TypeKind::KindStringEnum { kse_values } => {
+            generate_string_enum(&typedef.td_name, kse_values, &typedef.td_description)
         }
     }
 }
@@ -331,6 +335,22 @@ fn generate_primitive_alias(
         _ => "unknown",
     };
     lines.push(format!("export type {} = {};", to_pascal(name), ts_type));
+    lines.join("\n")
+}
+
+fn generate_string_enum(name: &str, values: &[String], desc: &Option<String>) -> String {
+    let mut lines = Vec::new();
+    if let Some(d) = desc {
+        lines.push(format!("/** {} */", d));
+    }
+    // Generate TypeScript string literal union: type Foo = "a" | "b" | "c";
+    let union_values: Vec<String> = values.iter().map(|v| format!("\"{}\"", v)).collect();
+    let union_type = if union_values.is_empty() {
+        "never".to_string()
+    } else {
+        union_values.join(" | ")
+    };
+    lines.push(format!("export type {} = {};", to_pascal(name), union_type));
     lines.join("\n")
 }
 

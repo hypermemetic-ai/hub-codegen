@@ -28,16 +28,12 @@ async function main() {
     throw new Error(`Expected 'test message', got '${once.message}'`);
   }
   
-  // Test echo.echo (streaming)
-  console.log('\nTesting echo.echo (streaming)...');
-  let count = 0;
-  for await (const event of echo.echo('streaming test', 3)) {
-    count++;
-    console.log(`  event ${count}:`, event);
-  }
-  console.log(`✓ echo.echo: received ${count} events`);
-  if (count !== 3) {
-    throw new Error(`Expected 3 events, got ${count}`);
+  // Test echo.echo (count, message)
+  console.log('\nTesting echo.echo...');
+  const echoResult = await echo.echo(3, 'test');
+  console.log('✓ echo.echo:', echoResult.type);
+  if (echoResult.type !== 'echo') {
+    throw new Error(`Expected type 'echo', got '${echoResult.type}'`);
   }
   
   rpc.disconnect();
