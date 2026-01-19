@@ -252,7 +252,65 @@ pub fn generate_types_for_namespace(ir: &IR, namespace: &str) -> String {
         lines.push("".to_string());
     }
 
+    // Generate stubs for missing types referenced in this namespace
+    let missing_stubs = collect_missing_types_for_namespace(ir, namespace);
+    if !missing_stubs.is_empty() {
+        lines.push("// === Stub Types (referenced but not defined in schema) ===".to_string());
+        lines.push("".to_string());
+
+        for local_name in missing_stubs {
+            lines.push(format!("/** Stub type - definition missing from IR */"));
+            lines.push(format!("export type {} = unknown;", to_pascal(&local_name)));
+            lines.push("".to_string());
+        }
+    }
+
     lines.join("\n")
+}
+
+/// Collect types that are referenced in a namespace but not defined
+fn collect_missing_types_for_namespace(ir: &IR, namespace: &str) -> Vec<String> {
+    use std::collections::HashSet;
+
+    let mut referenced = HashSet::new();
+    let mut defined = HashSet::new();
+
+    // Collect defined types in this namespace
+    for (qual_name, typedef) in &ir.ir_types {
+        if typedef.td_namespace == namespace {
+            defined.insert(typedef.td_name.clone());
+        }
+    }
+
+    // Collect types referenced by methods in this namespace
+    fn collect_from_type_ref(tr: &TypeRef, namespace: &str, refs: &mut HashSet<String>) {
+        match tr {
+            TypeRef::RefNamed(name) => {
+                let (ns, local) = crate::ir::split_qualified_name(name);
+                // Only track references within the same namespace
+                if ns == Some(namespace) {
+                    refs.insert(local.to_string());
+                }
+            }
+            TypeRef::RefArray(inner) => collect_from_type_ref(inner, namespace, refs),
+            TypeRef::RefOptional(inner) => collect_from_type_ref(inner, namespace, refs),
+            _ => {}
+        }
+    }
+
+    for method in ir.ir_methods.values() {
+        if method.md_namespace == namespace {
+            collect_from_type_ref(&method.md_returns, namespace, &mut referenced);
+            for param in &method.md_params {
+                collect_from_type_ref(&param.pd_type, namespace, &mut referenced);
+            }
+        }
+    }
+
+    // Find missing = referenced - defined
+    let mut missing: Vec<_> = referenced.difference(&defined).cloned().collect();
+    missing.sort();
+    missing
 }
 
 /// Generate all namespace type files
