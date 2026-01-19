@@ -25,20 +25,28 @@ pub fn generate_namespaces(ir: &IR) -> HashMap<String, String> {
         let content = generate_namespace(&namespace, &methods, ir);
         files.insert(format!("{}/client.ts", namespace), content);
 
+        // Check if this namespace has any types
+        let has_types = ir.ir_types.values().any(|td| td.td_namespace == namespace);
+
         // Generate index.ts that re-exports types and client
-        let index_content = generate_namespace_index(&namespace);
+        let index_content = generate_namespace_index(&namespace, has_types);
         files.insert(format!("{}/index.ts", namespace), index_content);
     }
 
     files
 }
 
-fn generate_namespace_index(namespace: &str) -> String {
+fn generate_namespace_index(namespace: &str, has_types: bool) -> String {
+    let types_export = if has_types {
+        "export * from './types';\n"
+    } else {
+        ""
+    };
+
     format!(
         "// Auto-generated namespace module for {}\n\
-         export * from './types';\n\
-         export * from './client';\n",
-        namespace
+         {}export * from './client';\n",
+        namespace, types_export
     )
 }
 

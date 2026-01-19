@@ -200,12 +200,77 @@ pub fn generate_types(ir: &IR) -> String {
 
         for name in sorted_missing {
             lines.push(format!("/** Stub type - definition missing from IR */"));
-            lines.push(format!("export type {} = unknown;", to_pascal(&name)));
+            let (_ns, local) = crate::ir::split_qualified_name(&name);
+            lines.push(format!("export type {} = unknown;", to_pascal(local)));
             lines.push("".to_string());
         }
     }
 
     lines.join("\n")
+}
+
+/// Collect cross-namespace type imports needed for a set of type definitions
+fn collect_cross_namespace_type_imports(typedefs: &[&TypeDef], current_namespace: &str) -> std::collections::BTreeMap<String, Vec<String>> {
+    use std::collections::BTreeMap;
+
+    let mut imports: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+    fn collect_from_type_ref(
+        tr: &TypeRef,
+        imports: &mut BTreeMap<String, Vec<String>>,
+        current_namespace: &str,
+    ) {
+        match tr {
+            TypeRef::RefNamed(name) => {
+                let (ns, local) = crate::ir::split_qualified_name(name);
+                // Only import if from a DIFFERENT namespace
+                if let Some(other_ns) = ns {
+                    if other_ns != current_namespace {
+                        imports
+                            .entry(other_ns.to_string())
+                            .or_default()
+                            .push(to_pascal(local));
+                    }
+                }
+            }
+            TypeRef::RefArray(inner) => collect_from_type_ref(inner, imports, current_namespace),
+            TypeRef::RefOptional(inner) => collect_from_type_ref(inner, imports, current_namespace),
+            _ => {}
+        }
+    }
+
+    fn collect_from_fields(fields: &[FieldDef], imports: &mut BTreeMap<String, Vec<String>>, current_namespace: &str) {
+        for field in fields {
+            collect_from_type_ref(&field.fd_type, imports, current_namespace);
+        }
+    }
+
+    // Collect from all type definitions
+    for typedef in typedefs {
+        match &typedef.td_kind {
+            TypeKind::KindStruct { ks_fields } => {
+                collect_from_fields(ks_fields, &mut imports, current_namespace);
+            }
+            TypeKind::KindEnum { ke_variants, .. } => {
+                for variant in ke_variants {
+                    collect_from_fields(&variant.vd_fields, &mut imports, current_namespace);
+                }
+            }
+            TypeKind::KindAlias { ka_target } => {
+                collect_from_type_ref(ka_target, &mut imports, current_namespace);
+            }
+            TypeKind::KindPrimitive { .. } => {}
+            TypeKind::KindStringEnum { .. } => {}
+        }
+    }
+
+    // Deduplicate and sort type names within each namespace
+    for types in imports.values_mut() {
+        types.sort();
+        types.dedup();
+    }
+
+    imports
 }
 
 /// Generate TypeScript types for a specific namespace
@@ -224,6 +289,23 @@ pub fn generate_types_for_namespace(ir: &IR, namespace: &str) -> String {
 
     // Sort for deterministic output
     namespace_types.sort_by(|a, b| a.td_name.cmp(&b.td_name));
+
+    // Collect cross-namespace type imports
+    let cross_ns_imports = collect_cross_namespace_type_imports(&namespace_types, namespace);
+
+    // Add cross-namespace imports
+    for (other_ns, types) in cross_ns_imports {
+        let import_line = format!(
+            "import type {{ {} }} from '../{}/types';",
+            types.join(", "),
+            other_ns
+        );
+        lines.push(import_line);
+    }
+
+    if !lines.last().map(|s| s.is_empty()).unwrap_or(false) {
+        lines.push("".to_string());
+    }
 
     for typedef in namespace_types {
         lines.push(generate_typedef_in_namespace(typedef, namespace));
