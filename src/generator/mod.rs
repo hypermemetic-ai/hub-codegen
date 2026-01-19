@@ -155,9 +155,11 @@ fn generate_index(ir: &IR) -> String {
     namespaces.sort();
 
     for namespace in namespaces {
-        // Export namespace as a module: import * as Cone from './cone'
+        // Export namespace as a module
+        // e.g., "hyperforge.workspace.repos" → "export * as HyperforgeWorkspaceRepos from './hyperforge/workspace/repos';"
         let pascal_name = to_pascal(namespace);
-        lines.push(format!("export * as {} from './{}';", pascal_name, namespace));
+        let path = namespace.replace('.', "/");
+        lines.push(format!("export * as {} from './{}';", pascal_name, path));
     }
 
     lines.join("\n")
@@ -167,7 +169,7 @@ fn to_pascal(s: &str) -> String {
     let mut result = String::new();
     let mut capitalize = true;
     for c in s.chars() {
-        if c == '_' || c == '-' {
+        if c == '_' || c == '-' || c == '.' {  // Treat dots as word boundaries
             capitalize = true;
         } else if capitalize {
             result.push(c.to_ascii_uppercase());

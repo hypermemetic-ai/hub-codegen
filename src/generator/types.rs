@@ -149,6 +149,15 @@ pub fn generate_types(_ir: &IR) -> String {
     lines.join("\n")
 }
 
+/// Calculate relative import path between two namespaces
+/// e.g., from "hyperforge.workspace.repos" to "io" → "../../../io"
+fn calculate_relative_import_path(from_namespace: &str, to_namespace: &str) -> String {
+    let from_depth = from_namespace.matches('.').count();
+    let ups = "../".repeat(from_depth + 1);  // +1 because we're in types.ts
+    let to_path = to_namespace.replace('.', "/");
+    format!("{}{}", ups, to_path)
+}
+
 /// Collect cross-namespace type imports needed for a set of type definitions
 fn collect_cross_namespace_type_imports(typedefs: &[&TypeDef], current_namespace: &str) -> std::collections::BTreeMap<String, Vec<String>> {
     use std::collections::BTreeMap;
@@ -235,10 +244,11 @@ pub fn generate_types_for_namespace(ir: &IR, namespace: &str) -> String {
 
     // Add cross-namespace imports
     for (other_ns, types) in cross_ns_imports {
+        let relative_path = calculate_relative_import_path(namespace, &other_ns);
         let import_line = format!(
-            "import type {{ {} }} from '../{}/types';",
+            "import type {{ {} }} from '{}/types';",
             types.join(", "),
-            other_ns
+            relative_path
         );
         lines.push(import_line);
     }
@@ -324,7 +334,9 @@ pub fn generate_namespace_types(ir: &IR) -> HashMap<String, String> {
 
     for namespace in namespaces {
         let content = generate_types_for_namespace(ir, namespace);
-        files.insert(format!("{}/types.ts", namespace), content);
+        // Convert dotted namespace to directory path: "hyperforge.workspace.repos" → "hyperforge/workspace/repos"
+        let path = namespace.replace('.', "/");
+        files.insert(format!("{}/types.ts", path), content);
     }
 
     files

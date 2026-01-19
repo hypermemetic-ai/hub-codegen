@@ -23,14 +23,16 @@ pub fn generate_namespaces(ir: &IR) -> HashMap<String, String> {
     // Generate interface and implementation for each namespace
     for (namespace, methods) in methods_by_ns {
         let content = generate_namespace(&namespace, &methods, ir);
-        files.insert(format!("{}/client.ts", namespace), content);
+        // Convert dotted namespace to directory path
+        let path = namespace.replace('.', "/");
+        files.insert(format!("{}/client.ts", path), content);
 
         // Check if this namespace has any types
         let has_types = ir.ir_types.values().any(|td| td.td_namespace == namespace);
 
         // Generate index.ts that re-exports types and client
         let index_content = generate_namespace_index(&namespace, has_types);
-        files.insert(format!("{}/index.ts", namespace), index_content);
+        files.insert(format!("{}/index.ts", path), index_content);
     }
 
     files
@@ -53,6 +55,10 @@ fn generate_namespace_index(namespace: &str, has_types: bool) -> String {
 fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> String {
     let interface_name = to_pascal(namespace);
 
+    // Calculate relative path to root based on namespace depth
+    let depth = namespace.matches('.').count();
+    let to_root = "../".repeat(depth + 1);  // +1 because we're in client.ts
+
     // Collect all type imports needed (local types only - same namespace)
     let mut type_imports = collect_type_imports(methods, namespace);
     type_imports.sort();
@@ -71,8 +77,8 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> Stri
         "// Auto-generated typed client (Layer 2)".to_string(),
         "// Wraps RPC layer and unwraps PlexusStreamItem to domain types".to_string(),
         "".to_string(),
-        "import type { RpcClient } from '../rpc';".to_string(),
-        "import { extractData, collectOne } from '../rpc';".to_string(),
+        format!("import type {{ RpcClient }} from '{}rpc';", to_root),
+        format!("import {{ extractData, collectOne }} from '{}rpc';", to_root),
     ];
 
     if !type_import_str.is_empty() {
@@ -81,10 +87,12 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> Stri
 
     // Add cross-namespace imports
     for (other_ns, types) in cross_ns_imports {
+        let other_path = other_ns.replace('.', "/");
         let import_line = format!(
-            "import type {{ {} }} from '../{}/types';",
+            "import type {{ {} }} from '{}{}/types';",
             types.join(", "),
-            other_ns
+            to_root,
+            other_path
         );
         lines.push(import_line);
     }
