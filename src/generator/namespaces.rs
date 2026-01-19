@@ -56,6 +56,9 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> Stri
         format!("import type {{ {} }} from './types';", type_imports.join(", "))
     };
 
+    // Collect cross-namespace type imports (types from other namespaces)
+    let cross_ns_imports = collect_cross_namespace_imports(methods, namespace);
+
     let mut lines = vec![
         "// Auto-generated typed client (Layer 2)".to_string(),
         "// Wraps RPC layer and unwraps PlexusStreamItem to domain types".to_string(),
@@ -66,6 +69,16 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> Stri
 
     if !type_import_str.is_empty() {
         lines.push(type_import_str);
+    }
+
+    // Add cross-namespace imports
+    for (other_ns, types) in cross_ns_imports {
+        let import_line = format!(
+            "import type {{ {} }} from '../{}/types';",
+            types.join(", "),
+            other_ns
+        );
+        lines.push(import_line);
     }
 
     lines.push("".to_string());
@@ -175,6 +188,55 @@ fn collect_type_imports(methods: &[&MethodDef], namespace: &str) -> Vec<String> 
         for param in &method.md_params {
             collect_from_type_ref(&param.pd_type, &mut imports, namespace);
         }
+    }
+
+    imports
+}
+
+/// Collect types from OTHER namespaces that need to be imported
+/// Returns a map of namespace -> list of type names
+/// Example: { "io" => ["SolarEvent", "BodyType"], "arbor" => ["TreeInfo"] }
+fn collect_cross_namespace_imports(methods: &[&MethodDef], current_namespace: &str) -> std::collections::BTreeMap<String, Vec<String>> {
+    use crate::ir::TypeRef;
+    use std::collections::BTreeMap;
+
+    let mut imports: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+    fn collect_from_type_ref(
+        tr: &TypeRef,
+        imports: &mut BTreeMap<String, Vec<String>>,
+        current_namespace: &str,
+    ) {
+        match tr {
+            TypeRef::RefNamed(name) => {
+                let (ns, local) = split_qualified_name(name);
+                // Only import if from a DIFFERENT namespace
+                if let Some(other_ns) = ns {
+                    if other_ns != current_namespace {
+                        imports
+                            .entry(other_ns.to_string())
+                            .or_default()
+                            .push(to_pascal(local));
+                    }
+                }
+            }
+            TypeRef::RefArray(inner) => collect_from_type_ref(inner, imports, current_namespace),
+            TypeRef::RefOptional(inner) => collect_from_type_ref(inner, imports, current_namespace),
+            _ => {}
+        }
+    }
+
+    for method in methods {
+        collect_from_type_ref(&method.md_returns, &mut imports, current_namespace);
+        for param in &method.md_params {
+            collect_from_type_ref(&param.pd_type, &mut imports, current_namespace);
+        }
+    }
+
+    // Deduplicate and sort type names within each namespace
+    for types in imports.values_mut() {
+        types.sort();
+        types.dedup();
     }
 
     imports

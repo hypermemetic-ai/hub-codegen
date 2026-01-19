@@ -224,17 +224,13 @@ impl TypeRef {
     }
 
     /// Convert to TypeScript type string within a namespace context
-    /// If the type is in the same namespace, use local name; otherwise use qualified
+    /// Always uses local name - cross-namespace types are handled via imports
     pub fn to_ts_in_namespace(&self, current_namespace: &str) -> String {
         match self {
             TypeRef::RefNamed(name) => {
-                let (ns, local) = split_qualified_name(name);
-                if ns == Some(current_namespace) {
-                    to_upper_camel(local)
-                } else {
-                    // Cross-namespace reference - use fully qualified
-                    to_upper_camel(name)
-                }
+                let (_ns, local) = split_qualified_name(name);
+                // Always use local name - imports handle cross-namespace references
+                to_upper_camel(local)
             }
             TypeRef::RefPrimitive(prim, format) => primitive_to_ts(prim, format.as_deref()),
             TypeRef::RefArray(inner) => format!("{}[]", inner.to_ts_in_namespace(current_namespace)),
