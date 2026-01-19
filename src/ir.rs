@@ -27,9 +27,17 @@ pub struct IR {
 #[serde(rename_all = "camelCase")]
 pub struct TypeDef {
     pub td_name: String,
+    pub td_namespace: String,
     #[serde(default)]
     pub td_description: Option<String>,
     pub td_kind: TypeKind,
+}
+
+impl TypeDef {
+    /// Compute the fully qualified type name
+    pub fn full_name(&self) -> String {
+        format!("{}.{}", self.td_namespace, self.td_name)
+    }
 }
 
 /// Kind of type (Haskell-style tagged union)
@@ -203,7 +211,7 @@ pub struct ParamDef {
 // === Helper methods for code generation ===
 
 impl TypeRef {
-    /// Convert to TypeScript type string
+    /// Convert to TypeScript type string (fully qualified - joins namespace.Name as NamespaceName)
     pub fn to_ts(&self) -> String {
         match self {
             TypeRef::RefNamed(name) => to_upper_camel(name),
@@ -212,6 +220,35 @@ impl TypeRef {
             TypeRef::RefOptional(inner) => format!("{} | null", inner.to_ts()),
             TypeRef::RefAny => "unknown".to_string(),     // Intentionally dynamic
             TypeRef::RefUnknown => "unknown".to_string(), // Schema gap (will warn)
+        }
+    }
+
+    /// Convert to TypeScript type string within a namespace context
+    /// If the type is in the same namespace, use local name; otherwise use qualified
+    pub fn to_ts_in_namespace(&self, current_namespace: &str) -> String {
+        match self {
+            TypeRef::RefNamed(name) => {
+                let (ns, local) = split_qualified_name(name);
+                if ns == Some(current_namespace) {
+                    to_upper_camel(local)
+                } else {
+                    // Cross-namespace reference - use fully qualified
+                    to_upper_camel(name)
+                }
+            }
+            TypeRef::RefPrimitive(prim, format) => primitive_to_ts(prim, format.as_deref()),
+            TypeRef::RefArray(inner) => format!("{}[]", inner.to_ts_in_namespace(current_namespace)),
+            TypeRef::RefOptional(inner) => format!("{} | null", inner.to_ts_in_namespace(current_namespace)),
+            TypeRef::RefAny => "unknown".to_string(),
+            TypeRef::RefUnknown => "unknown".to_string(),
+        }
+    }
+
+    /// Get the namespace from a RefNamed, if qualified
+    pub fn get_namespace(&self) -> Option<&str> {
+        match self {
+            TypeRef::RefNamed(name) => split_qualified_name(name).0,
+            _ => None,
         }
     }
 
@@ -231,6 +268,17 @@ impl TypeRef {
     }
 }
 
+/// Split a qualified name into (namespace, local_name)
+/// "cone.ListResult" -> (Some("cone"), "ListResult")
+/// "ListResult" -> (None, "ListResult")
+pub fn split_qualified_name(name: &str) -> (Option<&str>, &str) {
+    if let Some(dot_pos) = name.find('.') {
+        (Some(&name[..dot_pos]), &name[dot_pos + 1..])
+    } else {
+        (None, name)
+    }
+}
+
 fn primitive_to_ts(prim: &str, format: Option<&str>) -> String {
     match (prim, format) {
         ("string", Some("uuid")) => "string".to_string(), // UUID as string
@@ -244,19 +292,25 @@ fn primitive_to_ts(prim: &str, format: Option<&str>) -> String {
 }
 
 fn to_upper_camel(s: &str) -> String {
-    let mut result = String::new();
-    let mut capitalize = true;
-    for c in s.chars() {
-        if c == '_' || c == '-' {
-            capitalize = true;
-        } else if capitalize {
-            result.push(c.to_ascii_uppercase());
-            capitalize = false;
-        } else {
-            result.push(c);
-        }
-    }
-    result
+    // Handle namespace-qualified types like "cone.ListResult" → "ConeListResult"
+    s.split('.')
+        .map(|part| {
+            let mut result = String::new();
+            let mut capitalize = true;
+            for c in part.chars() {
+                if c == '_' || c == '-' {
+                    capitalize = true;
+                } else if capitalize {
+                    result.push(c.to_ascii_uppercase());
+                    capitalize = false;
+                } else {
+                    result.push(c);
+                }
+            }
+            result
+        })
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 #[cfg(test)]

@@ -3,10 +3,11 @@
 //! Generates Layer 2: typed client interfaces and implementations that
 //! unwrap PlexusStreamItem and return domain types.
 
-use crate::ir::{IR, MethodDef, ParamDef};
+use crate::ir::{IR, MethodDef, ParamDef, split_qualified_name};
 use std::collections::HashMap;
 
-/// Generate TypeScript namespace interfaces and implementations
+/// Generate TypeScript namespace client files (one per namespace)
+/// Files are placed in `<namespace>/client.ts`
 pub fn generate_namespaces(ir: &IR) -> HashMap<String, String> {
     let mut files = HashMap::new();
 
@@ -22,17 +23,30 @@ pub fn generate_namespaces(ir: &IR) -> HashMap<String, String> {
     // Generate interface and implementation for each namespace
     for (namespace, methods) in methods_by_ns {
         let content = generate_namespace(&namespace, &methods, ir);
-        files.insert(format!("{}.ts", namespace), content);
+        files.insert(format!("{}/client.ts", namespace), content);
+
+        // Generate index.ts that re-exports types and client
+        let index_content = generate_namespace_index(&namespace);
+        files.insert(format!("{}/index.ts", namespace), index_content);
     }
 
     files
 }
 
-fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR) -> String {
+fn generate_namespace_index(namespace: &str) -> String {
+    format!(
+        "// Auto-generated namespace module for {}\n\
+         export * from './types';\n\
+         export * from './client';\n",
+        namespace
+    )
+}
+
+fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> String {
     let interface_name = to_pascal(namespace);
 
-    // Collect all type imports needed
-    let mut type_imports = collect_type_imports(methods, ir);
+    // Collect all type imports needed (local types only - same namespace)
+    let mut type_imports = collect_type_imports(methods, namespace);
     type_imports.sort();
     type_imports.dedup();
 
@@ -46,8 +60,8 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR) -> Strin
         "// Auto-generated typed client (Layer 2)".to_string(),
         "// Wraps RPC layer and unwraps PlexusStreamItem to domain types".to_string(),
         "".to_string(),
-        "import type { RpcClient } from './rpc';".to_string(),
-        "import { extractData, collectOne } from './rpc';".to_string(),
+        "import type { RpcClient } from '../rpc';".to_string(),
+        "import { extractData, collectOne } from '../rpc';".to_string(),
     ];
 
     if !type_import_str.is_empty() {
@@ -66,8 +80,8 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR) -> Strin
 
     for method in &methods {
         let method_name = to_camel(&method.md_name);
-        let params = generate_params(&method.md_params);
-        let return_type = method.md_returns.to_ts();
+        let params = generate_params(&method.md_params, namespace);
+        let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Streaming methods return AsyncGenerator, non-streaming return Promise
         let full_return = if method.md_streaming {
@@ -94,8 +108,8 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR) -> Strin
     for method in &methods {
         let method_name = to_camel(&method.md_name);
         let full_path = &method.md_full_path;
-        let params_signature = generate_params(&method.md_params);
-        let return_type = method.md_returns.to_ts();
+        let params_signature = generate_params(&method.md_params, namespace);
+        let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Build params object for RPC call
         let params_object = generate_params_object(&method.md_params);
@@ -135,33 +149,38 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR) -> Strin
 }
 
 /// Collect all named types referenced in method params and returns
-fn collect_type_imports(methods: &[&MethodDef], _ir: &IR) -> Vec<String> {
+/// Only includes types from the same namespace (local imports)
+fn collect_type_imports(methods: &[&MethodDef], namespace: &str) -> Vec<String> {
     use crate::ir::TypeRef;
 
     let mut imports = Vec::new();
 
-    fn collect_from_type_ref(tr: &TypeRef, imports: &mut Vec<String>) {
+    fn collect_from_type_ref(tr: &TypeRef, imports: &mut Vec<String>, namespace: &str) {
         match tr {
             TypeRef::RefNamed(name) => {
-                imports.push(to_pascal(name));
+                // Only import if in same namespace
+                let (ns, local) = split_qualified_name(name);
+                if ns == Some(namespace) {
+                    imports.push(to_pascal(local));
+                }
             }
-            TypeRef::RefArray(inner) => collect_from_type_ref(inner, imports),
-            TypeRef::RefOptional(inner) => collect_from_type_ref(inner, imports),
+            TypeRef::RefArray(inner) => collect_from_type_ref(inner, imports, namespace),
+            TypeRef::RefOptional(inner) => collect_from_type_ref(inner, imports, namespace),
             _ => {}
         }
     }
 
     for method in methods {
-        collect_from_type_ref(&method.md_returns, &mut imports);
+        collect_from_type_ref(&method.md_returns, &mut imports, namespace);
         for param in &method.md_params {
-            collect_from_type_ref(&param.pd_type, &mut imports);
+            collect_from_type_ref(&param.pd_type, &mut imports, namespace);
         }
     }
 
     imports
 }
 
-fn generate_params(params: &[ParamDef]) -> String {
+fn generate_params(params: &[ParamDef], namespace: &str) -> String {
     // Sort parameters: required first, then optional
     // This is required by TypeScript syntax
     let mut sorted_params = params.to_vec();
@@ -174,7 +193,7 @@ fn generate_params(params: &[ParamDef]) -> String {
         .iter()
         .map(|p| {
             let optional = if p.pd_required { "" } else { "?" };
-            let ts_type = p.pd_type.to_ts();
+            let ts_type = p.pd_type.to_ts_in_namespace(namespace);
             format!("{}{}: {}", to_camel(&p.pd_name), optional, ts_type)
         })
         .collect::<Vec<_>>()
