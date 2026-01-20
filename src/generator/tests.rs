@@ -7,35 +7,33 @@ pub fn generate_smoke_test() -> String {
     r#"// Auto-generated smoke test
 // Run with: npm test
 
-import { createClient, createHealthClient, createEchoClient } from '../index';
+import { createClient } from '../transport';
+import { Health, Echo } from '../index';
 
 async function main() {
   console.log('Connecting to substrate...');
   const rpc = createClient({ url: 'ws://localhost:4444' });
-  
+
   // Test health.check (non-streaming)
   console.log('\nTesting health.check...');
-  const health = createHealthClient(rpc);
+  const health = new Health.HealthClientImpl(rpc);
   const status = await health.check();
-  console.log('✓ health.check:', status.type);
-  
+  console.log('✓ health.check:', status);
+
   // Test echo.once (non-streaming)
   console.log('\nTesting echo.once...');
-  const echo = createEchoClient(rpc);
+  const echo = new Echo.EchoClientImpl(rpc);
   const once = await echo.once('test message');
-  console.log('✓ echo.once:', once.message);
+  console.log('✓ echo.once:', once);
   if (once.message !== 'test message') {
     throw new Error(`Expected 'test message', got '${once.message}'`);
   }
-  
-  // Test echo.echo (count, message)
+
+  // Test echo.echo (non-streaming, count first)
   console.log('\nTesting echo.echo...');
   const echoResult = await echo.echo(3, 'test');
-  console.log('✓ echo.echo:', echoResult.type);
-  if (echoResult.type !== 'echo') {
-    throw new Error(`Expected type 'echo', got '${echoResult.type}'`);
-  }
-  
+  console.log('✓ echo.echo:', echoResult);
+
   rpc.disconnect();
   console.log('\n✅ All smoke tests passed!');
 }

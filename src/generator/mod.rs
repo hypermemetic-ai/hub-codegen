@@ -37,6 +37,16 @@ pub fn generate(ir: &IR) -> Result<GenerationResult> {
     let mut files = HashMap::new();
     let mut warnings = Vec::new();
 
+    // Validate IR version
+    if ir.ir_version != "2.0" {
+        anyhow::bail!(
+            "Unsupported IR version: {}. Expected 2.0.\n\
+             This version of hub-codegen requires IR v2.0 with structured TypeRef.\n\
+             Please regenerate IR with latest Synapse.",
+            ir.ir_version
+        );
+    }
+
     // Collect warnings for unknown types
     collect_warnings(ir, &mut warnings);
 
@@ -155,6 +165,11 @@ fn generate_index(ir: &IR) -> String {
     namespaces.sort();
 
     for namespace in namespaces {
+        // Skip empty namespace (core plexus methods)
+        if namespace.is_empty() {
+            continue;
+        }
+
         // Export namespace as a module
         // e.g., "hyperforge.workspace.repos" → "export * as HyperforgeWorkspaceRepos from './hyperforge/workspace/repos';"
         let pascal_name = to_pascal(namespace);

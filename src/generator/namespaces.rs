@@ -3,7 +3,7 @@
 //! Generates Layer 2: typed client interfaces and implementations that
 //! unwrap PlexusStreamItem and return domain types.
 
-use crate::ir::{IR, MethodDef, ParamDef, split_qualified_name};
+use crate::ir::{IR, MethodDef, ParamDef};
 use std::collections::HashMap;
 
 /// Generate TypeScript namespace client files (one per namespace)
@@ -22,6 +22,11 @@ pub fn generate_namespaces(ir: &IR) -> HashMap<String, String> {
 
     // Generate interface and implementation for each namespace
     for (namespace, methods) in methods_by_ns {
+        // Skip empty namespace - those are core plexus methods
+        if namespace.is_empty() {
+            continue;
+        }
+
         let content = generate_namespace(&namespace, &methods, ir);
         // Convert dotted namespace to directory path
         let path = namespace.replace('.', "/");
@@ -186,11 +191,10 @@ fn collect_type_imports(methods: &[&MethodDef], namespace: &str) -> Vec<String> 
 
     fn collect_from_type_ref(tr: &TypeRef, imports: &mut Vec<String>, namespace: &str) {
         match tr {
-            TypeRef::RefNamed(name) => {
+            TypeRef::RefNamed(qn) => {
                 // Only import if in same namespace
-                let (ns, local) = split_qualified_name(name);
-                if ns == Some(namespace) {
-                    imports.push(to_pascal(local));
+                if qn.namespace() == Some(namespace) {
+                    imports.push(to_pascal(qn.local_name()));
                 }
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, imports, namespace),
@@ -224,15 +228,14 @@ fn collect_cross_namespace_imports(methods: &[&MethodDef], current_namespace: &s
         current_namespace: &str,
     ) {
         match tr {
-            TypeRef::RefNamed(name) => {
-                let (ns, local) = split_qualified_name(name);
+            TypeRef::RefNamed(qn) => {
                 // Only import if from a DIFFERENT namespace
-                if let Some(other_ns) = ns {
+                if let Some(other_ns) = qn.namespace() {
                     if other_ns != current_namespace {
                         imports
                             .entry(other_ns.to_string())
                             .or_default()
-                            .push(to_pascal(local));
+                            .push(to_pascal(qn.local_name()));
                     }
                 }
             }
@@ -303,7 +306,7 @@ fn to_pascal(s: &str) -> String {
     let mut result = String::new();
     let mut capitalize = true;
     for c in s.chars() {
-        if c == '_' || c == '-' {
+        if c == '_' || c == '-' || c == '.' {  // Treat dots as word boundaries
             capitalize = true;
         } else if capitalize {
             result.push(c.to_ascii_uppercase());

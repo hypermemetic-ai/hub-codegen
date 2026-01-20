@@ -101,17 +101,50 @@ pub struct VariantDef {
     pub vd_fields: Vec<FieldDef>,
 }
 
+/// Qualified name for type references (namespace.localName)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct QualifiedName {
+    pub qn_namespace: String,
+    pub qn_local_name: String,
+}
+
+impl QualifiedName {
+    /// Get the full qualified name as "namespace.localName" or just "localName" if namespace is empty
+    pub fn full_name(&self) -> String {
+        if self.qn_namespace.is_empty() {
+            self.qn_local_name.clone()
+        } else {
+            format!("{}.{}", self.qn_namespace, self.qn_local_name)
+        }
+    }
+
+    /// Get the namespace, returning None if empty
+    pub fn namespace(&self) -> Option<&str> {
+        if self.qn_namespace.is_empty() {
+            None
+        } else {
+            Some(&self.qn_namespace)
+        }
+    }
+
+    /// Get the local name
+    pub fn local_name(&self) -> &str {
+        &self.qn_local_name
+    }
+}
+
 /// Reference to a type (Haskell-style tagged union with contents)
 ///
 /// Haskell Aeson emits:
-/// - Variants with data: {"tag": "RefNamed", "contents": "TypeName"}
+/// - Variants with data: {"tag": "RefNamed", "contents": {...}}
 /// - Unit variants: {"tag": "RefAny"} (no contents field)
 ///
 /// We use a custom deserializer to handle both cases.
 #[derive(Debug, Clone, Serialize)]
 pub enum TypeRef {
     /// Named type reference
-    RefNamed(String),
+    RefNamed(QualifiedName),
     /// Primitive type with optional format
     RefPrimitive(String, Option<String>),
     /// Array type
@@ -141,9 +174,10 @@ impl<'de> serde::Deserialize<'de> for TypeRef {
         match tag {
             "RefNamed" => {
                 let contents = obj.get("contents")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| D::Error::custom("RefNamed requires string contents"))?;
-                Ok(TypeRef::RefNamed(contents.to_string()))
+                    .ok_or_else(|| D::Error::custom("RefNamed requires contents"))?;
+                let qname: QualifiedName = serde_json::from_value(contents.clone())
+                    .map_err(|e| D::Error::custom(format!("RefNamed contents must be QualifiedName: {}", e)))?;
+                Ok(TypeRef::RefNamed(qname))
             }
             "RefPrimitive" => {
                 let contents = obj.get("contents")
@@ -214,7 +248,7 @@ impl TypeRef {
     /// Convert to TypeScript type string (fully qualified - joins namespace.Name as NamespaceName)
     pub fn to_ts(&self) -> String {
         match self {
-            TypeRef::RefNamed(name) => to_upper_camel(name),
+            TypeRef::RefNamed(qname) => to_upper_camel(&qname.full_name()),
             TypeRef::RefPrimitive(prim, format) => primitive_to_ts(prim, format.as_deref()),
             TypeRef::RefArray(inner) => format!("{}[]", inner.to_ts()),
             TypeRef::RefOptional(inner) => format!("{} | null", inner.to_ts()),
@@ -227,10 +261,9 @@ impl TypeRef {
     /// Always uses local name - cross-namespace types are handled via imports
     pub fn to_ts_in_namespace(&self, current_namespace: &str) -> String {
         match self {
-            TypeRef::RefNamed(name) => {
-                let (_ns, local) = split_qualified_name(name);
+            TypeRef::RefNamed(qname) => {
                 // Always use local name - imports handle cross-namespace references
-                to_upper_camel(local)
+                to_upper_camel(qname.local_name())
             }
             TypeRef::RefPrimitive(prim, format) => primitive_to_ts(prim, format.as_deref()),
             TypeRef::RefArray(inner) => format!("{}[]", inner.to_ts_in_namespace(current_namespace)),
@@ -243,7 +276,7 @@ impl TypeRef {
     /// Get the namespace from a RefNamed, if qualified
     pub fn get_namespace(&self) -> Option<&str> {
         match self {
-            TypeRef::RefNamed(name) => split_qualified_name(name).0,
+            TypeRef::RefNamed(qname) => qname.namespace(),
             _ => None,
         }
     }
@@ -261,17 +294,6 @@ impl TypeRef {
             TypeRef::RefOptional(inner) => inner.contains_unknown(),
             _ => false,
         }
-    }
-}
-
-/// Split a qualified name into (namespace, local_name)
-/// "cone.ListResult" -> (Some("cone"), "ListResult")
-/// "ListResult" -> (None, "ListResult")
-pub fn split_qualified_name(name: &str) -> (Option<&str>, &str) {
-    if let Some(dot_pos) = name.find('.') {
-        (Some(&name[..dot_pos]), &name[dot_pos + 1..])
-    } else {
-        (None, name)
     }
 }
 
@@ -314,13 +336,71 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_qualified_name() {
+        // Test with namespace
+        let qn = QualifiedName {
+            qn_namespace: "cone".to_string(),
+            qn_local_name: "UUID".to_string(),
+        };
+        assert_eq!(qn.full_name(), "cone.UUID");
+        assert_eq!(qn.namespace(), Some("cone"));
+        assert_eq!(qn.local_name(), "UUID");
+
+        // Test without namespace (empty)
+        let qn_no_ns = QualifiedName {
+            qn_namespace: "".to_string(),
+            qn_local_name: "LocalType".to_string(),
+        };
+        assert_eq!(qn_no_ns.full_name(), "LocalType");
+        assert_eq!(qn_no_ns.namespace(), None);
+        assert_eq!(qn_no_ns.local_name(), "LocalType");
+    }
+
+    #[test]
+    fn test_qualified_name_deserialization() {
+        // Test deserializing v2.0 format with QualifiedName
+        let json = r#"{
+            "tag": "RefNamed",
+            "contents": {
+                "qnNamespace": "cone",
+                "qnLocalName": "UUID"
+            }
+        }"#;
+        let type_ref: TypeRef = serde_json::from_str(json).unwrap();
+
+        if let TypeRef::RefNamed(qname) = type_ref {
+            assert_eq!(qname.qn_namespace, "cone");
+            assert_eq!(qname.qn_local_name, "UUID");
+            assert_eq!(qname.full_name(), "cone.UUID");
+        } else {
+            panic!("Expected RefNamed variant");
+        }
+    }
+
+    #[test]
     fn test_type_ref_to_ts() {
-        assert_eq!(TypeRef::RefNamed("ChatEvent".to_string()).to_ts(), "ChatEvent");
+        let chat_event = TypeRef::RefNamed(QualifiedName {
+            qn_namespace: "".to_string(),
+            qn_local_name: "ChatEvent".to_string(),
+        });
+        assert_eq!(chat_event.to_ts(), "ChatEvent");
+
         assert_eq!(TypeRef::RefPrimitive("string".to_string(), None).to_ts(), "string");
         assert_eq!(TypeRef::RefPrimitive("string".to_string(), Some("uuid".to_string())).to_ts(), "string");
         assert_eq!(TypeRef::RefPrimitive("integer".to_string(), Some("int64".to_string())).to_ts(), "number");
-        assert_eq!(TypeRef::RefArray(Box::new(TypeRef::RefNamed("Node".to_string()))).to_ts(), "Node[]");
-        assert_eq!(TypeRef::RefOptional(Box::new(TypeRef::RefNamed("Pos".to_string()))).to_ts(), "Pos | null");
+
+        let node = TypeRef::RefNamed(QualifiedName {
+            qn_namespace: "".to_string(),
+            qn_local_name: "Node".to_string(),
+        });
+        assert_eq!(TypeRef::RefArray(Box::new(node)).to_ts(), "Node[]");
+
+        let pos = TypeRef::RefNamed(QualifiedName {
+            qn_namespace: "".to_string(),
+            qn_local_name: "Pos".to_string(),
+        });
+        assert_eq!(TypeRef::RefOptional(Box::new(pos)).to_ts(), "Pos | null");
+
         assert_eq!(TypeRef::RefAny.to_ts(), "unknown");     // Intentional - no warning
         assert_eq!(TypeRef::RefUnknown.to_ts(), "unknown"); // Schema gap - will warn
     }
@@ -329,7 +409,12 @@ mod tests {
     fn test_unknown_detection() {
         assert!(!TypeRef::RefAny.is_unknown());
         assert!(TypeRef::RefUnknown.is_unknown());
-        assert!(!TypeRef::RefNamed("Foo".to_string()).is_unknown());
+
+        let foo = TypeRef::RefNamed(QualifiedName {
+            qn_namespace: "".to_string(),
+            qn_local_name: "Foo".to_string(),
+        });
+        assert!(!foo.is_unknown());
 
         // contains_unknown
         assert!(!TypeRef::RefAny.contains_unknown());

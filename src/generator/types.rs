@@ -88,8 +88,8 @@ fn collect_all_referenced_types(ir: &IR) -> HashSet<String> {
 
     fn collect_from_type_ref(tr: &TypeRef, refs: &mut HashSet<String>) {
         match tr {
-            TypeRef::RefNamed(name) => {
-                refs.insert(name.clone());
+            TypeRef::RefNamed(qn) => {
+                refs.insert(qn.full_name());
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, refs),
             TypeRef::RefOptional(inner) => collect_from_type_ref(inner, refs),
@@ -170,15 +170,14 @@ fn collect_cross_namespace_type_imports(typedefs: &[&TypeDef], current_namespace
         current_namespace: &str,
     ) {
         match tr {
-            TypeRef::RefNamed(name) => {
-                let (ns, local) = crate::ir::split_qualified_name(name);
+            TypeRef::RefNamed(qn) => {
                 // Only import if from a DIFFERENT namespace
-                if let Some(other_ns) = ns {
-                    if other_ns != current_namespace {
+                if let Some(ns) = qn.namespace() {
+                    if ns != current_namespace {
                         imports
-                            .entry(other_ns.to_string())
+                            .entry(ns.to_string())
                             .or_default()
-                            .push(to_pascal(local));
+                            .push(to_pascal(qn.local_name()));
                     }
                 }
             }
@@ -295,11 +294,10 @@ fn collect_missing_types_for_namespace(ir: &IR, namespace: &str) -> Vec<String> 
     // Collect types referenced by methods in this namespace
     fn collect_from_type_ref(tr: &TypeRef, namespace: &str, refs: &mut HashSet<String>) {
         match tr {
-            TypeRef::RefNamed(name) => {
-                let (ns, local) = crate::ir::split_qualified_name(name);
+            TypeRef::RefNamed(qn) => {
                 // Only track references within the same namespace
-                if ns == Some(namespace) {
-                    refs.insert(local.to_string());
+                if qn.namespace() == Some(namespace) {
+                    refs.insert(qn.local_name().to_string());
                 }
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, namespace, refs),
@@ -333,6 +331,11 @@ pub fn generate_namespace_types(ir: &IR) -> HashMap<String, String> {
         .collect();
 
     for namespace in namespaces {
+        // Skip empty namespace - those types are in global types.ts
+        if namespace.is_empty() {
+            continue;
+        }
+
         let content = generate_types_for_namespace(ir, namespace);
         // Convert dotted namespace to directory path: "hyperforge.workspace.repos" → "hyperforge/workspace/repos"
         let path = namespace.replace('.', "/");
@@ -598,7 +601,7 @@ fn to_pascal(s: &str) -> String {
     let mut result = String::new();
     let mut capitalize = true;
     for c in s.chars() {
-        if c == '_' || c == '-' {
+        if c == '_' || c == '-' || c == '.' {  // Treat dots as word boundaries
             capitalize = true;
         } else if capitalize {
             result.push(c.to_ascii_uppercase());
