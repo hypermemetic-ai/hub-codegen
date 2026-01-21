@@ -282,19 +282,24 @@ fn generate_params(params: &[ParamDef], namespace: &str) -> String {
 }
 
 /// Generate a JavaScript object literal from params for the RPC call
+/// Uses explicit property mapping to preserve snake_case on the wire
+/// while keeping camelCase in TypeScript function signatures
 fn generate_params_object(params: &[ParamDef]) -> String {
     if params.is_empty() {
         return "{}".to_string();
     }
 
-    // Note: We don't need to sort here because we're using shorthand syntax
-    // and the order in the object literal doesn't matter
+    // Generate explicit mappings: { snake_case: camelCase }
+    // This ensures RPC wire format uses snake_case as Plexus expects,
+    // while TypeScript APIs remain idiomatic camelCase
     let fields: Vec<String> = params
         .iter()
         .map(|p| {
-            let name = to_camel(&p.pd_name);
-            // Use shorthand property syntax when name matches
-            name
+            let camel_name = to_camel(&p.pd_name);  // TypeScript variable (camelCase)
+            let snake_name = &p.pd_name;             // RPC wire format (snake_case)
+
+            // Use explicit mapping: property_name: variable_name
+            format!("{}: {}", snake_name, camel_name)
         })
         .collect();
 

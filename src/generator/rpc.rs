@@ -29,8 +29,35 @@ export interface RpcClient {
 }
 
 /**
+ * Convert snake_case string to camelCase.
+ * Used to transform backend field names to TypeScript conventions.
+ */
+function toCamelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
+ * Recursively transform all object keys from snake_case to camelCase.
+ * This allows TypeScript types to use idiomatic camelCase while the backend sends snake_case.
+ * Similar to Rust's #[serde(rename_all = "camelCase")].
+ */
+function transformKeys(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(transformKeys);
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = toCamelCase(key);
+    result[camelKey] = transformKeys(value);
+  }
+  return result;
+}
+
+/**
  * Helper to extract data content from a PlexusStreamItem stream.
  * Throws PlexusError on error events.
+ * Automatically transforms response field names from snake_case to camelCase.
  *
  * @param stream - AsyncGenerator of PlexusStreamItem
  * @returns AsyncGenerator of the unwrapped content (typed as T)
@@ -41,7 +68,7 @@ export async function* extractData<T>(
   for await (const item of stream) {
     switch (item.type) {
       case 'data':
-        yield item.content as T;
+        yield transformKeys(item.content) as T;
         break;
       case 'error':
         throw new PlexusError(
@@ -64,6 +91,7 @@ export async function* extractData<T>(
  * Helper to collect a single result from a non-streaming method.
  * Throws PlexusError on error events.
  * Throws if no data is received.
+ * Automatically transforms response field names from snake_case to camelCase.
  *
  * @param stream - AsyncGenerator of PlexusStreamItem
  * @returns Promise of the unwrapped content (typed as T)
@@ -74,7 +102,7 @@ export async function collectOne<T>(
   for await (const item of stream) {
     switch (item.type) {
       case 'data':
-        return item.content as T;
+        return transformKeys(item.content) as T;
       case 'error':
         throw new PlexusError(
           item.message,
