@@ -34,10 +34,10 @@ fn main() -> Result<()> {
         std::fs::read_to_string(&args.input)?
     };
 
-    let ir: hub_codegen::IR = serde_json::from_str(&ir_json)?;
+    let ir: plexus_codegen_typescript::IR = serde_json::from_str(&ir_json)?;
 
     // Generate
-    let result = hub_codegen::generate(&ir)?;
+    let result = plexus_codegen_typescript::generate(&ir)?;
 
     // Print warnings to stderr
     if !result.warnings.is_empty() {
