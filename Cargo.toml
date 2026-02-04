@@ -19,5 +19,5 @@ name = "hub-codegen"
 path = "src/main.rs"
 
 [lib]
-name = "hub_codegen"
+name = "plexus_codegen_typescript"
 path = "src/lib.rs"
