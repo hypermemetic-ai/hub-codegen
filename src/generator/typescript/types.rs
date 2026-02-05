@@ -83,6 +83,7 @@ export class PlexusError extends Error {
 }
 
 /// Collect all RefNamed type references from the IR
+#[allow(dead_code)]
 fn collect_all_referenced_types(ir: &IR) -> HashSet<String> {
     let mut refs = HashSet::new();
 
@@ -450,6 +451,7 @@ fn generate_alias_in_ns(name: &str, target: &TypeRef, desc: &Option<String>, nam
     lines.join("\n")
 }
 
+#[allow(dead_code)]
 fn generate_typedef(typedef: &TypeDef) -> String {
     match &typedef.td_kind {
         TypeKind::KindStruct { ks_fields } => {
@@ -470,6 +472,7 @@ fn generate_typedef(typedef: &TypeDef) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn generate_interface(name: &str, fields: &[FieldDef], desc: &Option<String>) -> String {
     let mut lines = Vec::new();
 
@@ -492,6 +495,7 @@ fn generate_interface(name: &str, fields: &[FieldDef], desc: &Option<String>) ->
     lines.join("\n")
 }
 
+#[allow(dead_code)]
 fn generate_discriminated_union(
     name: &str,
     discriminator: &str,
@@ -550,6 +554,7 @@ fn generate_discriminated_union(
     lines.join("\n")
 }
 
+#[allow(dead_code)]
 fn generate_alias(name: &str, target: &crate::ir::TypeRef, desc: &Option<String>) -> String {
     let mut lines = Vec::new();
     if let Some(d) = desc {
