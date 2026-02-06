@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Full development environment
+  # Mount substrate and synapse source directories
+  dev:
+    build: .
+    image: hub-codegen:dev
+    ports:
+      - "44410:44410"
+    volumes:
+      # Mount your substrate source
+      - ../substrate:/workspace/substrate
+      # Mount your synapse source
+      - ../synapse:/workspace/synapse
+      # Output directory
+      - ./output:/workspace/output
+    command: dev rust
+    environment:
+      - RUST_BACKTRACE=1
+
+  # Interactive development shell
+  shell:
+    image: hub-codegen:dev
+    volumes:
+      - ../substrate:/workspace/substrate
+      - ../synapse:/workspace/synapse
+      - ./output:/workspace/output
+    command: bash
+    stdin_open: true
+    tty: true

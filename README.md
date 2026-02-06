@@ -94,6 +94,23 @@ generated/
 └── Cargo.toml       # Package manifest
 ```
 
+## Docker
+
+Run the full pipeline (Substrate → Synapse → hub-codegen) in Docker:
+
+```bash
+# Build image
+docker build -t hub-codegen:dev .
+
+# Run full pipeline (mounts substrate and synapse source)
+docker-compose run dev
+
+# Or specify language
+docker-compose run dev typescript
+```
+
+See [README.docker.md](README.docker.md) for details.
+
 ## Development
 
 ```bash
