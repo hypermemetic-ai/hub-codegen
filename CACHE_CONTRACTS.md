@@ -14,117 +14,169 @@ No RPC, no shared libraries, no FFI. This enables:
 
 ---
 
-## 1. Hash Algorithm (CRITICAL - Must Match!)
+## 1. Hash Sources (USE EXISTING PLEXUS HASHES!)
 
-**All components MUST use the same hashing algorithm:**
+**IMPORTANT: Plexus RPC already provides content-based hashes. Use them directly.**
 
-```
-Algorithm: SHA-256
-Encoding: Hex (lowercase)
-Input: Canonical JSON (sorted keys, no whitespace)
-```
+### Existing Hash Fields in Plexus
 
-### Canonical JSON Rules
+Plexus schemas include hashes at multiple levels:
 
-Before hashing any JSON:
-1. Sort all object keys alphabetically
-2. Remove all whitespace
-3. Use consistent number formatting (no trailing zeros)
-4. Encode as UTF-8 bytes
-
-### Reference Implementation
-
-**Rust:**
 ```rust
-use sha2::{Sha256, Digest};
-use serde_json::Value;
-
-pub fn canonical_hash(value: &Value) -> String {
-    // Convert to canonical form
-    let canonical = to_canonical_json(value);
-
-    // Hash
-    let mut hasher = Sha256::new();
-    hasher.update(canonical.as_bytes());
-    let result = hasher.finalize();
-
-    // Hex encode (lowercase)
-    hex::encode(result)
+// From plexus-core/src/plexus/schema.rs
+pub struct PluginSchema {
+    pub namespace: String,
+    pub version: String,
+    pub description: String,
+    pub hash: String,  // ← Plugin-level hash (rollup of all methods)
+    pub methods: Vec<MethodSchema>,
+    pub children: Option<Vec<ChildSummary>>,
 }
 
-fn to_canonical_json(value: &Value) -> String {
-    // Sort keys, remove whitespace
-    serde_json::to_string(&canonicalize(value)).unwrap()
+pub struct MethodSchema {
+    pub name: String,
+    pub description: String,
+    pub hash: String,  // ← Method-level hash (signature + description)
+    pub params: Option<schemars::Schema>,
+    pub returns: Option<schemars::Schema>,
+    pub streaming: bool,
 }
 
-fn canonicalize(value: &Value) -> Value {
-    match value {
-        Value::Object(map) => {
-            let mut sorted: Vec<_> = map.iter().collect();
-            sorted.sort_by_key(|(k, _)| *k);
-            Value::Object(
-                sorted.into_iter()
-                    .map(|(k, v)| (k.clone(), canonicalize(v)))
-                    .collect()
-            )
-        }
-        Value::Array(arr) => {
-            Value::Array(arr.iter().map(canonicalize).collect())
-        }
-        other => other.clone(),
+pub struct ChildSummary {
+    pub namespace: String,
+    pub description: String,
+    pub hash: String,  // ← Child plugin hash
+}
+```
+
+### Hash Hierarchy
+
+```
+Global Hash (plexus_hash = "194b22dbccdb5ea6")
+├── cone.hash = hash_of([cone.chat.hash, cone.create.hash, ...])
+│   ├── cone.chat.hash = hash_of(signature + description)
+│   └── cone.create.hash = hash_of(signature + description)
+├── arbor.hash = hash_of([arbor.tree_get.hash, ...])
+└── ...
+```
+
+### How to Use Existing Hashes
+
+**For Schema Cache:**
+```rust
+// Schema fetched from substrate already includes hash
+let schema: PluginSchema = fetch_schema("cone");
+let schema_hash = schema.hash;  // Use this directly!
+
+// Store in cache
+let cache_entry = SchemaCacheEntry {
+    version: "1.0",
+    plugin: "cone",
+    schema_hash,  // ← Use PluginSchema.hash
+    fetched_at: now(),
+    substrate_hash: global_plexus_hash,  // ← From substrate startup
+    schema,
+};
+```
+
+**For Global Invalidation:**
+```rust
+// Substrate prints this at startup:
+// "Plexus hash: 194b22dbccdb5ea6"
+//
+// Also available via substrate.hash() method or in StreamMetadata
+let global_hash = fetch_global_hash();  // "194b22dbccdb5ea6"
+
+// Invalidate all caches if this changes
+if cached_manifest.substrate_hash != global_hash {
+    invalidate_all_caches();
+}
+```
+
+**For IR Cache:**
+```rust
+// IR hash is hash of the IR content (not schema)
+// Compute this for the generated IR fragment
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+fn hash_ir_fragment(types: &Map<String, TypeDef>, methods: &Map<String, MethodDef>) -> String {
+    let mut hasher = DefaultHasher::new();
+
+    // Hash type definitions
+    for (name, typedef) in types.iter() {
+        name.hash(&mut hasher);
+        // Hash typedef structure (simplified)
+        serde_json::to_string(typedef).unwrap().hash(&mut hasher);
     }
+
+    // Hash method definitions
+    for (name, methoddef) in methods.iter() {
+        name.hash(&mut hasher);
+        serde_json::to_string(methoddef).unwrap().hash(&mut hasher);
+    }
+
+    format!("{:016x}", hasher.finish())
 }
 ```
 
-**Haskell:**
-```haskell
-import Crypto.Hash (hash, SHA256(..))
-import Data.Aeson (Value, encode)
-import qualified Data.ByteString.Base16 as B16
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
+### Key Differences
 
-canonicalHash :: Value -> T.Text
-canonicalHash val =
-  let canonical = canonicalizeJSON val
-      jsonBytes = LBS.toStrict $ encode canonical
-      hashBytes = hash jsonBytes :: Digest SHA256
-      hexEncoded = B16.encode $ convert hashBytes
-  in TE.decodeUtf8 hexEncoded
+| Hash Type | Source | Algorithm | Length | Purpose |
+|-----------|--------|-----------|--------|---------|
+| **Plugin Schema** | Plexus macro | Rust DefaultHasher | 16 hex chars | Detect schema changes |
+| **Method Schema** | Plexus macro | Rust DefaultHasher | 16 hex chars | Detect method changes |
+| **Global Plexus** | Runtime rollup | Rust DefaultHasher | 16 hex chars | Detect any change |
+| **IR Fragment** | Our implementation | Rust DefaultHasher | 16 hex chars | Detect IR changes |
 
-canonicalizeJSON :: Value -> Value
-canonicalizeJSON (Object obj) =
-  Object $ fromList $ sort $ map (\(k, v) -> (k, canonicalizeJSON v)) $ toList obj
-canonicalizeJSON (Array arr) =
-  Array $ fmap canonicalizeJSON arr
-canonicalizeJSON other = other
+### Properties of Plexus Hashes
+
+✅ **Content-based** - Same signature → same hash
+✅ **Stable across restarts** - Deterministic computation
+✅ **Hierarchical** - Plugin hash = hash(method hashes)
+✅ **Already computed** - No need to recompute
+✅ **Designed for caching** - Explicitly documented purpose
+
+### No Custom Hashing Needed!
+
+**DO NOT implement SHA-256 or canonical JSON hashing.**
+
+Instead:
+1. Read `PluginSchema.hash` from substrate responses
+2. Read global `plexus_hash` from substrate startup or `substrate.hash()` method
+3. Only compute IR hashes using `DefaultHasher` for generated IR content
+
+### How to Fetch Global Plexus Hash
+
+**Option 1: From substrate startup logs**
+```bash
+$ substrate
+...
+INFO substrate: Plexus hash: 194b22dbccdb5ea6
 ```
 
-### Test Vectors
-
-All implementations MUST pass these tests:
-
-```json
-// Input 1
-{"b": 2, "a": 1}
-
-// Canonical
-{"a":1,"b":2}
-
-// Hash (SHA-256, hex)
-"5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+**Option 2: Via RPC call to substrate.hash()**
+```rust
+// Synapse can call this method
+let response = call_method("substrate", "hash", json!({}));
+// Returns: { "value": "194b22dbccdb5ea6" }
 ```
 
+**Option 3: From any stream response metadata**
 ```json
-// Input 2
-{"plugins": ["cone", "arbor"], "version": "2.0"}
-
-// Canonical
-{"plugins":["cone","arbor"],"version":"2.0"}
-
-// Hash
-"d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "tag": "data",
+    "metadata": {
+      "provenance": ["substrate", "cone"],
+      "plexus_hash": "194b22dbccdb5ea6",
+      "timestamp": 1735052400
+    },
+    "path": "cone.chat",
+    "data": { /* ... */ }
+  }
+}
 ```
 
 ---
@@ -176,10 +228,10 @@ $CACHE_ROOT/
 {
   "version": "1.0",           // Cache entry format version
   "plugin": string,           // Plugin name (e.g., "cone")
-  "schemaHash": string,       // SHA-256 hash of schema content
+  "schemaHash": string,       // ← From PluginSchema.hash (Plexus-provided)
   "fetchedAt": string,        // ISO 8601 timestamp
-  "substrateHash": string,    // Global substrate hash at fetch time
-  "schema": PluginSchema      // The actual schema (see below)
+  "substrateHash": string,    // Global plexus_hash at fetch time
+  "schema": PluginSchema      // The actual schema from substrate
 }
 ```
 
@@ -188,15 +240,25 @@ $CACHE_ROOT/
 {
   "version": "1.0",
   "plugin": "cone",
-  "schemaHash": "abc123def456...",
+  "schemaHash": "a1b2c3d4e5f6g7h8",
   "fetchedAt": "2026-02-06T01:30:00Z",
   "substrateHash": "194b22dbccdb5ea6",
   "schema": {
-    "psName": "cone",
-    "psVersion": "1.0.0",
-    "psDescription": "LLM cone with persistent conversation context",
-    "psMethods": [...],
-    "psChildren": null
+    "namespace": "cone",
+    "version": "1.0.0",
+    "description": "LLM cone with persistent conversation context",
+    "hash": "a1b2c3d4e5f6g7h8",
+    "methods": [
+      {
+        "name": "chat",
+        "description": "Stream chat messages",
+        "hash": "m123hash",
+        "params": { /* JSON Schema */ },
+        "returns": { /* JSON Schema */ },
+        "streaming": true
+      }
+    ],
+    "children": null
   }
 }
 ```
@@ -462,16 +524,49 @@ $CACHE_ROOT/hub-codegen/<target>/<plugin>/
 ### Schema Cache Invalidation
 
 **Invalidate ALL schemas if:**
-- Global `substrateHash` changed
+- Global `substrateHash` (plexus_hash) changed
+- Fetch from substrate: `substrate.hash()` → compare to cached manifest
 
 **Invalidate SINGLE schema if:**
-- Plugin's `schemaHash` changed (compared to manifest)
+- Plugin's `schemaHash` (PluginSchema.hash) changed
+- Fetch schema, compare `schema.hash` to cached `schemaHash`
+
+**Example:**
+```rust
+// Check if global hash changed
+let current_global = fetch_substrate_hash();  // "194b22dbccdb5ea6"
+if cached_manifest.substrate_hash != current_global {
+    invalidate_all_schemas();
+    return;
+}
+
+// Check individual plugins
+for plugin in plugins {
+    let fresh_schema = fetch_schema(plugin);
+    let cached = load_cached_schema(plugin);
+
+    if fresh_schema.hash != cached.schema_hash {
+        invalidate_schema(plugin);
+        fetch_and_cache(plugin);
+    }
+}
+```
 
 ### IR Cache Invalidation
 
 **Invalidate plugin IR if:**
-- Source `schemaHash` changed
+- Source `schemaHash` (PluginSchema.hash) changed
 - Any dependency's `irHash` changed (transitive)
+
+**Example:**
+```rust
+// cone depends on arbor
+// If arbor's schema changes:
+if arbor_schema.hash != cached_arbor_schema.hash {
+    invalidate_ir("arbor");
+    invalidate_ir("cone");  // Transitive!
+}
+```
 
 **Algorithm:**
 ```python
