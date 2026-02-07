@@ -523,6 +523,229 @@ For large systems with 20+ plugins:
 
 ---
 
+## Implementation Waves (Parallel Execution)
+
+This section breaks down the implementation into waves, where tasks within each wave can be executed in parallel by different agents/developers.
+
+### Wave 1: Foundation (All tasks can run in parallel)
+
+**Agent A: Synapse Schema Cache Module**
+- [ ] Create `Synapse/Cache/Schema.hs` module
+- [ ] Implement `SchemaCache` data type
+- [ ] Implement cache loading/saving (JSON format)
+- [ ] Add hash validation logic
+- [ ] Write unit tests for cache operations
+
+**Agent B: Synapse IR Cache Module**
+- [ ] Create `Synapse/Cache/IR.hs` module
+- [ ] Implement `IRCache` data type with per-plugin fragments
+- [ ] Implement dependency tracking data structures
+- [ ] Add IR fragment merging logic
+- [ ] Write unit tests for IR merging
+
+**Agent C: hub-codegen Cache Module**
+- [ ] Create `src/cache.rs` module in hub-codegen
+- [ ] Implement `CodeCache` struct
+- [ ] Add hash computation for IR fragments
+- [ ] Implement cache directory management
+- [ ] Write unit tests for cache operations
+
+**Agent D: Shared Cache Infrastructure**
+- [ ] Design common cache directory structure
+- [ ] Implement hash utilities (consistent hashing across Haskell/Rust)
+- [ ] Create cache manifest format specification
+- [ ] Add cache cleanup utilities
+- [ ] Document cache file formats
+
+---
+
+### Wave 2: Integration (Dependencies on Wave 1)
+
+**Agent A: Synapse CLI Integration**
+- [ ] Add `--use-cache` flag to Main.hs
+- [ ] Add `--cache-dir` flag to Main.hs
+- [ ] Integrate SchemaCache into schema fetching
+- [ ] Integrate IRCache into IR building
+- [ ] Add `--cache-info` command
+- [ ] Add `--cache-clean` command
+
+**Agent B: hub-codegen CLI Integration**
+- [ ] Add `--use-cache` flag to main.rs
+- [ ] Add `--cache-dir` flag to main.rs
+- [ ] Integrate CodeCache into generation pipeline
+- [ ] Add per-plugin IR grouping logic
+- [ ] Add `--cache-info` command
+- [ ] Add `--cache-clean` command
+
+**Agent C: Dependency Graph Analysis**
+- [ ] Implement plugin dependency extraction from IR
+- [ ] Build dependency graph data structure
+- [ ] Implement transitive dependency calculation
+- [ ] Add cache invalidation based on dependencies
+- [ ] Write tests for dependency scenarios
+
+**Agent D: Script Updates**
+- [ ] Update `scripts/update-rust-client.sh` to use caching
+- [ ] Update `scripts/update-client.sh` to use caching
+- [ ] Add cache directory parameter to scripts
+- [ ] Add cache stats reporting to scripts
+- [ ] Update documentation in `scripts/README.md`
+
+---
+
+### Wave 3: Testing & Optimization (Dependencies on Wave 2)
+
+**Agent A: Integration Testing**
+- [ ] Create end-to-end test for schema caching
+- [ ] Create end-to-end test for IR caching
+- [ ] Create end-to-end test for code caching
+- [ ] Test cache invalidation scenarios
+- [ ] Test dependency-based invalidation
+
+**Agent B: Performance Testing**
+- [ ] Benchmark cache hit vs miss performance
+- [ ] Measure speedup for various change scenarios
+- [ ] Profile cache lookup overhead
+- [ ] Optimize cache serialization format if needed
+- [ ] Document performance characteristics
+
+**Agent C: Docker Integration**
+- [ ] Add cache volume mounts to Dockerfile
+- [ ] Update docker-compose.yml with cache volumes
+- [ ] Test caching in Docker environment
+- [ ] Document Docker cache usage
+- [ ] Add cache persistence examples
+
+**Agent D: Documentation & Polish**
+- [ ] Write user guide for cache usage
+- [ ] Add troubleshooting section
+- [ ] Create cache management best practices
+- [ ] Add examples to README files
+- [ ] Create migration guide from non-cached builds
+
+---
+
+### Wave 4: Advanced Features (Optional, can run in parallel)
+
+**Agent A: Watch Mode**
+- [ ] Implement file watching for substrate changes
+- [ ] Auto-regenerate on schema changes
+- [ ] Add debouncing for rapid changes
+- [ ] Integrate with cache system
+- [ ] Add CLI flags for watch mode
+
+**Agent B: Parallel Generation**
+- [ ] Identify independent plugins that can be parallelized
+- [ ] Implement parallel IR generation
+- [ ] Implement parallel code generation
+- [ ] Add worker pool management
+- [ ] Benchmark parallel vs sequential
+
+**Agent C: Remote Cache**
+- [ ] Design remote cache protocol
+- [ ] Implement S3/GCS backend
+- [ ] Add cache upload/download commands
+- [ ] Implement cache sharing for CI
+- [ ] Document remote cache setup
+
+**Agent D: Analytics & Visualization**
+- [ ] Add cache hit/miss rate tracking
+- [ ] Implement dependency graph visualization
+- [ ] Create cache size monitoring
+- [ ] Add performance metrics collection
+- [ ] Build simple dashboard/CLI display
+
+---
+
+## Task Dependencies Graph
+
+```
+Wave 1 (Parallel)
+├─ Agent A: Schema Cache Module
+├─ Agent B: IR Cache Module
+├─ Agent C: Code Cache Module
+└─ Agent D: Shared Infrastructure
+       │
+       ▼
+Wave 2 (Depends on Wave 1)
+├─ Agent A: Synapse CLI (depends on Schema + IR Cache)
+├─ Agent B: hub-codegen CLI (depends on Code Cache)
+├─ Agent C: Dependency Graph (depends on IR Cache)
+└─ Agent D: Script Updates (depends on all CLIs)
+       │
+       ▼
+Wave 3 (Depends on Wave 2)
+├─ Agent A: Integration Tests (depends on all Wave 2)
+├─ Agent B: Performance Tests (depends on all Wave 2)
+├─ Agent C: Docker Integration (depends on all Wave 2)
+└─ Agent D: Documentation (depends on all Wave 2)
+       │
+       ▼
+Wave 4 (Optional, Parallel)
+├─ Agent A: Watch Mode
+├─ Agent B: Parallel Generation
+├─ Agent C: Remote Cache
+└─ Agent D: Analytics
+```
+
+---
+
+## Estimated Timeline
+
+| Wave | Duration (with 4 parallel agents) | Dependencies |
+|------|-----------------------------------|--------------|
+| Wave 1 | 2-3 days | None |
+| Wave 2 | 3-4 days | Wave 1 complete |
+| Wave 3 | 2-3 days | Wave 2 complete |
+| Wave 4 | 3-5 days (optional) | Wave 3 complete |
+| **Total** | **7-10 days** (or 10-15 days with Wave 4) | Sequential |
+
+With serial execution (single developer): 4-6 weeks
+
+**Speedup from parallelization: 4-6x**
+
+---
+
+## Quick Start for Each Agent
+
+### Agent A (Wave 1)
+```bash
+cd /workspace/hypermemetic/synapse
+git checkout -b feature/schema-cache
+mkdir -p src/Synapse/Cache
+touch src/Synapse/Cache/Schema.hs
+# Start implementing SchemaCache...
+```
+
+### Agent B (Wave 1)
+```bash
+cd /workspace/hypermemetic/synapse
+git checkout -b feature/ir-cache
+touch src/Synapse/Cache/IR.hs
+# Start implementing IRCache...
+```
+
+### Agent C (Wave 1)
+```bash
+cd /workspace/hypermemetic/hub-codegen
+git checkout -b feature/code-cache
+mkdir -p src/cache
+touch src/cache/mod.rs
+touch src/cache/code_cache.rs
+# Start implementing CodeCache...
+```
+
+### Agent D (Wave 1)
+```bash
+cd /workspace/hypermemetic/hub-codegen
+git checkout -b feature/cache-infrastructure
+mkdir -p docs/cache
+touch docs/cache/CACHE_FORMAT.md
+# Document cache formats and shared utilities...
+```
+
+---
+
 ## Open Questions
 
 1. **Cache Location**: User home vs project-local vs global?
