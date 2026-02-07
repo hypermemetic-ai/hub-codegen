@@ -552,10 +552,13 @@ This section breaks down the implementation into waves, where tasks within each 
 
 **Agent D: Shared Cache Infrastructure**
 - [ ] Design common cache directory structure
-- [ ] Implement hash utilities (consistent hashing across Haskell/Rust)
+- [ ] Document how to use Plexus's built-in hashes (PluginSchema.hash, plexus_hash)
 - [ ] Create cache manifest format specification
 - [ ] Add cache cleanup utilities
 - [ ] Document cache file formats
+
+**Note:** Plexus already provides content-based hashes at all levels. No need to
+implement custom hashing - just read `schema.hash` and `plexus_hash` fields!
 
 ---
 
