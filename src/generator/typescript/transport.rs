@@ -1,10 +1,14 @@
 //! WebSocket transport generation
 //!
-//! Generates a SubstrateClient class that implements RpcClient using
+//! Generates a generic PlexusRpcClient class that implements RpcClient using
 //! WebSocket + JSON-RPC 2.0 subscription protocol.
 
 /// Generate the WebSocket transport implementation
 pub fn generate_transport() -> String {
+    get_transport_template()
+}
+
+fn get_transport_template() -> String {
     r#"// Auto-generated WebSocket transport
 // Implements RpcClient using JSON-RPC 2.0 subscription protocol
 
@@ -13,9 +17,11 @@ import type { PlexusStreamItem, StreamMetadata } from './types';
 import WebSocket from 'ws';
 
 /**
- * Configuration for SubstrateClient
+ * Configuration for PlexusRpcClient
  */
-export interface SubstrateConfig {
+export interface PlexusRpcConfig {
+  /** Backend identifier (e.g., "substrate", "synapse") */
+  backend: string;
   /** WebSocket URL (e.g., "ws://localhost:4444") */
   url: string;
   /** Connection timeout in milliseconds (default: 5000) */
@@ -23,15 +29,6 @@ export interface SubstrateConfig {
   /** Enable debug logging (default: false) */
   debug?: boolean;
 }
-
-/**
- * Default configuration for local development
- */
-export const defaultConfig: SubstrateConfig = {
-  url: 'ws://127.0.0.1:4444',
-  connectionTimeout: 5000,
-  debug: false,
-};
 
 /**
  * JSON-RPC 2.0 request structure
@@ -97,33 +94,34 @@ interface ActiveSubscription {
 }
 
 /**
- * WebSocket-based RPC client for Substrate
+ * WebSocket-based RPC client for Plexus
  *
  * Implements the JSON-RPC 2.0 subscription protocol:
  * 1. Send request, receive subscription ID
  * 2. Receive notifications with that subscription ID
  * 3. Stream terminates on done/error item
  */
-export class SubstrateClient implements RpcClient {
+export class PlexusRpcClient implements RpcClient {
   private ws: WebSocket | null = null;
   private nextId = 1;
   private pendingRequests = new Map<number, PendingRequest>();
   private subscriptions = new Map<number, ActiveSubscription>();
   private pendingSubscriptionMessages = new Map<number, PlexusStreamItem[]>();
-  private config: Required<SubstrateConfig>;
+  private config: Required<PlexusRpcConfig>;
   private connectionPromise: Promise<void> | null = null;
 
-  constructor(config: Partial<SubstrateConfig> = {}) {
+  constructor(config: PlexusRpcConfig) {
     this.config = {
-      url: config.url ?? defaultConfig.url,
-      connectionTimeout: config.connectionTimeout ?? defaultConfig.connectionTimeout ?? 5000,
-      debug: config.debug ?? defaultConfig.debug ?? false,
+      backend: config.backend,
+      url: config.url,
+      connectionTimeout: config.connectionTimeout ?? 5000,
+      debug: config.debug ?? false,
     };
   }
 
   private log(...args: unknown[]): void {
     if (this.config.debug) {
-      console.log('[SubstrateClient]', ...args);
+      console.log('[PlexusRpcClient]', ...args);
     }
   }
 
@@ -303,12 +301,12 @@ export class SubstrateClient implements RpcClient {
       done: false,
     };
 
-    // Send request - wrap in plexus.call
+    // Send request - wrap in backend-specific call method
     const id = this.nextId++;
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id,
-      method: 'plexus.call',
+      method: `${this.config.backend}.call`,
       params: {
         method,
         params: params ?? {},
@@ -394,10 +392,10 @@ export class SubstrateClient implements RpcClient {
 }
 
 /**
- * Create a SubstrateClient with the given configuration
+ * Create a PlexusRpcClient with the given configuration
  */
-export function createClient(config: Partial<SubstrateConfig> = {}): SubstrateClient {
-  return new SubstrateClient(config);
+export function createClient(config: PlexusRpcConfig): PlexusRpcClient {
+  return new PlexusRpcClient(config);
 }
 "#.to_string()
 }

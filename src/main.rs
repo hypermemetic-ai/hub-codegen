@@ -32,6 +32,10 @@ struct Args {
     /// Dry run - print generated files without writing
     #[arg(long)]
     dry_run: bool,
+
+    /// Bundle transport code (default: true). If false, assumes external @plexus/rpc-client package
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    bundle_transport: bool,
 }
 
 fn main() -> Result<()> {
@@ -48,10 +52,15 @@ fn main() -> Result<()> {
 
     let ir: hub_codegen::IR = serde_json::from_str(&ir_json)?;
 
+    // Create generation options
+    let options = hub_codegen::GenerationOptions {
+        bundle_transport: args.bundle_transport,
+    };
+
     // Generate based on target
     let result = match args.target {
         #[cfg(feature = "typescript")]
-        CodegenTarget::Typescript => hub_codegen::generate_typescript(&ir)?,
+        CodegenTarget::Typescript => hub_codegen::generate_typescript(&ir, &options)?,
         #[cfg(not(feature = "typescript"))]
         CodegenTarget::Typescript => {
             anyhow::bail!("TypeScript codegen not enabled. Rebuild with --features typescript");

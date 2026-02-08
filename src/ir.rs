@@ -11,6 +11,8 @@ use std::collections::HashMap;
 pub struct IR {
     /// IR format version
     pub ir_version: String,
+    /// Backend name (e.g., "substrate", "plexus")
+    pub ir_backend: String,
     /// Plexus hash for versioning (optional, computed from schema tree)
     #[serde(default)]
     pub ir_hash: Option<String>,

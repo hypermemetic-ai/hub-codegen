@@ -29,3 +29,19 @@ pub struct GenerationResult {
     pub warnings: Vec<Warning>,
 }
 
+/// Options for code generation
+#[derive(Debug, Clone)]
+pub struct GenerationOptions {
+    /// Whether to bundle transport code (for TypeScript)
+    /// If false, assumes external @plexus/rpc-client package
+    pub bundle_transport: bool,
+}
+
+impl Default for GenerationOptions {
+    fn default() -> Self {
+        Self {
+            bundle_transport: true,
+        }
+    }
+}
+

@@ -4,7 +4,7 @@ pub mod ir;
 pub mod generator;
 
 pub use ir::IR;
-pub use generator::{GenerationResult, Warning};
+pub use generator::{GenerationResult, Warning, GenerationOptions};
 
 // Conditionally export generators based on features
 #[cfg(feature = "typescript")]

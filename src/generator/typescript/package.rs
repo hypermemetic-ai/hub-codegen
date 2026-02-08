@@ -5,12 +5,20 @@
 use crate::ir::IR;
 
 /// Generate package.json content
-pub fn generate_package_json(ir: &IR) -> String {
+pub fn generate_package_json(ir: &IR, bundle_transport: bool) -> String {
     let plexus_hash = ir.ir_hash.as_deref().unwrap_or("unknown");
     let version_hash = if plexus_hash.len() >= 16 {
         &plexus_hash[..16]
     } else {
         plexus_hash
+    };
+
+    // Conditionally include @plexus/rpc-client dependency based on bundle_transport flag
+    let dependencies = if bundle_transport {
+        r#"    "ws": "^8.18.0""#
+    } else {
+        r#"    "ws": "^8.18.0",
+    "@plexus/rpc-client": "workspace:*""#
     };
 
     format!(r#"{{
@@ -23,7 +31,7 @@ pub fn generate_package_json(ir: &IR) -> String {
     "typecheck": "npx tsc --noEmit"
   }},
   "dependencies": {{
-    "ws": "^8.0.0"
+{dependencies}
   }},
   "devDependencies": {{
     "tsx": "^4.0.0",
