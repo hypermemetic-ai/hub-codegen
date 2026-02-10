@@ -5,6 +5,28 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Generator tool version information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratorInfo {
+    /// Tool name (e.g., "synapse", "synapse-cc")
+    pub gi_tool: String,
+    /// Version string (e.g., "0.2.0.0")
+    pub gi_version: String,
+}
+
+/// Generation metadata tracking the full toolchain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationMetadata {
+    /// All tools in the generation chain
+    pub gm_generators: Vec<GeneratorInfo>,
+    /// ISO 8601 timestamp of generation
+    pub gm_timestamp: String,
+    /// IR format version
+    pub gm_ir_version: String,
+}
+
 /// Top-level IR structure (matches Synapse output)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,6 +38,9 @@ pub struct IR {
     /// Plexus hash for versioning (optional, computed from schema tree)
     #[serde(default)]
     pub ir_hash: Option<String>,
+    /// Generation toolchain metadata
+    #[serde(default)]
+    pub ir_metadata: Option<GenerationMetadata>,
     /// Named type definitions (structs, enums, aliases)
     pub ir_types: HashMap<String, TypeDef>,
     /// Method definitions keyed by full path (e.g., "cone.chat")

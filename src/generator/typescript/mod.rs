@@ -9,8 +9,10 @@ pub mod tests;
 
 use crate::ir::IR;
 use crate::generator::{GenerationResult, Warning, GenerationOptions};
+use crate::HUB_CODEGEN_VERSION;
 use anyhow::Result;
 use std::collections::HashMap;
+use serde_json::json;
 
 /// Generate TypeScript code from IR
 pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult> {
@@ -69,7 +71,45 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     let smoke_test = tests::generate_smoke_test(ir, options.bundle_transport);
     files.insert("test/smoke.test.ts".to_string(), smoke_test);
 
+    // Generate metadata file
+    let metadata = generate_metadata_file(ir);
+    files.insert(".codegen-metadata.json".to_string(), metadata);
+
     Ok(GenerationResult { files, warnings })
+}
+
+/// Generate .codegen-metadata.json with full toolchain information
+fn generate_metadata_file(ir: &IR) -> String {
+    use crate::ir::GeneratorInfo;
+
+    // Get generators from IR metadata and add hub-codegen itself
+    let mut generators = ir.ir_metadata
+        .as_ref()
+        .map(|m| m.gm_generators.clone())
+        .unwrap_or_default();
+
+    generators.push(GeneratorInfo {
+        gi_tool: "hub-codegen".to_string(),
+        gi_version: HUB_CODEGEN_VERSION.to_string(),
+    });
+
+    let metadata = json!({
+        "format_version": "1.0",
+        "generation": {
+            "toolchain": generators.iter().map(|g| json!({
+                "tool": g.gi_tool,
+                "version": g.gi_version,
+            })).collect::<Vec<_>>(),
+            "timestamp": ir.ir_metadata.as_ref().map(|m| &m.gm_timestamp),
+            "ir_version": &ir.ir_version,
+        },
+        "source": {
+            "backend": &ir.ir_backend,
+            "plexus_hash": &ir.ir_hash,
+        },
+    });
+
+    serde_json::to_string_pretty(&metadata).unwrap()
 }
 
 /// Collect warnings for unknown/untyped references
