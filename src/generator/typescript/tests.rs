@@ -53,7 +53,7 @@ async function smokeTest() {{
         break;
       }}
       if (item.type === 'error') {{
-        throw new Error(`Backend returned error: ${{item.error}}`);
+        throw new Error(`Backend returned error: ${{item.message}}`);
       }}
     }}
 
