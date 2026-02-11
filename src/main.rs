@@ -2,6 +2,8 @@
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
+use hub_codegen::cache::{read_cache_manifest, write_cache_manifest, CodeCacheManifest, ToolchainVersions, CodePluginCache};
+use hub_codegen::merge::{merge_generated_code, print_merge_summary, MergeStrategy};
 use std::io::{self, Read};
 use std::path::PathBuf;
 
@@ -36,6 +38,10 @@ struct Args {
     /// Bundle transport code (default: true). If false, assumes external @plexus/rpc-client package
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     bundle_transport: bool,
+
+    /// Merge strategy for handling user-modified files (skip|force|interactive)
+    #[arg(long, default_value = "skip")]
+    merge_strategy: MergeStrategy,
 }
 
 fn main() -> Result<()> {
@@ -90,15 +96,70 @@ fn main() -> Result<()> {
             println!();
         }
     } else {
+        // Create output directory if it doesn't exist
         std::fs::create_dir_all(&args.output)?;
-        for (path, content) in &result.files {
-            let full_path = args.output.join(path);
-            if let Some(parent) = full_path.parent() {
-                std::fs::create_dir_all(parent)?;
+
+        // Determine backend name from IR (or use default)
+        let backend = ir.ir_backend.clone();
+        let target_name = match args.target {
+            CodegenTarget::Typescript => "typescript",
+            CodegenTarget::Rust => "rust",
+        };
+
+        // Try to read existing cache manifest
+        let cache_manifest = read_cache_manifest(target_name, &backend).ok();
+
+        // Perform three-way merge
+        let merge_result = merge_generated_code(
+            &result.files,
+            &args.output,
+            cache_manifest.as_ref(),
+            args.merge_strategy,
+        )?;
+
+        // Print merge summary with warnings
+        print_merge_summary(&merge_result);
+
+        // Update cache manifest with new file hashes
+        let toolchain = ToolchainVersions {
+            synapse_cc: "0.0.0".to_string(), // Will be populated by synapse-cc
+            synapse: "0.0.0".to_string(),    // Will be populated by synapse-cc
+            hub_codegen: hub_codegen::HUB_CODEGEN_VERSION.to_string(),
+        };
+
+        let mut manifest = cache_manifest.unwrap_or_else(|| {
+            CodeCacheManifest::new(target_name.to_string(), toolchain.clone())
+        });
+
+        // Update toolchain version
+        manifest.toolchain = toolchain;
+
+        // Build file hashes for cache: use new hashes for written files,
+        // preserve old hashes for skipped files
+        let mut updated_file_hashes = result.file_hashes.clone();
+
+        // For skipped files, restore the old hash from cache to preserve conflict detection
+        if let Some(old_plugin) = manifest.plugins.get("default") {
+            for skipped_file in &merge_result.skipped {
+                let skipped_path = skipped_file.to_str().unwrap();
+                if let Some(old_hash) = old_plugin.file_hashes.get(skipped_path) {
+                    // Keep the old hash so future runs can detect the conflict
+                    updated_file_hashes.insert(skipped_path.to_string(), old_hash.clone());
+                }
             }
-            std::fs::write(&full_path, content)?;
-            println!("Wrote: {}", full_path.display());
         }
+
+        let cache_entry = CodePluginCache {
+            ir_hash: ir.ir_hash.clone().unwrap_or_default(),
+            file_hashes: updated_file_hashes,
+            cached_at: String::new(), // Will be set by add_plugin
+        };
+
+        manifest.plugins.clear();
+        manifest.plugins.insert("default".to_string(), cache_entry);
+
+        // Write updated cache manifest
+        write_cache_manifest(target_name, &backend, &manifest)?;
     }
 
     Ok(())

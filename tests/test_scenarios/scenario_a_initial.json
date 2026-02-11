@@ -1,0 +1,20 @@
+{
+  "plugins": {
+    "test_plugin": {
+      "methods": [
+        "method1",
+        "method2",
+        "method3"
+      ],
+      "children": [
+        "child1",
+        "child2"
+      ],
+      "types": [
+        "TestType",
+        "RequestType",
+        "ResponseType"
+      ]
+    }
+  }
+}

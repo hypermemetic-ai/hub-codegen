@@ -3,7 +3,6 @@
 use hub_codegen::{generate_rust, IR};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
 use std::process::Command;
 
 fn create_comprehensive_test_ir() -> IR {
@@ -186,7 +185,9 @@ fn create_comprehensive_test_ir() -> IR {
 
     IR {
         ir_version: "2.0".to_string(),
+        ir_backend: "test".to_string(),
         ir_hash: Some("smoke-test-hash".to_string()),
+        ir_metadata: None,
         ir_types,
         ir_methods,
         ir_plugins,

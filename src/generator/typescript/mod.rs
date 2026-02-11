@@ -9,6 +9,7 @@ pub mod tests;
 
 use crate::ir::IR;
 use crate::generator::{GenerationResult, Warning, GenerationOptions};
+use crate::hash::compute_file_hashes;
 use crate::HUB_CODEGEN_VERSION;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -71,15 +72,22 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     let smoke_test = tests::generate_smoke_test(ir, options.bundle_transport);
     files.insert("test/smoke.test.ts".to_string(), smoke_test);
 
-    // Generate metadata file
-    let metadata = generate_metadata_file(ir);
-    files.insert(".codegen-metadata.json".to_string(), metadata);
+    // Compute file hashes for all files generated so far
+    let mut file_hashes = compute_file_hashes(&files);
 
-    Ok(GenerationResult { files, warnings })
+    // Generate metadata file with file hashes included
+    let metadata = generate_metadata_file(ir, &file_hashes);
+    files.insert(".codegen-metadata.json".to_string(), metadata.clone());
+
+    // Compute hash for metadata file itself
+    use crate::hash::compute_file_hash;
+    file_hashes.insert(".codegen-metadata.json".to_string(), compute_file_hash(&metadata));
+
+    Ok(GenerationResult { files, warnings, file_hashes })
 }
 
 /// Generate .codegen-metadata.json with full toolchain information
-fn generate_metadata_file(ir: &IR) -> String {
+fn generate_metadata_file(ir: &IR, file_hashes: &HashMap<String, String>) -> String {
     use crate::ir::GeneratorInfo;
 
     // Get generators from IR metadata and add hub-codegen itself
@@ -94,7 +102,7 @@ fn generate_metadata_file(ir: &IR) -> String {
     });
 
     let metadata = json!({
-        "format_version": "1.0",
+        "format_version": "2.0",
         "generation": {
             "toolchain": generators.iter().map(|g| json!({
                 "tool": g.gi_tool,
@@ -106,6 +114,9 @@ fn generate_metadata_file(ir: &IR) -> String {
         "source": {
             "backend": &ir.ir_backend,
             "plexus_hash": &ir.ir_hash,
+        },
+        "cache": {
+            "file_hashes": file_hashes,
         },
     });
 

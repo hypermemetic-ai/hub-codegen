@@ -5,6 +5,9 @@ pub const HUB_CODEGEN_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod ir;
 pub mod generator;
+pub mod hash;
+pub mod cache;
+pub mod merge;
 
 pub use ir::IR;
 pub use generator::{GenerationResult, Warning, GenerationOptions};

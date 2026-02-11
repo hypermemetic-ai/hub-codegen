@@ -27,6 +27,8 @@ pub struct GenerationResult {
     pub files: HashMap<String, String>,
     /// Warnings encountered during generation
     pub warnings: Vec<Warning>,
+    /// Map of relative path -> content hash (for cache invalidation)
+    pub file_hashes: HashMap<String, String>,
 }
 
 /// Options for code generation
