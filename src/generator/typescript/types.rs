@@ -53,7 +53,8 @@ export type PlexusStreamItem =
   | PlexusStreamItem_Data
   | PlexusStreamItem_Progress
   | PlexusStreamItem_Error
-  | PlexusStreamItem_Done;
+  | PlexusStreamItem_Done
+  | PlexusStreamItem_Request;
 
 /** Data payload with caller-applied metadata */
 export interface PlexusStreamItem_Data {
@@ -95,6 +96,102 @@ export interface PlexusStreamItem_Done {
   type: 'done';
   /** Metadata from calling layer */
   metadata: StreamMetadata;
+}
+
+/** Server-to-client request for bidirectional communication */
+export interface PlexusStreamItem_Request {
+  type: 'request';
+  /** Unique identifier for correlating response */
+  requestId: string;
+  /** Serialized request data */
+  requestData: StandardRequest;
+  /** Maximum time to wait for response (milliseconds) */
+  timeoutMs: number;
+}
+
+// === Bidirectional Communication Types ===
+
+/** Standard request types for common UI patterns */
+export type StandardRequest =
+  | StandardRequest_Confirm
+  | StandardRequest_Prompt
+  | StandardRequest_Select;
+
+/** Confirmation request (yes/no) */
+export interface StandardRequest_Confirm {
+  type: 'confirm';
+  /** Message to display to user */
+  message: string;
+  /** Default value if user doesn't respond */
+  default?: boolean;
+}
+
+/** Text prompt request */
+export interface StandardRequest_Prompt {
+  type: 'prompt';
+  /** Message to display to user */
+  message: string;
+  /** Default value */
+  default?: string;
+  /** Placeholder text */
+  placeholder?: string;
+}
+
+/** Selection request (single or multiple choice) */
+export interface StandardRequest_Select {
+  type: 'select';
+  /** Message to display to user */
+  message: string;
+  /** Available options */
+  options: SelectOption[];
+  /** Allow multiple selections */
+  multiSelect?: boolean;
+}
+
+/** Option in a select menu */
+export interface SelectOption {
+  /** Value returned when selected */
+  value: string;
+  /** Display label */
+  label: string;
+  /** Optional description */
+  description?: string;
+}
+
+/** Standard response types for bidirectional requests */
+export type StandardResponse =
+  | StandardResponse_Confirmed
+  | StandardResponse_Text
+  | StandardResponse_Selected
+  | StandardResponse_Cancelled;
+
+/** Response to confirmation request */
+export interface StandardResponse_Confirmed {
+  type: 'confirmed';
+  value: boolean;
+}
+
+/** Response to prompt request */
+export interface StandardResponse_Text {
+  type: 'text';
+  value: string;
+}
+
+/** Response to select request */
+export interface StandardResponse_Selected {
+  type: 'selected';
+  values: string[];
+}
+
+/** User cancelled the request */
+export interface StandardResponse_Cancelled {
+  type: 'cancelled';
+}
+
+/** Respond to a bidirectional request */
+export interface PlexusResponse {
+  requestId: string;
+  response: StandardResponse;
 }
 
 /** Error thrown when a PlexusStreamItem_Error is received */

@@ -13,7 +13,7 @@ fn get_transport_template() -> String {
 // Implements RpcClient using JSON-RPC 2.0 subscription protocol
 
 import type { RpcClient } from './rpc';
-import type { PlexusStreamItem, StreamMetadata } from './types';
+import type { PlexusStreamItem, PlexusStreamItem_Request, StandardRequest, StandardResponse, PlexusResponse, StreamMetadata } from './types';
 import WebSocket from 'ws';
 
 /**
@@ -28,7 +28,19 @@ export interface PlexusRpcConfig {
   connectionTimeout?: number;
   /** Enable debug logging (default: false) */
   debug?: boolean;
+  /** Handler for bidirectional requests from the server */
+  onBidirectionalRequest?: BidirectionalRequestHandler;
 }
+
+/**
+ * Handler type for bidirectional requests
+ *
+ * @param request - The request from the server
+ * @returns Promise resolving to the response, or undefined to auto-cancel
+ */
+export type BidirectionalRequestHandler = (
+  request: StandardRequest
+) => Promise<StandardResponse | undefined>;
 
 /**
  * JSON-RPC 2.0 request structure
@@ -110,6 +122,8 @@ export class PlexusRpcClient implements RpcClient {
   private config: Required<PlexusRpcConfig>;
   private connectionPromise: Promise<void> | null = null;
 
+  private onBidirectionalRequest?: BidirectionalRequestHandler;
+
   constructor(config: PlexusRpcConfig) {
     this.config = {
       backend: config.backend,
@@ -117,6 +131,14 @@ export class PlexusRpcClient implements RpcClient {
       connectionTimeout: config.connectionTimeout ?? 5000,
       debug: config.debug ?? false,
     };
+    this.onBidirectionalRequest = config.onBidirectionalRequest;
+  }
+
+  /**
+   * Set or update the bidirectional request handler
+   */
+  setBidirectionalHandler(handler: BidirectionalRequestHandler | undefined): void {
+    this.onBidirectionalRequest = handler;
   }
 
   private log(...args: unknown[]): void {
@@ -263,6 +285,12 @@ export class PlexusRpcClient implements RpcClient {
       return;
     }
 
+    // Handle bidirectional requests specially - don't queue, handle immediately
+    if (item.type === 'request') {
+      this.handleBidirectionalRequest(item as PlexusStreamItem_Request);
+      return;
+    }
+
     // Check if stream is terminating
     if (item.type === 'done' || item.type === 'error') {
       sub.done = true;
@@ -281,6 +309,69 @@ export class PlexusRpcClient implements RpcClient {
     if (sub.done && sub.queue.length === 0) {
       this.subscriptions.delete(subscriptionId);
     }
+  }
+
+  /**
+   * Handle a bidirectional request from the server
+   */
+  private async handleBidirectionalRequest(requestItem: PlexusStreamItem_Request): Promise<void> {
+    const { requestId, requestData, timeoutMs } = requestItem;
+
+    // If no handler, auto-cancel
+    if (!this.onBidirectionalRequest) {
+      this.log('No bidirectional handler, auto-cancelling request:', requestId);
+      await this.sendBidirectionalResponse(requestId, { type: 'cancelled' });
+      return;
+    }
+
+    // Set up timeout
+    const timeoutPromise = new Promise<undefined>((resolve) => {
+      setTimeout(() => resolve(undefined), timeoutMs);
+    });
+
+    try {
+      // Race between handler and timeout
+      const response = await Promise.race([
+        this.onBidirectionalRequest(requestData),
+        timeoutPromise,
+      ]);
+
+      // Send response (undefined means cancelled)
+      if (response === undefined) {
+        await this.sendBidirectionalResponse(requestId, { type: 'cancelled' });
+      } else {
+        await this.sendBidirectionalResponse(requestId, response);
+      }
+    } catch (err) {
+      this.log('Bidirectional handler error:', err);
+      await this.sendBidirectionalResponse(requestId, { type: 'cancelled' });
+    }
+  }
+
+  /**
+   * Send a response to a bidirectional request
+   */
+  private async sendBidirectionalResponse(requestId: string, response: StandardResponse): Promise<void> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.log('Cannot send response, not connected');
+      return;
+    }
+
+    const id = this.nextId++;
+    const request: JsonRpcRequest = {
+      jsonrpc: '2.0',
+      id,
+      method: `${this.config.backend}._plexus_respond`,
+      params: {
+        request_id: requestId,
+        response,
+      },
+    };
+
+    this.log('Sending bidirectional response:', JSON.stringify(request));
+    this.ws.send(JSON.stringify(request));
+
+    // Don't wait for response - fire and forget
   }
 
   /**
