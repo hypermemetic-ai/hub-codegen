@@ -56,12 +56,15 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
         files.insert("transport.ts".to_string(), transport_content);
     }
 
+    // Check if bidirectional methods exist (for package.json scripts)
+    let has_bidir = tests::has_bidir_methods(ir);
+
     // Generate index
     let index = generate_index(ir, options.bundle_transport);
     files.insert("index.ts".to_string(), index);
 
     // Generate package.json
-    let package_json = package::generate_package_json(ir, options.bundle_transport);
+    let package_json = package::generate_package_json(ir, options.bundle_transport, has_bidir);
     files.insert("package.json".to_string(), package_json);
 
     // Generate tsconfig.json
@@ -71,6 +74,12 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     // Generate smoke test
     let smoke_test = tests::generate_smoke_test(ir, options.bundle_transport);
     files.insert("test/smoke.test.ts".to_string(), smoke_test);
+
+    // Generate bidirectional smoke test if bidir methods exist
+    if has_bidir {
+        let bidir_test = tests::generate_bidir_smoke_test(ir, options.bundle_transport);
+        files.insert("test/bidir-smoke.test.ts".to_string(), bidir_test);
+    }
 
     // Compute file hashes for all files generated so far
     let mut file_hashes = compute_file_hashes(&files);

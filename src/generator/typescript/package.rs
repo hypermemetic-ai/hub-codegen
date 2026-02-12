@@ -5,7 +5,7 @@
 use crate::ir::IR;
 
 /// Generate package.json content
-pub fn generate_package_json(ir: &IR, bundle_transport: bool) -> String {
+pub fn generate_package_json(ir: &IR, bundle_transport: bool, has_bidir: bool) -> String {
     let plexus_hash = ir.ir_hash.as_deref().unwrap_or("unknown");
     let version_hash = if plexus_hash.len() >= 16 {
         &plexus_hash[..16]
@@ -21,14 +21,24 @@ pub fn generate_package_json(ir: &IR, bundle_transport: bool) -> String {
     "@plexus/rpc-client": "workspace:*""#
     };
 
+    // Include bidir test script if bidir methods exist
+    let scripts = if has_bidir {
+        r#""test": "npx tsx test/smoke.test.ts",
+    "test:bidir": "npx tsx test/bidir-smoke.test.ts",
+    "test:all": "npm run test && npm run test:bidir",
+    "typecheck": "npx tsc --noEmit""#
+    } else {
+        r#""test": "npx tsx test/smoke.test.ts",
+    "typecheck": "npx tsc --noEmit""#
+    };
+
     format!(r#"{{
   "name": "@plexus/client",
   "version": "0.0.0-{version_hash}",
   "type": "module",
   "main": "index.ts",
   "scripts": {{
-    "test": "npx tsx test/smoke.test.ts",
-    "typecheck": "npx tsc --noEmit"
+    {scripts}
   }},
   "dependencies": {{
 {dependencies}
