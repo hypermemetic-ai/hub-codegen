@@ -119,7 +119,7 @@ export class PlexusRpcClient implements RpcClient {
   private pendingRequests = new Map<number, PendingRequest>();
   private subscriptions = new Map<number, ActiveSubscription>();
   private pendingSubscriptionMessages = new Map<number, PlexusStreamItem[]>();
-  private config: Required<PlexusRpcConfig>;
+  private config: Omit<Required<PlexusRpcConfig>, 'onBidirectionalRequest'>;
   private connectionPromise: Promise<void> | null = null;
 
   private onBidirectionalRequest?: BidirectionalRequestHandler;
@@ -361,10 +361,10 @@ export class PlexusRpcClient implements RpcClient {
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id,
-      method: `${this.config.backend}._plexus_respond`,
+      method: `${this.config.backend}.respond`,
       params: {
         request_id: requestId,
-        response,
+        response_data: response,
       },
     };
 
