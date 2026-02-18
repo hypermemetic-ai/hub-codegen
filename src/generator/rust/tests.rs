@@ -87,6 +87,7 @@ mod tests {
                     qn_namespace: "health".to_string(),
                     qn_local_name: "Status".to_string(),
                 }),
+                md_bidir_type: None,
             },
         );
 
@@ -110,6 +111,7 @@ mod tests {
                     qn_namespace: "health".to_string(),
                     qn_local_name: "Event".to_string(),
                 }),
+                md_bidir_type: None,
             },
         );
 

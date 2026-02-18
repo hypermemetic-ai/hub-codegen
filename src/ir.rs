@@ -253,6 +253,24 @@ pub struct MethodDef {
     #[serde(default)]
     pub md_params: Vec<ParamDef>,
     pub md_returns: TypeRef,
+    /// Bidirectional channel type parameter T.
+    ///
+    /// When a method uses `BidirChannel<StandardRequest<T>, StandardResponse<T>>` or
+    /// `Arc<StandardBidirChannel>` (the T=Value default), this field describes T.
+    ///
+    /// - `None`  → the method is not bidirectional, OR it uses the default
+    ///             `T = serde_json::Value` (i.e., `StandardBidirChannel`)
+    /// - `Some(TypeRef::RefAny)` → bidirectional with T=Value (explicit marker)
+    /// - `Some(TypeRef::RefNamed(...))` → bidirectional with a specific T type
+    ///
+    /// # Schema field
+    ///
+    /// The synapse IR builder populates this from the `"bidirType"` field in the
+    /// method schema JSON (emitted when `bidirectional: true` in `MethodSchema`
+    /// with a non-Value `request_type`).  When the schema only has
+    /// `bidirectional: true` but no `bidir_type` field, `None` is emitted.
+    #[serde(default)]
+    pub md_bidir_type: Option<TypeRef>,
 }
 
 /// Parameter definition
@@ -448,5 +466,80 @@ mod tests {
         assert!(TypeRef::RefUnknown.contains_unknown());
         assert!(TypeRef::RefArray(Box::new(TypeRef::RefUnknown)).contains_unknown());
         assert!(!TypeRef::RefArray(Box::new(TypeRef::RefAny)).contains_unknown());
+    }
+
+    /// Test that `md_bidir_type` is correctly deserialized from IR JSON.
+    ///
+    /// Verifies three cases:
+    /// 1. Field absent       → `None` (legacy IR / non-bidir method)
+    /// 2. `null`             → `None` (explicit null from synapse)
+    /// 3. `{"tag":"RefAny"}` → `Some(TypeRef::RefAny)` (T=Value bidir)
+    /// 4. `{"tag":"RefNamed",...}` → `Some(TypeRef::RefNamed(...))` (specific T)
+    #[test]
+    fn test_method_def_bidir_type_deserialization() {
+        // 1. Field absent → None (backward compatibility)
+        let json_no_field = r#"{
+            "mdName": "wizard",
+            "mdFullPath": "interactive.wizard",
+            "mdNamespace": "interactive",
+            "mdStreaming": true,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefAny"}
+        }"#;
+        let method: MethodDef = serde_json::from_str(json_no_field).unwrap();
+        assert!(method.md_bidir_type.is_none(), "absent field should default to None");
+
+        // 2. Explicit null → None
+        let json_null = r#"{
+            "mdName": "wizard",
+            "mdFullPath": "interactive.wizard",
+            "mdNamespace": "interactive",
+            "mdStreaming": true,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefAny"},
+            "mdBidirType": null
+        }"#;
+        let method: MethodDef = serde_json::from_str(json_null).unwrap();
+        assert!(method.md_bidir_type.is_none(), "null should deserialize to None");
+
+        // 3. RefAny → Some(TypeRef::RefAny)  (standard bidirectional, T=Value)
+        let json_ref_any = r#"{
+            "mdName": "wizard",
+            "mdFullPath": "interactive.wizard",
+            "mdNamespace": "interactive",
+            "mdStreaming": true,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefAny"},
+            "mdBidirType": {"tag": "RefAny"}
+        }"#;
+        let method: MethodDef = serde_json::from_str(json_ref_any).unwrap();
+        assert!(
+            matches!(method.md_bidir_type, Some(TypeRef::RefAny)),
+            "RefAny tag should deserialize to Some(RefAny)"
+        );
+
+        // 4. RefNamed → Some(TypeRef::RefNamed(...))  (typed bidirectional)
+        let json_ref_named = r#"{
+            "mdName": "wizard",
+            "mdFullPath": "interactive.wizard",
+            "mdNamespace": "interactive",
+            "mdStreaming": true,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefAny"},
+            "mdBidirType": {
+                "tag": "RefNamed",
+                "contents": {
+                    "qnNamespace": "interactive",
+                    "qnLocalName": "WizardRequest"
+                }
+            }
+        }"#;
+        let method: MethodDef = serde_json::from_str(json_ref_named).unwrap();
+        if let Some(TypeRef::RefNamed(qn)) = method.md_bidir_type {
+            assert_eq!(qn.qn_namespace, "interactive");
+            assert_eq!(qn.qn_local_name, "WizardRequest");
+        } else {
+            panic!("Expected Some(RefNamed(...)) for typed bidirectional");
+        }
     }
 }

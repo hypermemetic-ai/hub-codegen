@@ -89,6 +89,7 @@ impl TestIRBuilder {
                         pd_default: None,
                     }],
                     md_returns: TypeRef::RefPrimitive("string".to_string(), None),
+                    md_bidir_type: None,
                 },
             );
         }

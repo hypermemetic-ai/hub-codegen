@@ -146,6 +146,7 @@ fn create_comprehensive_test_ir() -> IR {
                 qn_namespace: "echo".to_string(),
                 qn_local_name: "EchoResponse".to_string(),
             }),
+            md_bidir_type: None,
         },
     );
 
@@ -178,6 +179,7 @@ fn create_comprehensive_test_ir() -> IR {
                 qn_namespace: "echo".to_string(),
                 qn_local_name: "EchoEvent".to_string(),
             }),
+            md_bidir_type: None,
         },
     );
 
