@@ -119,7 +119,9 @@ mod tests {
 
         IR {
             ir_version: "2.0".to_string(),
+            ir_backend: "test".to_string(),
             ir_hash: Some("test-hash-123".to_string()),
+            ir_metadata: None,
             ir_types,
             ir_methods,
             ir_plugins,
@@ -129,40 +131,53 @@ mod tests {
     #[test]
     fn test_generate_types() {
         let ir = create_test_ir();
-        let types_content = rust::types::generate_types(&ir);
+
+        // Core types (PlexusStreamItem, PlexusError, etc.)
+        let core_types = rust::types::generate_core_types(&ir);
+        assert!(core_types.contains("pub enum PlexusStreamItem"));
+        assert!(core_types.contains("PlexusError"));
+
+        // Namespace types are generated via namespace modules
+        let namespace_modules = rust::client::generate_namespace_modules(&ir);
+        // Find the health namespace module content
+        let health_content = namespace_modules.values()
+            .find(|c| c.contains("pub struct Status"))
+            .expect("Should have a module containing Status struct");
 
         // Should contain struct definition
-        assert!(types_content.contains("pub struct Status"));
-        assert!(types_content.contains("pub healthy: bool"));
-        assert!(types_content.contains("pub uptime: i64"));
+        assert!(health_content.contains("pub struct Status"));
+        assert!(health_content.contains("pub healthy: bool"));
+        assert!(health_content.contains("pub uptime: i64"));
 
         // Should contain enum definition
-        assert!(types_content.contains("pub enum Event"));
-        assert!(types_content.contains("Started"));
-        assert!(types_content.contains("Completed"));
-
-        // Should contain core transport types
-        assert!(types_content.contains("pub enum PlexusStreamItem"));
-        assert!(types_content.contains("PlexusError"));
+        assert!(health_content.contains("pub enum Event"));
+        assert!(health_content.contains("Started"));
+        assert!(health_content.contains("Completed"));
     }
 
     #[test]
     fn test_generate_client() {
         let ir = create_test_ir();
-        let client_content = rust::client::generate_client(&ir);
 
-        // Should contain client struct
-        assert!(client_content.contains("pub struct PlexusClient"));
-        assert!(client_content.contains("pub fn new("));
+        // Base client has PlexusClient struct
+        let base_client = rust::client::generate_base_client();
+        assert!(base_client.contains("pub struct PlexusClient"));
+        assert!(base_client.contains("pub fn new("));
+
+        // Methods are in namespace modules
+        let namespace_modules = rust::client::generate_namespace_modules(&ir);
+        let health_content = namespace_modules.values()
+            .find(|c| c.contains("pub async fn check"))
+            .expect("Should have a module containing check method");
 
         // Should contain non-streaming method
-        assert!(client_content.contains("pub async fn check"));
-        assert!(client_content.contains("-> Result<Status>"));
+        assert!(health_content.contains("pub async fn check"));
+        assert!(health_content.contains("-> Result<Status>"));
 
         // Should contain streaming method
-        assert!(client_content.contains("pub async fn watch"));
-        assert!(client_content.contains("interval: i64"));
-        assert!(client_content.contains("Pin<Box<dyn Stream<Item = Result<Event>> + Send>>"));
+        assert!(health_content.contains("pub async fn watch"));
+        assert!(health_content.contains("interval: i64"));
+        assert!(health_content.contains("Pin<Box<dyn Stream<Item = Result<Event>> + Send>>"));
     }
 
     #[test]
@@ -170,14 +185,14 @@ mod tests {
         let ir = create_test_ir();
         let result = rust::generate(&ir).expect("Generation should succeed");
 
-        // Should have all required files
-        assert!(result.files.contains_key("lib.rs"));
-        assert!(result.files.contains_key("types.rs"));
-        assert!(result.files.contains_key("client.rs"));
+        // Should have all required files (paths include src/ prefix)
+        assert!(result.files.contains_key("src/lib.rs"), "Missing src/lib.rs, keys: {:?}", result.files.keys().collect::<Vec<_>>());
+        assert!(result.files.contains_key("src/types.rs"));
+        assert!(result.files.contains_key("src/client.rs"));
         assert!(result.files.contains_key("Cargo.toml"));
 
         // lib.rs should re-export modules
-        let lib_content = result.files.get("lib.rs").unwrap();
+        let lib_content = result.files.get("src/lib.rs").unwrap();
         assert!(lib_content.contains("pub mod types"));
         assert!(lib_content.contains("pub mod client"));
         assert!(lib_content.contains("pub use client::PlexusClient"));
@@ -192,12 +207,17 @@ mod tests {
     #[test]
     fn test_snake_case_conversion() {
         let ir = create_test_ir();
-        let client_content = rust::client::generate_client(&ir);
+
+        // Methods are in namespace modules
+        let namespace_modules = rust::client::generate_namespace_modules(&ir);
+        let health_content = namespace_modules.values()
+            .find(|c| c.contains("pub async fn check"))
+            .expect("Should have a module containing check method");
 
         // CamelCase method names should be converted to snake_case
         // (Note: in this test data all methods are already snake_case,
         // but the converter should handle it correctly)
-        assert!(client_content.contains("pub async fn check"));
-        assert!(client_content.contains("pub async fn watch"));
+        assert!(health_content.contains("pub async fn check"));
+        assert!(health_content.contains("pub async fn watch"));
     }
 }

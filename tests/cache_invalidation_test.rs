@@ -7,8 +7,6 @@
 use hub_codegen::ir::*;
 use hub_codegen::{cache::*, hash::*};
 use std::collections::HashMap;
-use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// Helper to create a test IR with configurable plugin structure
@@ -308,12 +306,8 @@ fn test_cache_manifest_operations() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let cache_root = temp_dir.path().to_path_buf();
 
-    // Create the cache directory structure
-    let cache_dir = cache_root.join(".cache/plexus-codegen/hub-codegen/rust/test_backend");
-    std::fs::create_dir_all(&cache_dir).expect("Failed to create cache dir");
-
-    // Set up test environment
-    std::env::set_var("HOME", cache_root.to_str().unwrap());
+    // Get cache directory under our temp root (no HOME mutation)
+    let cache_dir = get_cache_dir_under(&cache_root, "rust", "test_backend");
 
     // Create toolchain versions
     let toolchain = ToolchainVersions {
@@ -340,14 +334,14 @@ fn test_cache_manifest_operations() {
     println!("IR hash: ir_hash_123");
 
     // Write manifest to disk
-    write_cache_manifest("rust", "test_backend", &manifest)
+    write_cache_manifest_to(&cache_dir, &manifest)
         .expect("Failed to write manifest");
 
     println!("✅ Manifest written to disk");
 
     // Read manifest back
     let loaded_manifest =
-        read_cache_manifest("rust", "test_backend").expect("Failed to read manifest");
+        read_cache_manifest_from(&cache_dir).expect("Failed to read manifest");
 
     assert_eq!(loaded_manifest.version, "2.0");
     assert_eq!(loaded_manifest.target, "rust");
@@ -453,7 +447,10 @@ fn test_end_to_end_cache_workflow() {
     println!("\n=== End-to-End Cache Workflow ===");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    std::env::set_var("HOME", temp_dir.path().to_str().unwrap());
+    let cache_root = temp_dir.path().to_path_buf();
+
+    // Get cache directory under our temp root (no HOME mutation)
+    let cache_dir = get_cache_dir_under(&cache_root, "rust", "test");
 
     let toolchain = ToolchainVersions {
         synapse_cc: "0.1.0.0".to_string(),
@@ -480,12 +477,12 @@ fn test_end_to_end_cache_workflow() {
     let mut manifest = CodeCacheManifest::new("rust".to_string(), toolchain.clone());
     manifest.add_plugin("my_plugin".to_string(), ir_hash_v1.clone(), file_hashes_v1);
 
-    write_cache_manifest("rust", "test", &manifest).expect("Failed to write manifest");
+    write_cache_manifest_to(&cache_dir, &manifest).expect("Failed to write manifest");
     println!("✅ Cache manifest written");
 
     // Step 2: Regeneration with same IR (cache hit)
     println!("\n--- Step 2: Regeneration with Same IR (Cache Hit) ---");
-    let loaded_manifest = read_cache_manifest("rust", "test").expect("Failed to read manifest");
+    let loaded_manifest = read_cache_manifest_from(&cache_dir).expect("Failed to read manifest");
 
     let cached_plugin = loaded_manifest.plugins.get("my_plugin").unwrap();
     assert_eq!(cached_plugin.ir_hash, ir_hash_v1);
@@ -513,7 +510,7 @@ fn test_end_to_end_cache_workflow() {
     let mut updated_manifest = CodeCacheManifest::new("rust".to_string(), toolchain);
     updated_manifest.add_plugin("my_plugin".to_string(), ir_hash_v2, file_hashes_v2);
 
-    write_cache_manifest("rust", "test", &updated_manifest).expect("Failed to write manifest");
+    write_cache_manifest_to(&cache_dir, &updated_manifest).expect("Failed to write manifest");
     println!("✅ Cache updated with new IR hash");
 
     println!("\n=== End-to-End Workflow Complete ===");

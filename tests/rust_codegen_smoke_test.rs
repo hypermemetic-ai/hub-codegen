@@ -1,5 +1,7 @@
 //! Integration test that generates Rust code and verifies it compiles
 
+#![cfg(feature = "rust")]
+
 use hub_codegen::{generate_rust, IR};
 use std::collections::HashMap;
 use std::fs;
@@ -211,17 +213,9 @@ fn test_generated_rust_compiles() {
     }
     fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
-    // Write generated files
-    let src_dir = temp_dir.join("src");
-    fs::create_dir_all(&src_dir).expect("Failed to create src dir");
-
+    // Write generated files (keys already include src/ prefix where appropriate)
     for (path, content) in &result.files {
-        // Put Cargo.toml at root, everything else in src/
-        let file_path = if path == "Cargo.toml" {
-            temp_dir.join(path)
-        } else {
-            src_dir.join(path)
-        };
+        let file_path = temp_dir.join(path);
 
         if let Some(parent) = file_path.parent() {
             fs::create_dir_all(parent).expect("Failed to create parent dir");
@@ -231,6 +225,7 @@ fn test_generated_rust_compiles() {
     }
 
     // Verify all expected files exist
+    let src_dir = temp_dir.join("src");
     assert!(src_dir.join("lib.rs").exists());
     assert!(src_dir.join("types.rs").exists());
     assert!(src_dir.join("client.rs").exists());
@@ -263,31 +258,36 @@ fn test_generated_code_structure() {
     let ir = create_comprehensive_test_ir();
     let result = generate_rust(&ir).expect("Code generation should succeed");
 
-    // Verify lib.rs structure
-    let lib_content = result.files.get("lib.rs").expect("lib.rs should exist");
+    // Verify lib.rs structure (generated with src/ prefix)
+    let lib_content = result.files.get("src/lib.rs").expect("src/lib.rs should exist");
     assert!(lib_content.contains("pub mod types"));
     assert!(lib_content.contains("pub mod client"));
     assert!(lib_content.contains("pub use client::PlexusClient"));
 
-    // Verify types.rs contains all types
-    let types_content = result.files.get("types.rs").expect("types.rs should exist");
-    assert!(types_content.contains("pub struct Message"));
-    assert!(types_content.contains("pub enum EchoEvent"));
-    assert!(types_content.contains("pub struct EchoResponse"));
-    assert!(types_content.contains("pub text: String"));
-    assert!(types_content.contains("pub count: i64"));
+    // Verify types are in namespace modules (types.rs has only core transport types)
+    // Namespace-specific types (Message, EchoEvent, EchoResponse) are in namespace modules
+    let echo_module = result.files.values()
+        .find(|c| c.contains("pub struct Message"))
+        .expect("Should have a module containing Message struct");
+    assert!(echo_module.contains("pub struct Message"));
+    assert!(echo_module.contains("pub enum EchoEvent"));
+    assert!(echo_module.contains("pub struct EchoResponse"));
+    assert!(echo_module.contains("pub text: String"));
+    assert!(echo_module.contains("pub count: i64"));
 
-    // Verify client.rs contains methods
-    let client_content = result.files.get("client.rs").expect("client.rs should exist");
+    // Verify client.rs contains PlexusClient base struct
+    let client_content = result.files.get("src/client.rs").expect("src/client.rs should exist");
     assert!(client_content.contains("pub struct PlexusClient"));
-    assert!(client_content.contains("pub async fn once"));
-    assert!(client_content.contains("pub async fn echo"));
-    assert!(client_content.contains("message: String"));
-    assert!(client_content.contains("count: i64"));
+
+    // Methods are in namespace modules
+    assert!(echo_module.contains("pub async fn once"));
+    assert!(echo_module.contains("pub async fn echo"));
+    assert!(echo_module.contains("message: String"));
+    assert!(echo_module.contains("count: i64"));
 
     // Verify streaming vs non-streaming signatures
-    assert!(client_content.contains("-> Result<EchoResponse>"));  // non-streaming
-    assert!(client_content.contains("Pin<Box<dyn Stream<Item = Result<EchoEvent>> + Send>>"));  // streaming
+    assert!(echo_module.contains("-> Result<EchoResponse>"));  // non-streaming
+    assert!(echo_module.contains("Pin<Box<dyn Stream<Item = Result<EchoEvent>> + Send>>"));  // streaming
 
     // Verify Cargo.toml
     let cargo_toml = result.files.get("Cargo.toml").expect("Cargo.toml should exist");

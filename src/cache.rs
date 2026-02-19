@@ -130,19 +130,26 @@ pub fn get_cache_dir(target: &str, backend: &str) -> Result<PathBuf> {
         .or_else(|_| std::env::var("USERPROFILE"))
         .map_err(|_| anyhow::anyhow!("Cannot determine home directory"))?;
 
-    let cache_dir = PathBuf::from(home)
-        .join(".cache")
+    Ok(get_cache_dir_under(&PathBuf::from(home), target, backend))
+}
+
+/// Get cache directory path under a specific root directory
+pub fn get_cache_dir_under(root: &PathBuf, target: &str, backend: &str) -> PathBuf {
+    root.join(".cache")
         .join("plexus-codegen")
         .join("hub-codegen")
         .join(target)
-        .join(backend);
-
-    Ok(cache_dir)
+        .join(backend)
 }
 
 /// Read cache manifest from disk
 pub fn read_cache_manifest(target: &str, backend: &str) -> Result<CodeCacheManifest> {
     let cache_dir = get_cache_dir(target, backend)?;
+    read_cache_manifest_from(&cache_dir)
+}
+
+/// Read cache manifest from a specific cache directory
+pub fn read_cache_manifest_from(cache_dir: &PathBuf) -> Result<CodeCacheManifest> {
     let manifest_path = cache_dir.join("manifest.json");
 
     if !manifest_path.exists() {
@@ -162,7 +169,15 @@ pub fn write_cache_manifest(
     manifest: &CodeCacheManifest,
 ) -> Result<()> {
     let cache_dir = get_cache_dir(target, backend)?;
-    fs::create_dir_all(&cache_dir)?;
+    write_cache_manifest_to(&cache_dir, manifest)
+}
+
+/// Write cache manifest to a specific cache directory
+pub fn write_cache_manifest_to(
+    cache_dir: &PathBuf,
+    manifest: &CodeCacheManifest,
+) -> Result<()> {
+    fs::create_dir_all(cache_dir)?;
 
     let manifest_path = cache_dir.join("manifest.json");
     let content = serde_json::to_string_pretty(&manifest)?;
