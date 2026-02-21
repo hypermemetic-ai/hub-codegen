@@ -2,6 +2,7 @@
 name = "hub-codegen"
 version = "0.1.0"
 edition = "2021"
+license = "AGPL-3.0-only"
 description = "Multi-language code generator for Hub plugins from Synapse IR"
 
 [features]
