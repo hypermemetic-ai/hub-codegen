@@ -46,7 +46,8 @@ pub fn generate_package_json(ir: &IR, bundle_transport: bool, has_bidir: bool) -
   "devDependencies": {{
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
-    "@types/ws": "^8.0.0"
+    "@types/ws": "^8.0.0",
+    "@types/node": "^20.0.0"
   }}
 }}
 "#)
