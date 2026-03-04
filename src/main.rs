@@ -106,8 +106,16 @@ fn main() -> Result<()> {
             CodegenTarget::Rust => "rust",
         };
 
-        // Try to read existing cache manifest
-        let cache_manifest = read_cache_manifest(target_name, &backend).ok();
+        // Try to read existing cache manifest, but discard it if the hub-codegen
+        // version has changed — stale hashes from a different binary cause false
+        // "user modified" detections and silently skip file updates.
+        let cache_manifest = read_cache_manifest(target_name, &backend).ok().and_then(|m| {
+            if m.toolchain.hub_codegen == hub_codegen::HUB_CODEGEN_VERSION {
+                Some(m)
+            } else {
+                None
+            }
+        });
 
         // Perform three-way merge
         let merge_result = merge_generated_code(
