@@ -18,6 +18,7 @@ enum CodegenTarget {
 #[derive(Parser)]
 #[command(name = "hub-codegen")]
 #[command(about = "Generate client code from Synapse IR")]
+#[command(version = hub_codegen::HUB_CODEGEN_VERSION)]
 struct Args {
     /// Path to IR JSON file (use - for stdin)
     #[arg(default_value = "-")]
