@@ -107,16 +107,12 @@ fn main() -> Result<()> {
             CodegenTarget::Rust => "rust",
         };
 
-        // Try to read existing cache manifest, but discard it if the hub-codegen
-        // version has changed — stale hashes from a different binary cause false
-        // "user modified" detections and silently skip file updates.
-        let cache_manifest = read_cache_manifest(target_name, &backend).ok().and_then(|m| {
-            if m.toolchain.hub_codegen == hub_codegen::HUB_CODEGEN_VERSION {
-                Some(m)
-            } else {
-                None
-            }
-        });
+        // Try to read existing cache manifest.
+        // We keep the cache even on version mismatch so the three-way merge can
+        // still detect user modifications (cached != current → skip).
+        // Generator-changed files (cached == current, new differs) are updated
+        // regardless of version, which is the correct upgrade behaviour.
+        let cache_manifest = read_cache_manifest(target_name, &backend).ok();
 
         // Perform three-way merge
         let merge_result = merge_generated_code(
