@@ -24,6 +24,14 @@ enum OutputFormat {
     Json,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum CliTransport {
+    #[default]
+    Ws,
+    Browser,
+    None,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CodegenOutput<'a> {
@@ -31,6 +39,8 @@ struct CodegenOutput<'a> {
     file_hashes: &'a HashMap<String, String>,
     warnings: Vec<WarningOutput<'a>>,
     hub_codegen_version: &'static str,
+    dependencies: &'a HashMap<String, String>,
+    dev_dependencies: &'a HashMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -60,9 +70,9 @@ struct Args {
     #[arg(long)]
     dry_run: bool,
 
-    /// Bundle transport code (default: true). If false, assumes external @plexus/rpc-client package
-    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
-    bundle_transport: bool,
+    /// Transport environment: ws (Node.js/test), browser (native WebSocket, no ws import), none (external @plexus/rpc-client)
+    #[arg(long, value_enum, default_value = "ws")]
+    transport: CliTransport,
 
     /// Merge strategy for handling user-modified files (files mode only)
     #[arg(long, default_value = "skip")]
@@ -89,7 +99,11 @@ fn main() -> Result<()> {
 
     // Create generation options
     let options = hub_codegen::GenerationOptions {
-        bundle_transport: args.bundle_transport,
+        transport: match args.transport {
+            CliTransport::Ws      => hub_codegen::generator::TransportEnv::Ws,
+            CliTransport::Browser => hub_codegen::generator::TransportEnv::Browser,
+            CliTransport::None    => hub_codegen::generator::TransportEnv::None,
+        },
     };
 
     // Generate based on target
@@ -128,6 +142,8 @@ fn main() -> Result<()> {
                     message: &w.message,
                 }).collect(),
                 hub_codegen_version: hub_codegen::HUB_CODEGEN_VERSION,
+                dependencies: &result.dependencies,
+                dev_dependencies: &result.dev_dependencies,
             };
             println!("{}", serde_json::to_string(&out)?);
         }
@@ -141,6 +157,22 @@ fn main() -> Result<()> {
             } else {
                 // Create output directory if it doesn't exist
                 std::fs::create_dir_all(&args.output)?;
+
+                // Write starter package.json if not already present (not in the files map,
+                // so it is not subject to three-way merge — the user owns it after first run)
+                #[cfg(feature = "typescript")]
+                {
+                    let pkg_path = args.output.join("package.json");
+                    if !pkg_path.exists() {
+                        let has_bidir = hub_codegen::generator::typescript::tests::has_bidir_methods(&ir);
+                        let pkg_content = hub_codegen::generator::typescript::package::generate_package_json(
+                            &ir,
+                            options.transport,
+                            has_bidir,
+                        );
+                        std::fs::write(&pkg_path, &pkg_content)?;
+                    }
+                }
 
                 // Determine backend name from IR (or use default)
                 let backend = ir.ir_backend.clone();

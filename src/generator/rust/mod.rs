@@ -69,7 +69,13 @@ pub fn generate(ir: &IR) -> Result<GenerationResult> {
     let cargo_toml = generate_cargo_toml(ir);
     files.insert("Cargo.toml".to_string(), cargo_toml);
 
-    Ok(GenerationResult { files, warnings, file_hashes: HashMap::new() })
+    Ok(GenerationResult {
+        files,
+        warnings,
+        file_hashes: HashMap::new(),
+        dependencies: HashMap::new(),
+        dev_dependencies: HashMap::new(),
+    })
 }
 
 /// Collect warnings for unknown/untyped references

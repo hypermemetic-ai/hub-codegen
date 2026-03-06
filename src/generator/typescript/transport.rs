@@ -3,9 +3,19 @@
 //! Generates a generic PlexusRpcClient class that implements RpcClient using
 //! WebSocket + JSON-RPC 2.0 subscription protocol.
 
+use crate::generator::TransportEnv;
+
 /// Generate the WebSocket transport implementation
-pub fn generate_transport() -> String {
-    get_transport_template()
+pub fn generate_transport(env: TransportEnv) -> String {
+    let template = get_transport_template();
+    if env == TransportEnv::Browser {
+        template.lines()
+            .filter(|l| *l != "import WebSocket from 'ws';")
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        template
+    }
 }
 
 fn get_transport_template() -> String {
@@ -13,7 +23,7 @@ fn get_transport_template() -> String {
 // Implements RpcClient using JSON-RPC 2.0 subscription protocol
 
 import type { RpcClient } from './rpc';
-import type { PlexusStreamItem, StandardRequest, StandardResponse, PlexusResponse, StreamMetadata } from './types';
+import type { PlexusStreamItem, PlexusStreamItemRequest, StandardRequest, StandardResponse } from './types';
 import WebSocket from 'ws';
 
 /**
@@ -287,7 +297,7 @@ export class PlexusRpcClient implements RpcClient {
 
     // Handle bidirectional requests specially - don't queue, handle immediately
     if (item.type === 'request') {
-      this.handleBidirectionalRequest(item as PlexusStreamItem.Request);
+      this.handleBidirectionalRequest(item as PlexusStreamItemRequest);
       return;
     }
 
@@ -314,7 +324,7 @@ export class PlexusRpcClient implements RpcClient {
   /**
    * Handle a bidirectional request from the server
    */
-  private async handleBidirectionalRequest(requestItem: PlexusStreamItem.Request): Promise<void> {
+  private async handleBidirectionalRequest(requestItem: PlexusStreamItemRequest): Promise<void> {
     const { requestId, requestData, timeoutMs } = requestItem;
 
     // If no handler, auto-cancel

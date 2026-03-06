@@ -78,13 +78,26 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> Stri
     // Collect cross-namespace type imports (types from other namespaces)
     let cross_ns_imports = collect_cross_namespace_imports(methods, namespace);
 
+    // Only import helpers that are actually used by this namespace's methods
+    let uses_extract_data = methods.iter().any(|m| m.md_streaming);
+    let uses_collect_one  = methods.iter().any(|m| !m.md_streaming);
+    let rpc_helpers: Vec<&str> = [
+        if uses_extract_data { Some("extractData") } else { None },
+        if uses_collect_one  { Some("collectOne")  } else { None },
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
     let mut lines = vec![
         "// Auto-generated typed client (Layer 2)".to_string(),
         "// Wraps RPC layer and unwraps PlexusStreamItem to domain types".to_string(),
         "".to_string(),
         format!("import type {{ RpcClient }} from '{}rpc';", to_root),
-        format!("import {{ extractData, collectOne }} from '{}rpc';", to_root),
     ];
+    if !rpc_helpers.is_empty() {
+        lines.push(format!("import {{ {} }} from '{}rpc';", rpc_helpers.join(", "), to_root));
+    }
 
     if !type_import_str.is_empty() {
         lines.push(type_import_str);
@@ -136,7 +149,8 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> Stri
     // Generate implementation class
     lines.push(format!("/** Typed client implementation for {} plugin */", namespace));
     lines.push(format!("class {}ClientImpl implements {}Client {{", interface_name, interface_name));
-    lines.push("  constructor(private readonly rpc: RpcClient) {}".to_string());
+    lines.push("  private rpc: RpcClient;".to_string());
+    lines.push("  constructor(rpc: RpcClient) { this.rpc = rpc; }".to_string());
     lines.push("".to_string());
 
     for (i, method) in methods.iter().enumerate() {

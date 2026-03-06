@@ -48,119 +48,115 @@ export interface StreamMetadata {
   timestamp: number;
 }
 
+/** Data payload with caller-applied metadata */
+export interface PlexusStreamItemData {
+  type: 'data';
+  /** Metadata from calling layer */
+  metadata: StreamMetadata;
+  /** Type identifier for deserialization (e.g., "health.status") */
+  contentType: string;
+  /** The actual payload (serialized activation event) */
+  content: unknown;
+}
+
+/** Progress update during long-running operations */
+export interface PlexusStreamItemProgress {
+  type: 'progress';
+  /** Metadata from calling layer */
+  metadata: StreamMetadata;
+  /** Human-readable progress message */
+  message: string;
+  /** Optional completion percentage (0.0 - 100.0) */
+  percentage?: number;
+}
+
+/** Error occurred during processing */
+export interface PlexusStreamItemError {
+  type: 'error';
+  /** Metadata from calling layer */
+  metadata: StreamMetadata;
+  /** Human-readable error message */
+  message: string;
+  /** Optional error code for programmatic handling */
+  code?: string;
+  /** Whether the operation can be retried */
+  recoverable: boolean;
+}
+
+/** Stream completed successfully */
+export interface PlexusStreamItemDone {
+  type: 'done';
+  /** Metadata from calling layer */
+  metadata: StreamMetadata;
+}
+
+/** Server-to-client request for bidirectional communication */
+export interface PlexusStreamItemRequest {
+  type: 'request';
+  /** Unique identifier for correlating response */
+  requestId: string;
+  /** Serialized request data */
+  requestData: StandardRequest;
+  /** Maximum time to wait for response (milliseconds) */
+  timeoutMs: number;
+}
+
 /** Universal stream item - all activations emit this type */
 export type PlexusStreamItem =
-  | PlexusStreamItem.Data
-  | PlexusStreamItem.Progress
-  | PlexusStreamItem.Error
-  | PlexusStreamItem.Done
-  | PlexusStreamItem.Request;
+  | PlexusStreamItemData
+  | PlexusStreamItemProgress
+  | PlexusStreamItemError
+  | PlexusStreamItemDone
+  | PlexusStreamItemRequest;
 
-export namespace PlexusStreamItem {
-  /** Data payload with caller-applied metadata */
-  export interface Data {
-    type: 'data';
-    /** Metadata from calling layer */
-    metadata: StreamMetadata;
-    /** Type identifier for deserialization (e.g., "health.status") */
-    contentType: string;
-    /** The actual payload (serialized activation event) */
-    content: unknown;
-  }
-
-  /** Progress update during long-running operations */
-  export interface Progress {
-    type: 'progress';
-    /** Metadata from calling layer */
-    metadata: StreamMetadata;
-    /** Human-readable progress message */
-    message: string;
-    /** Optional completion percentage (0.0 - 100.0) */
-    percentage?: number;
-  }
-
-  /** Error occurred during processing */
-  export interface Error {
-    type: 'error';
-    /** Metadata from calling layer */
-    metadata: StreamMetadata;
-    /** Human-readable error message */
-    message: string;
-    /** Optional error code for programmatic handling */
-    code?: string;
-    /** Whether the operation can be retried */
-    recoverable: boolean;
-  }
-
-  /** Stream completed successfully */
-  export interface Done {
-    type: 'done';
-    /** Metadata from calling layer */
-    metadata: StreamMetadata;
-  }
-
-  /** Server-to-client request for bidirectional communication */
-  export interface Request {
-    type: 'request';
-    /** Unique identifier for correlating response */
-    requestId: string;
-    /** Serialized request data */
-    requestData: StandardRequest;
-    /** Maximum time to wait for response (milliseconds) */
-    timeoutMs: number;
-  }
-
-  export function isData(e: PlexusStreamItem): e is Data { return e.type === 'data'; }
-  export function isProgress(e: PlexusStreamItem): e is Progress { return e.type === 'progress'; }
-  export function isError(e: PlexusStreamItem): e is Error { return e.type === 'error'; }
-  export function isDone(e: PlexusStreamItem): e is Done { return e.type === 'done'; }
-  export function isRequest(e: PlexusStreamItem): e is Request { return e.type === 'request'; }
-}
+export function isPlexusStreamItemData(e: PlexusStreamItem): e is PlexusStreamItemData { return e.type === 'data'; }
+export function isPlexusStreamItemProgress(e: PlexusStreamItem): e is PlexusStreamItemProgress { return e.type === 'progress'; }
+export function isPlexusStreamItemError(e: PlexusStreamItem): e is PlexusStreamItemError { return e.type === 'error'; }
+export function isPlexusStreamItemDone(e: PlexusStreamItem): e is PlexusStreamItemDone { return e.type === 'done'; }
+export function isPlexusStreamItemRequest(e: PlexusStreamItem): e is PlexusStreamItemRequest { return e.type === 'request'; }
 
 // === Bidirectional Communication Types ===
 
+/** Confirmation request (yes/no) */
+export interface StandardRequestConfirm {
+  type: 'confirm';
+  /** Message to display to user */
+  message: string;
+  /** Default value if user doesn't respond */
+  default?: boolean;
+}
+
+/** Text prompt request */
+export interface StandardRequestPrompt {
+  type: 'prompt';
+  /** Message to display to user */
+  message: string;
+  /** Default value */
+  default?: string;
+  /** Placeholder text */
+  placeholder?: string;
+}
+
+/** Selection request (single or multiple choice) */
+export interface StandardRequestSelect {
+  type: 'select';
+  /** Message to display to user */
+  message: string;
+  /** Available options */
+  options: SelectOption[];
+  /** Allow multiple selections */
+  multiSelect?: boolean;
+}
+
 /** Standard request types for common UI patterns */
 export type StandardRequest =
-  | StandardRequest.Confirm
-  | StandardRequest.Prompt
-  | StandardRequest.Select;
+  | StandardRequestConfirm
+  | StandardRequestPrompt
+  | StandardRequestSelect;
 
-export namespace StandardRequest {
-  /** Confirmation request (yes/no) */
-  export interface Confirm {
-    type: 'confirm';
-    /** Message to display to user */
-    message: string;
-    /** Default value if user doesn't respond */
-    default?: boolean;
-  }
-
-  /** Text prompt request */
-  export interface Prompt {
-    type: 'prompt';
-    /** Message to display to user */
-    message: string;
-    /** Default value */
-    default?: string;
-    /** Placeholder text */
-    placeholder?: string;
-  }
-
-  /** Selection request (single or multiple choice) */
-  export interface Select {
-    type: 'select';
-    /** Message to display to user */
-    message: string;
-    /** Available options */
-    options: SelectOption[];
-    /** Allow multiple selections */
-    multiSelect?: boolean;
-  }
-
-  export function isConfirm(e: StandardRequest): e is Confirm { return e.type === 'confirm'; }
-  export function isPrompt(e: StandardRequest): e is Prompt { return e.type === 'prompt'; }
-  export function isSelect(e: StandardRequest): e is Select { return e.type === 'select'; }
-}
+export function isStandardRequestConfirm(e: StandardRequest): e is StandardRequestConfirm { return e.type === 'confirm'; }
+export function isStandardRequestPrompt(e: StandardRequest): e is StandardRequestPrompt { return e.type === 'prompt'; }
+export function isStandardRequestSelect(e: StandardRequest): e is StandardRequestSelect { return e.type === 'select'; }
 
 /** Option in a select menu */
 export interface SelectOption {
@@ -172,42 +168,40 @@ export interface SelectOption {
   description?: string;
 }
 
+/** Response to confirmation request */
+export interface StandardResponseConfirmed {
+  type: 'confirmed';
+  value: boolean;
+}
+
+/** Response to prompt request */
+export interface StandardResponseText {
+  type: 'text';
+  value: string;
+}
+
+/** Response to select request */
+export interface StandardResponseSelected {
+  type: 'selected';
+  values: string[];
+}
+
+/** User cancelled the request */
+export interface StandardResponseCancelled {
+  type: 'cancelled';
+}
+
 /** Standard response types for bidirectional requests */
 export type StandardResponse =
-  | StandardResponse.Confirmed
-  | StandardResponse.Text
-  | StandardResponse.Selected
-  | StandardResponse.Cancelled;
+  | StandardResponseConfirmed
+  | StandardResponseText
+  | StandardResponseSelected
+  | StandardResponseCancelled;
 
-export namespace StandardResponse {
-  /** Response to confirmation request */
-  export interface Confirmed {
-    type: 'confirmed';
-    value: boolean;
-  }
-
-  /** Response to prompt request */
-  export interface Text {
-    type: 'text';
-    value: string;
-  }
-
-  /** Response to select request */
-  export interface Selected {
-    type: 'selected';
-    values: string[];
-  }
-
-  /** User cancelled the request */
-  export interface Cancelled {
-    type: 'cancelled';
-  }
-
-  export function isConfirmed(e: StandardResponse): e is Confirmed { return e.type === 'confirmed'; }
-  export function isText(e: StandardResponse): e is Text { return e.type === 'text'; }
-  export function isSelected(e: StandardResponse): e is Selected { return e.type === 'selected'; }
-  export function isCancelled(e: StandardResponse): e is Cancelled { return e.type === 'cancelled'; }
-}
+export function isStandardResponseConfirmed(e: StandardResponse): e is StandardResponseConfirmed { return e.type === 'confirmed'; }
+export function isStandardResponseText(e: StandardResponse): e is StandardResponseText { return e.type === 'text'; }
+export function isStandardResponseSelected(e: StandardResponse): e is StandardResponseSelected { return e.type === 'selected'; }
+export function isStandardResponseCancelled(e: StandardResponse): e is StandardResponseCancelled { return e.type === 'cancelled'; }
 
 /** Respond to a bidirectional request */
 export interface PlexusResponse {
@@ -215,16 +209,22 @@ export interface PlexusResponse {
   response: StandardResponse;
 }
 
-/** Error thrown when a PlexusStreamItem.Error is received */
+/** Error thrown when a PlexusStreamItemError is received */
 export class PlexusError extends Error {
+  readonly code: string | undefined;
+  readonly recoverable: boolean;
+  readonly metadata: StreamMetadata | undefined;
   constructor(
     message: string,
-    public readonly code?: string,
-    public readonly recoverable: boolean = false,
-    public readonly metadata?: StreamMetadata
+    code?: string,
+    recoverable: boolean = false,
+    metadata?: StreamMetadata
   ) {
     super(message);
     this.name = 'PlexusError';
+    this.code = code;
+    this.recoverable = recoverable;
+    this.metadata = metadata;
   }
 }
 "#.to_string()
@@ -543,6 +543,35 @@ fn generate_union_in_ns(
     let pascal_name = to_pascal(name);
     let mut lines = Vec::new();
 
+    // Flat variant interface names: TypeNameVariantName
+    let flat_variant_names: Vec<String> = variants
+        .iter()
+        .map(|v| format!("{}{}", pascal_name, to_pascal(&v.vd_name)))
+        .collect();
+
+    // Emit each variant interface as a top-level export first
+    for (i, variant) in variants.iter().enumerate() {
+        let flat_name = &flat_variant_names[i];
+
+        if let Some(d) = &variant.vd_description {
+            lines.push(format!("/** {} */", d));
+        }
+        lines.push(format!("export interface {} {{", flat_name));
+        lines.push(format!("  {}: '{}';", discriminator, variant.vd_name));
+
+        for field in &variant.vd_fields {
+            let optional = if field.fd_required { "" } else { "?" };
+            let ts_type = field.fd_type.to_ts_in_namespace(namespace);
+            if let Some(d) = &field.fd_description {
+                lines.push(format!("  /** {} */", d));
+            }
+            lines.push(format!("  {}{}: {};", to_camel(&field.fd_name), optional, ts_type));
+        }
+
+        lines.push("}".to_string());
+        lines.push("".to_string());
+    }
+
     // Only use the first paragraph of the description (strip Rust impl notes)
     if let Some(d) = desc {
         let first_para = d.split("\n\n").next().unwrap_or(d).trim();
@@ -551,62 +580,27 @@ fn generate_union_in_ns(
         }
     }
 
-    // Union type using Namespace.Variant pattern
-    let variant_refs: Vec<String> = variants
-        .iter()
-        .map(|v| format!("{}.{}", pascal_name, to_pascal(&v.vd_name)))
-        .collect();
-
-    let union_type = if variant_refs.is_empty() {
+    // Union type referencing flat names
+    let union_type = if flat_variant_names.is_empty() {
         "never".to_string()
     } else {
-        variant_refs.join(" | ")
+        flat_variant_names.join(" | ")
     };
 
     lines.push(format!("export type {} = {};", pascal_name, union_type));
-    lines.push("".to_string());
 
-    // Namespace containing variant interfaces and type guards
-    lines.push(format!("export namespace {} {{", pascal_name));
-
-    for (i, variant) in variants.iter().enumerate() {
-        let variant_pascal = to_pascal(&variant.vd_name);
-
-        if i > 0 {
-            lines.push("".to_string());
-        }
-
-        if let Some(d) = &variant.vd_description {
-            lines.push(format!("  /** {} */", d));
-        }
-        lines.push(format!("  export interface {} {{", variant_pascal));
-        lines.push(format!("    {}: '{}';", discriminator, variant.vd_name));
-
-        for field in &variant.vd_fields {
-            let optional = if field.fd_required { "" } else { "?" };
-            let ts_type = field.fd_type.to_ts_in_namespace(namespace);
-            if let Some(d) = &field.fd_description {
-                lines.push(format!("    /** {} */", d));
-            }
-            lines.push(format!("    {}{}: {};", to_camel(&field.fd_name), optional, ts_type));
-        }
-
-        lines.push("  }".to_string());
-    }
-
-    // Type guard functions
+    // Top-level type guard functions
     if !variants.is_empty() {
         lines.push("".to_string());
-        for variant in variants {
-            let variant_pascal = to_pascal(&variant.vd_name);
+        for (i, variant) in variants.iter().enumerate() {
+            let flat_name = &flat_variant_names[i];
             lines.push(format!(
-                "  export function is{}(e: {}): e is {} {{ return e.{} === '{}'; }}",
-                variant_pascal, pascal_name, variant_pascal, discriminator, variant.vd_name
+                "export function is{}(e: {}): e is {} {{ return e.{} === '{}'; }}",
+                flat_name, pascal_name, flat_name, discriminator, variant.vd_name
             ));
         }
     }
 
-    lines.push("}".to_string());
     lines.join("\n")
 }
 

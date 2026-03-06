@@ -29,21 +29,25 @@ pub struct GenerationResult {
     pub warnings: Vec<Warning>,
     /// Map of relative path -> content hash (for cache invalidation)
     pub file_hashes: HashMap<String, String>,
+    /// Runtime npm dependencies (name -> version range)
+    pub dependencies: HashMap<String, String>,
+    /// npm dev dependencies (name -> version range)
+    pub dev_dependencies: HashMap<String, String>,
 }
+
+/// Transport environment for generated code
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransportEnv { Ws, Browser, None }
 
 /// Options for code generation
 #[derive(Debug, Clone)]
 pub struct GenerationOptions {
-    /// Whether to bundle transport code (for TypeScript)
-    /// If false, assumes external @plexus/rpc-client package
-    pub bundle_transport: bool,
+    pub transport: TransportEnv,
 }
 
 impl Default for GenerationOptions {
     fn default() -> Self {
-        Self {
-            bundle_transport: true,
-        }
+        Self { transport: TransportEnv::Ws }
     }
 }
 
