@@ -63,8 +63,10 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     let index = generate_index(ir, options.transport);
     files.insert("index.ts".to_string(), index);
 
-    // package.json is NOT inserted into files — deps are surfaced as structured data
-    // and package.json is handled by the caller (files mode: written if missing; json mode: emitted as fields)
+    // Generate package.json — included in files so synapse-cc's three-way merge
+    // can update it when the generated content changes (e.g. test script changed).
+    let pkg_json = package::generate_package_json(ir, options.transport, has_bidir);
+    files.insert("package.json".to_string(), pkg_json);
 
     // Generate tsconfig.json
     let tsconfig = package::generate_tsconfig(options.transport);

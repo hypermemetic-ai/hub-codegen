@@ -6,6 +6,7 @@
 
 use hub_codegen::cache::{CodeCacheManifest, CodePluginCache, ToolchainVersions};
 use hub_codegen::generator::{GenerationOptions, TransportEnv};
+use hub_codegen::generator::typescript::package::{generate_package_json, get_dev_deps};
 use hub_codegen::hash::compute_file_hash;
 use hub_codegen::ir::*;
 use hub_codegen::merge::{merge_generated_code, MergeStrategy};
@@ -127,6 +128,77 @@ fn test_transport_ws_has_ws_import() {
     assert!(
         result.dependencies.contains_key("ws"),
         "ws transport must declare ws dep"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Generated artifact consistency
+// ─────────────────────────────────────────────────────────────
+//
+// These tests ensure the generated artifacts are mutually compatible.
+// The failure mode they guard against: test runner changed in package.json
+// but smoke test still imports from the old module (or vice versa), causing
+// silent breakage that only surfaces when a user runs the generated project.
+
+/// The generated `test` script must invoke bun, not tsx/npx/node.
+/// Regression: hub-codegen previously emitted `npx tsx test/smoke.test.ts`
+/// while smoke tests already imported from `"bun:test"` — incompatible.
+#[test]
+fn test_package_json_test_script_uses_bun() {
+    let ir = minimal_ir();
+    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Ws }).unwrap();
+
+    let pkg = result.files.get("package.json").expect("package.json must be emitted");
+    assert!(
+        pkg.contains("\"test\": \"bun test\""),
+        "package.json test script must use `bun test`, got:\n{}", pkg
+    );
+    assert!(
+        !pkg.contains("tsx"),
+        "package.json must not reference tsx (use bun instead)"
+    );
+    assert!(
+        !pkg.contains("npx"),
+        "package.json must not reference npx for tests"
+    );
+}
+
+/// Smoke tests must import from `"bun:test"`, not from ts-node, jest, or vitest.
+/// If this changes, `package.json` test script must change in lockstep.
+#[test]
+fn test_smoke_test_imports_from_bun_test() {
+    let ir = minimal_ir();
+    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Ws }).unwrap();
+
+    // Find the smoke test file(s)
+    let smoke_files: Vec<(&String, &String)> = result.files.iter()
+        .filter(|(k, _)| k.starts_with("test/") && k.ends_with(".ts"))
+        .collect();
+    assert!(!smoke_files.is_empty(), "at least one test/*.ts file must be generated");
+
+    for (path, content) in &smoke_files {
+        assert!(
+            content.contains("from \"bun:test\""),
+            "{path} must import from \"bun:test\", not from another test framework"
+        );
+        assert!(
+            !content.contains("from 'jest'") && !content.contains("from \"jest\""),
+            "{path} must not import from jest"
+        );
+    }
+}
+
+/// bun-types must be in dev deps.
+/// The smoke tests import from "bun:test"; tsc can only resolve that module
+/// when bun-types is installed. If bun-types is missing, tsc fails with
+/// TS2307 even though the test runner (bun) works fine.
+#[test]
+fn test_bun_types_in_dev_deps() {
+    use hub_codegen::generator::typescript::package::get_dev_deps;
+    let dev_deps = get_dev_deps(TransportEnv::Ws);
+    assert!(
+        dev_deps.contains_key("bun-types"),
+        "bun-types must be in dev deps so tsc can resolve bun:test imports: got {:?}", dev_deps
     );
 }
 
