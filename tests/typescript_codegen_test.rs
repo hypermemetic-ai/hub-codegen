@@ -63,9 +63,9 @@ fn cache_from_result(
         version: "2.0".to_string(),
         target: "typescript".to_string(),
         toolchain: ToolchainVersions {
-            synapse_cc: "0.1.1".to_string(),
+            synapse_cc: "0.2.0".to_string(),
             synapse: "0.0.1".to_string(),
-            hub_codegen: "0.1.1".to_string(),
+            hub_codegen: "0.2.0".to_string(),
         },
         updated_at: "2026-01-01T00:00:00Z".to_string(),
         plugins,
