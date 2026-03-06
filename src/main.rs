@@ -4,6 +4,8 @@ use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use hub_codegen::cache::{read_cache_manifest, write_cache_manifest, CodeCacheManifest, ToolchainVersions, CodePluginCache};
 use hub_codegen::merge::{merge_generated_code, print_merge_summary, MergeStrategy};
+use serde::Serialize;
+use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::PathBuf;
 
@@ -15,6 +17,28 @@ enum CodegenTarget {
     Rust,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum OutputFormat {
+    #[default]
+    Files,
+    Json,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CodegenOutput<'a> {
+    files: &'a HashMap<String, String>,
+    file_hashes: &'a HashMap<String, String>,
+    warnings: Vec<WarningOutput<'a>>,
+    hub_codegen_version: &'static str,
+}
+
+#[derive(Serialize)]
+struct WarningOutput<'a> {
+    location: &'a str,
+    message: &'a str,
+}
+
 #[derive(Parser)]
 #[command(name = "hub-codegen")]
 #[command(about = "Generate client code from Synapse IR")]
@@ -24,7 +48,7 @@ struct Args {
     #[arg(default_value = "-")]
     input: PathBuf,
 
-    /// Output directory
+    /// Output directory (used in --output-format files mode)
     #[arg(short, long, default_value = "./generated")]
     output: PathBuf,
 
@@ -32,7 +56,7 @@ struct Args {
     #[arg(short, long, value_enum, default_value = "typescript")]
     target: CodegenTarget,
 
-    /// Dry run - print generated files without writing
+    /// Dry run - print generated files without writing (files mode only)
     #[arg(long)]
     dry_run: bool,
 
@@ -40,9 +64,13 @@ struct Args {
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     bundle_transport: bool,
 
-    /// Merge strategy for handling user-modified files (skip|force|interactive)
+    /// Merge strategy for handling user-modified files (files mode only)
     #[arg(long, default_value = "skip")]
     merge_strategy: MergeStrategy,
+
+    /// Output format: files (write to --output dir) or json (emit JSON to stdout)
+    #[arg(long, value_enum, default_value = "files")]
+    output_format: OutputFormat,
 }
 
 fn main() -> Result<()> {
@@ -90,81 +118,94 @@ fn main() -> Result<()> {
         eprintln!();
     }
 
-    if args.dry_run {
-        for (path, content) in &result.files {
-            println!("=== {} ===", path);
-            println!("{}", content);
-            println!();
+    match args.output_format {
+        OutputFormat::Json => {
+            let out = CodegenOutput {
+                files: &result.files,
+                file_hashes: &result.file_hashes,
+                warnings: result.warnings.iter().map(|w| WarningOutput {
+                    location: &w.location,
+                    message: &w.message,
+                }).collect(),
+                hub_codegen_version: hub_codegen::HUB_CODEGEN_VERSION,
+            };
+            println!("{}", serde_json::to_string(&out)?);
         }
-    } else {
-        // Create output directory if it doesn't exist
-        std::fs::create_dir_all(&args.output)?;
-
-        // Determine backend name from IR (or use default)
-        let backend = ir.ir_backend.clone();
-        let target_name = match args.target {
-            CodegenTarget::Typescript => "typescript",
-            CodegenTarget::Rust => "rust",
-        };
-
-        // Try to read existing cache manifest.
-        // We keep the cache even on version mismatch so the three-way merge can
-        // still detect user modifications (cached != current → skip).
-        // Generator-changed files (cached == current, new differs) are updated
-        // regardless of version, which is the correct upgrade behaviour.
-        let cache_manifest = read_cache_manifest(target_name, &backend).ok();
-
-        // Perform three-way merge
-        let merge_result = merge_generated_code(
-            &result.files,
-            &args.output,
-            cache_manifest.as_ref(),
-            args.merge_strategy,
-        )?;
-
-        // Print merge summary with warnings
-        print_merge_summary(&merge_result);
-
-        // Update cache manifest with new file hashes
-        let toolchain = ToolchainVersions {
-            synapse_cc: "0.0.0".to_string(), // Will be populated by synapse-cc
-            synapse: "0.0.0".to_string(),    // Will be populated by synapse-cc
-            hub_codegen: hub_codegen::HUB_CODEGEN_VERSION.to_string(),
-        };
-
-        let mut manifest = cache_manifest.unwrap_or_else(|| {
-            CodeCacheManifest::new(target_name.to_string(), toolchain.clone())
-        });
-
-        // Update toolchain version
-        manifest.toolchain = toolchain;
-
-        // Build file hashes for cache: use new hashes for written files,
-        // preserve old hashes for skipped files
-        let mut updated_file_hashes = result.file_hashes.clone();
-
-        // For skipped files, restore the old hash from cache to preserve conflict detection
-        if let Some(old_plugin) = manifest.plugins.get("default") {
-            for skipped_file in &merge_result.skipped {
-                let skipped_path = skipped_file.to_str().unwrap();
-                if let Some(old_hash) = old_plugin.file_hashes.get(skipped_path) {
-                    // Keep the old hash so future runs can detect the conflict
-                    updated_file_hashes.insert(skipped_path.to_string(), old_hash.clone());
+        OutputFormat::Files => {
+            if args.dry_run {
+                for (path, content) in &result.files {
+                    println!("=== {} ===", path);
+                    println!("{}", content);
+                    println!();
                 }
+            } else {
+                // Create output directory if it doesn't exist
+                std::fs::create_dir_all(&args.output)?;
+
+                // Determine backend name from IR (or use default)
+                let backend = ir.ir_backend.clone();
+                let target_name = match args.target {
+                    CodegenTarget::Typescript => "typescript",
+                    CodegenTarget::Rust => "rust",
+                };
+
+                // Try to read existing cache manifest.
+                // We keep the cache even on version mismatch so the three-way merge can
+                // still detect user modifications (cached != current → skip).
+                let cache_manifest = read_cache_manifest(target_name, &backend).ok();
+
+                // Perform three-way merge
+                let merge_result = merge_generated_code(
+                    &result.files,
+                    &args.output,
+                    cache_manifest.as_ref(),
+                    args.merge_strategy,
+                )?;
+
+                // Print merge summary with warnings
+                print_merge_summary(&merge_result);
+
+                // Update cache manifest with new file hashes
+                let toolchain = ToolchainVersions {
+                    synapse_cc: "0.0.0".to_string(),
+                    synapse: "0.0.0".to_string(),
+                    hub_codegen: hub_codegen::HUB_CODEGEN_VERSION.to_string(),
+                };
+
+                let mut manifest = cache_manifest.unwrap_or_else(|| {
+                    CodeCacheManifest::new(target_name.to_string(), toolchain.clone())
+                });
+
+                // Update toolchain version
+                manifest.toolchain = toolchain;
+
+                // Build file hashes for cache: use new hashes for written files,
+                // preserve old hashes for skipped files
+                let mut updated_file_hashes = result.file_hashes.clone();
+
+                // For skipped files, restore the old hash from cache to preserve conflict detection
+                if let Some(old_plugin) = manifest.plugins.get("default") {
+                    for skipped_file in &merge_result.skipped {
+                        let skipped_path = skipped_file.to_str().unwrap();
+                        if let Some(old_hash) = old_plugin.file_hashes.get(skipped_path) {
+                            updated_file_hashes.insert(skipped_path.to_string(), old_hash.clone());
+                        }
+                    }
+                }
+
+                let cache_entry = CodePluginCache {
+                    ir_hash: ir.ir_hash.clone().unwrap_or_default(),
+                    file_hashes: updated_file_hashes,
+                    cached_at: String::new(),
+                };
+
+                manifest.plugins.clear();
+                manifest.plugins.insert("default".to_string(), cache_entry);
+
+                // Write updated cache manifest
+                write_cache_manifest(target_name, &backend, &manifest)?;
             }
         }
-
-        let cache_entry = CodePluginCache {
-            ir_hash: ir.ir_hash.clone().unwrap_or_default(),
-            file_hashes: updated_file_hashes,
-            cached_at: String::new(), // Will be set by add_plugin
-        };
-
-        manifest.plugins.clear();
-        manifest.plugins.insert("default".to_string(), cache_entry);
-
-        // Write updated cache manifest
-        write_cache_manifest(target_name, &backend, &manifest)?;
     }
 
     Ok(())

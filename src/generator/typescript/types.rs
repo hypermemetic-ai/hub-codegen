@@ -50,102 +50,116 @@ export interface StreamMetadata {
 
 /** Universal stream item - all activations emit this type */
 export type PlexusStreamItem =
-  | PlexusStreamItem_Data
-  | PlexusStreamItem_Progress
-  | PlexusStreamItem_Error
-  | PlexusStreamItem_Done
-  | PlexusStreamItem_Request;
+  | PlexusStreamItem.Data
+  | PlexusStreamItem.Progress
+  | PlexusStreamItem.Error
+  | PlexusStreamItem.Done
+  | PlexusStreamItem.Request;
 
-/** Data payload with caller-applied metadata */
-export interface PlexusStreamItem_Data {
-  type: 'data';
-  /** Metadata from calling layer */
-  metadata: StreamMetadata;
-  /** Type identifier for deserialization (e.g., "health.status") */
-  contentType: string;
-  /** The actual payload (serialized activation event) */
-  content: unknown;
-}
+export namespace PlexusStreamItem {
+  /** Data payload with caller-applied metadata */
+  export interface Data {
+    type: 'data';
+    /** Metadata from calling layer */
+    metadata: StreamMetadata;
+    /** Type identifier for deserialization (e.g., "health.status") */
+    contentType: string;
+    /** The actual payload (serialized activation event) */
+    content: unknown;
+  }
 
-/** Progress update during long-running operations */
-export interface PlexusStreamItem_Progress {
-  type: 'progress';
-  /** Metadata from calling layer */
-  metadata: StreamMetadata;
-  /** Human-readable progress message */
-  message: string;
-  /** Optional completion percentage (0.0 - 100.0) */
-  percentage?: number;
-}
+  /** Progress update during long-running operations */
+  export interface Progress {
+    type: 'progress';
+    /** Metadata from calling layer */
+    metadata: StreamMetadata;
+    /** Human-readable progress message */
+    message: string;
+    /** Optional completion percentage (0.0 - 100.0) */
+    percentage?: number;
+  }
 
-/** Error occurred during processing */
-export interface PlexusStreamItem_Error {
-  type: 'error';
-  /** Metadata from calling layer */
-  metadata: StreamMetadata;
-  /** Human-readable error message */
-  message: string;
-  /** Optional error code for programmatic handling */
-  code?: string;
-  /** Whether the operation can be retried */
-  recoverable: boolean;
-}
+  /** Error occurred during processing */
+  export interface Error {
+    type: 'error';
+    /** Metadata from calling layer */
+    metadata: StreamMetadata;
+    /** Human-readable error message */
+    message: string;
+    /** Optional error code for programmatic handling */
+    code?: string;
+    /** Whether the operation can be retried */
+    recoverable: boolean;
+  }
 
-/** Stream completed successfully */
-export interface PlexusStreamItem_Done {
-  type: 'done';
-  /** Metadata from calling layer */
-  metadata: StreamMetadata;
-}
+  /** Stream completed successfully */
+  export interface Done {
+    type: 'done';
+    /** Metadata from calling layer */
+    metadata: StreamMetadata;
+  }
 
-/** Server-to-client request for bidirectional communication */
-export interface PlexusStreamItem_Request {
-  type: 'request';
-  /** Unique identifier for correlating response */
-  requestId: string;
-  /** Serialized request data */
-  requestData: StandardRequest;
-  /** Maximum time to wait for response (milliseconds) */
-  timeoutMs: number;
+  /** Server-to-client request for bidirectional communication */
+  export interface Request {
+    type: 'request';
+    /** Unique identifier for correlating response */
+    requestId: string;
+    /** Serialized request data */
+    requestData: StandardRequest;
+    /** Maximum time to wait for response (milliseconds) */
+    timeoutMs: number;
+  }
+
+  export function isData(e: PlexusStreamItem): e is Data { return e.type === 'data'; }
+  export function isProgress(e: PlexusStreamItem): e is Progress { return e.type === 'progress'; }
+  export function isError(e: PlexusStreamItem): e is Error { return e.type === 'error'; }
+  export function isDone(e: PlexusStreamItem): e is Done { return e.type === 'done'; }
+  export function isRequest(e: PlexusStreamItem): e is Request { return e.type === 'request'; }
 }
 
 // === Bidirectional Communication Types ===
 
 /** Standard request types for common UI patterns */
 export type StandardRequest =
-  | StandardRequest_Confirm
-  | StandardRequest_Prompt
-  | StandardRequest_Select;
+  | StandardRequest.Confirm
+  | StandardRequest.Prompt
+  | StandardRequest.Select;
 
-/** Confirmation request (yes/no) */
-export interface StandardRequest_Confirm {
-  type: 'confirm';
-  /** Message to display to user */
-  message: string;
-  /** Default value if user doesn't respond */
-  default?: boolean;
-}
+export namespace StandardRequest {
+  /** Confirmation request (yes/no) */
+  export interface Confirm {
+    type: 'confirm';
+    /** Message to display to user */
+    message: string;
+    /** Default value if user doesn't respond */
+    default?: boolean;
+  }
 
-/** Text prompt request */
-export interface StandardRequest_Prompt {
-  type: 'prompt';
-  /** Message to display to user */
-  message: string;
-  /** Default value */
-  default?: string;
-  /** Placeholder text */
-  placeholder?: string;
-}
+  /** Text prompt request */
+  export interface Prompt {
+    type: 'prompt';
+    /** Message to display to user */
+    message: string;
+    /** Default value */
+    default?: string;
+    /** Placeholder text */
+    placeholder?: string;
+  }
 
-/** Selection request (single or multiple choice) */
-export interface StandardRequest_Select {
-  type: 'select';
-  /** Message to display to user */
-  message: string;
-  /** Available options */
-  options: SelectOption[];
-  /** Allow multiple selections */
-  multiSelect?: boolean;
+  /** Selection request (single or multiple choice) */
+  export interface Select {
+    type: 'select';
+    /** Message to display to user */
+    message: string;
+    /** Available options */
+    options: SelectOption[];
+    /** Allow multiple selections */
+    multiSelect?: boolean;
+  }
+
+  export function isConfirm(e: StandardRequest): e is Confirm { return e.type === 'confirm'; }
+  export function isPrompt(e: StandardRequest): e is Prompt { return e.type === 'prompt'; }
+  export function isSelect(e: StandardRequest): e is Select { return e.type === 'select'; }
 }
 
 /** Option in a select menu */
@@ -160,32 +174,39 @@ export interface SelectOption {
 
 /** Standard response types for bidirectional requests */
 export type StandardResponse =
-  | StandardResponse_Confirmed
-  | StandardResponse_Text
-  | StandardResponse_Selected
-  | StandardResponse_Cancelled;
+  | StandardResponse.Confirmed
+  | StandardResponse.Text
+  | StandardResponse.Selected
+  | StandardResponse.Cancelled;
 
-/** Response to confirmation request */
-export interface StandardResponse_Confirmed {
-  type: 'confirmed';
-  value: boolean;
-}
+export namespace StandardResponse {
+  /** Response to confirmation request */
+  export interface Confirmed {
+    type: 'confirmed';
+    value: boolean;
+  }
 
-/** Response to prompt request */
-export interface StandardResponse_Text {
-  type: 'text';
-  value: string;
-}
+  /** Response to prompt request */
+  export interface Text {
+    type: 'text';
+    value: string;
+  }
 
-/** Response to select request */
-export interface StandardResponse_Selected {
-  type: 'selected';
-  values: string[];
-}
+  /** Response to select request */
+  export interface Selected {
+    type: 'selected';
+    values: string[];
+  }
 
-/** User cancelled the request */
-export interface StandardResponse_Cancelled {
-  type: 'cancelled';
+  /** User cancelled the request */
+  export interface Cancelled {
+    type: 'cancelled';
+  }
+
+  export function isConfirmed(e: StandardResponse): e is Confirmed { return e.type === 'confirmed'; }
+  export function isText(e: StandardResponse): e is Text { return e.type === 'text'; }
+  export function isSelected(e: StandardResponse): e is Selected { return e.type === 'selected'; }
+  export function isCancelled(e: StandardResponse): e is Cancelled { return e.type === 'cancelled'; }
 }
 
 /** Respond to a bidirectional request */
@@ -194,7 +215,7 @@ export interface PlexusResponse {
   response: StandardResponse;
 }
 
-/** Error thrown when a PlexusStreamItem_Error is received */
+/** Error thrown when a PlexusStreamItem.Error is received */
 export class PlexusError extends Error {
   constructor(
     message: string,
@@ -519,50 +540,73 @@ fn generate_union_in_ns(
     desc: &Option<String>,
     namespace: &str,
 ) -> String {
+    let pascal_name = to_pascal(name);
     let mut lines = Vec::new();
 
+    // Only use the first paragraph of the description (strip Rust impl notes)
     if let Some(d) = desc {
-        lines.push(format!("/** {} */", d));
+        let first_para = d.split("\n\n").next().unwrap_or(d).trim();
+        if !first_para.is_empty() {
+            lines.push(format!("/** {} */", first_para));
+        }
     }
 
-    // Generate union type
-    let variant_names: Vec<String> = variants
+    // Union type using Namespace.Variant pattern
+    let variant_refs: Vec<String> = variants
         .iter()
-        .map(|v| format!("{}_{}", to_pascal(name), to_pascal(&v.vd_name)))
+        .map(|v| format!("{}.{}", pascal_name, to_pascal(&v.vd_name)))
         .collect();
 
-    let union_type = if variant_names.is_empty() {
+    let union_type = if variant_refs.is_empty() {
         "never".to_string()
     } else {
-        variant_names.join(" | ")
+        variant_refs.join(" | ")
     };
 
-    lines.push(format!("export type {} = {};", to_pascal(name), union_type));
+    lines.push(format!("export type {} = {};", pascal_name, union_type));
     lines.push("".to_string());
 
-    // Generate individual variant interfaces
-    for variant in variants {
-        let variant_type_name = format!("{}_{}", to_pascal(name), to_pascal(&variant.vd_name));
+    // Namespace containing variant interfaces and type guards
+    lines.push(format!("export namespace {} {{", pascal_name));
+
+    for (i, variant) in variants.iter().enumerate() {
+        let variant_pascal = to_pascal(&variant.vd_name);
+
+        if i > 0 {
+            lines.push("".to_string());
+        }
 
         if let Some(d) = &variant.vd_description {
-            lines.push(format!("/** {} */", d));
+            lines.push(format!("  /** {} */", d));
         }
-        lines.push(format!("export interface {} {{", variant_type_name));
-        lines.push(format!("  {}: '{}';", discriminator, variant.vd_name));
+        lines.push(format!("  export interface {} {{", variant_pascal));
+        lines.push(format!("    {}: '{}';", discriminator, variant.vd_name));
 
         for field in &variant.vd_fields {
             let optional = if field.fd_required { "" } else { "?" };
             let ts_type = field.fd_type.to_ts_in_namespace(namespace);
             if let Some(d) = &field.fd_description {
-                lines.push(format!("  /** {} */", d));
+                lines.push(format!("    /** {} */", d));
             }
-            lines.push(format!("  {}{}: {};", to_camel(&field.fd_name), optional, ts_type));
+            lines.push(format!("    {}{}: {};", to_camel(&field.fd_name), optional, ts_type));
         }
 
-        lines.push("}".to_string());
-        lines.push("".to_string());
+        lines.push("  }".to_string());
     }
 
+    // Type guard functions
+    if !variants.is_empty() {
+        lines.push("".to_string());
+        for variant in variants {
+            let variant_pascal = to_pascal(&variant.vd_name);
+            lines.push(format!(
+                "  export function is{}(e: {}): e is {} {{ return e.{} === '{}'; }}",
+                variant_pascal, pascal_name, variant_pascal, discriminator, variant.vd_name
+            ));
+        }
+    }
+
+    lines.push("}".to_string());
     lines.join("\n")
 }
 

@@ -135,11 +135,11 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> Stri
 
     // Generate implementation class
     lines.push(format!("/** Typed client implementation for {} plugin */", namespace));
-    lines.push(format!("export class {}ClientImpl implements {}Client {{", interface_name, interface_name));
+    lines.push(format!("class {}ClientImpl implements {}Client {{", interface_name, interface_name));
     lines.push("  constructor(private readonly rpc: RpcClient) {}".to_string());
     lines.push("".to_string());
 
-    for method in &methods {
+    for (i, method) in methods.iter().enumerate() {
         let method_name = to_camel(&method.md_name);
         let full_path = &method.md_full_path;
         let params_signature = generate_params(&method.md_params, namespace);
@@ -149,25 +149,19 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], _ir: &IR) -> Stri
         let params_object = generate_params_object(&method.md_params);
 
         if method.md_streaming {
-            // Streaming method - return AsyncGenerator
-            if let Some(desc) = &method.md_description {
-                lines.push(format!("  /** {} */", desc));
-            }
             lines.push(format!("  async *{}({}): AsyncGenerator<{}> {{", method_name, params_signature, return_type));
             lines.push(format!("    const stream = this.rpc.call('{}', {});", full_path, params_object));
             lines.push(format!("    yield* extractData<{}>(stream);", return_type));
             lines.push("  }".to_string());
         } else {
-            // Non-streaming method - return Promise
-            if let Some(desc) = &method.md_description {
-                lines.push(format!("  /** {} */", desc));
-            }
             lines.push(format!("  async {}({}): Promise<{}> {{", method_name, params_signature, return_type));
             lines.push(format!("    const stream = this.rpc.call('{}', {});", full_path, params_object));
             lines.push(format!("    return collectOne<{}>(stream);", return_type));
             lines.push("  }".to_string());
         }
-        lines.push("".to_string());
+        if i < methods.len() - 1 {
+            lines.push("".to_string());
+        }
     }
 
     lines.push("}".to_string());
@@ -298,8 +292,12 @@ fn generate_params_object(params: &[ParamDef]) -> String {
             let camel_name = to_camel(&p.pd_name);  // TypeScript variable (camelCase)
             let snake_name = &p.pd_name;             // RPC wire format (snake_case)
 
-            // Use explicit mapping: property_name: variable_name
-            format!("{}: {}", snake_name, camel_name)
+            // Use shorthand when names are identical, explicit mapping otherwise
+            if camel_name == *snake_name {
+                camel_name
+            } else {
+                format!("{}: {}", snake_name, camel_name)
+            }
         })
         .collect();
 

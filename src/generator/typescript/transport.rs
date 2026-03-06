@@ -13,7 +13,7 @@ fn get_transport_template() -> String {
 // Implements RpcClient using JSON-RPC 2.0 subscription protocol
 
 import type { RpcClient } from './rpc';
-import type { PlexusStreamItem, PlexusStreamItem_Request, StandardRequest, StandardResponse, PlexusResponse, StreamMetadata } from './types';
+import type { PlexusStreamItem, StandardRequest, StandardResponse, PlexusResponse, StreamMetadata } from './types';
 import WebSocket from 'ws';
 
 /**
@@ -287,7 +287,7 @@ export class PlexusRpcClient implements RpcClient {
 
     // Handle bidirectional requests specially - don't queue, handle immediately
     if (item.type === 'request') {
-      this.handleBidirectionalRequest(item as PlexusStreamItem_Request);
+      this.handleBidirectionalRequest(item as PlexusStreamItem.Request);
       return;
     }
 
@@ -314,7 +314,7 @@ export class PlexusRpcClient implements RpcClient {
   /**
    * Handle a bidirectional request from the server
    */
-  private async handleBidirectionalRequest(requestItem: PlexusStreamItem_Request): Promise<void> {
+  private async handleBidirectionalRequest(requestItem: PlexusStreamItem.Request): Promise<void> {
     const { requestId, requestData, timeoutMs } = requestItem;
 
     // If no handler, auto-cancel
