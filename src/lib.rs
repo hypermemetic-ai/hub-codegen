@@ -10,7 +10,7 @@ pub mod cache;
 pub mod merge;
 
 pub use ir::IR;
-pub use generator::{GenerationResult, Warning, GenerationOptions, TransportEnv};
+pub use generator::{GenerationResult, Warning, GenerationOptions, TransportEnv, GenerateSelector};
 
 // Conditionally export generators based on features
 #[cfg(feature = "typescript")]

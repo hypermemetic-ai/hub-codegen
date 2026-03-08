@@ -2,11 +2,12 @@
 //!
 //! Focused on invariants that matter for real-world correctness:
 //!   1. Transport dispatch — none/browser/ws emit the right artifacts
-//!   2. Three-way merge — user edits are preserved (Skip) or overwritten (Force)
+//!   2. Generate selector — each selector produces only the expected file set
+//!   3. Three-way merge — user edits are preserved (Skip) or overwritten (Force)
 
 use hub_codegen::cache::{CodeCacheManifest, CodePluginCache, ToolchainVersions};
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::generator::typescript::package::{generate_package_json, get_dev_deps};
+use hub_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
+
 use hub_codegen::hash::compute_file_hash;
 use hub_codegen::ir::*;
 use hub_codegen::merge::{merge_generated_code, MergeStrategy};
@@ -84,7 +85,7 @@ fn cache_from_result(
 #[test]
 fn test_transport_none_no_transport_file() {
     let ir = minimal_ir();
-    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::None }).unwrap();
+    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::None, ..GenerationOptions::default() }).unwrap();
 
     assert!(
         !result.files.contains_key("transport.ts"),
@@ -101,7 +102,7 @@ fn test_transport_none_no_transport_file() {
 #[test]
 fn test_transport_browser_no_ws_import() {
     let ir = minimal_ir();
-    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Browser }).unwrap();
+    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Browser, ..GenerationOptions::default() }).unwrap();
 
     let transport = result.files.get("transport.ts").expect("browser transport must emit transport.ts");
     assert!(
@@ -118,7 +119,7 @@ fn test_transport_browser_no_ws_import() {
 #[test]
 fn test_transport_ws_has_ws_import() {
     let ir = minimal_ir();
-    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Ws }).unwrap();
+    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Ws, ..GenerationOptions::default() }).unwrap();
 
     let transport = result.files.get("transport.ts").expect("ws transport must emit transport.ts");
     assert!(
@@ -146,7 +147,7 @@ fn test_transport_ws_has_ws_import() {
 #[test]
 fn test_package_json_test_script_uses_bun() {
     let ir = minimal_ir();
-    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Ws }).unwrap();
+    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Ws, ..GenerationOptions::default() }).unwrap();
 
     let pkg = result.files.get("package.json").expect("package.json must be emitted");
     assert!(
@@ -168,7 +169,7 @@ fn test_package_json_test_script_uses_bun() {
 #[test]
 fn test_smoke_test_imports_from_bun_test() {
     let ir = minimal_ir();
-    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Ws }).unwrap();
+    let result = generate_typescript(&ir, &GenerationOptions { transport: TransportEnv::Ws, ..GenerationOptions::default() }).unwrap();
 
     // Find the smoke test file(s)
     let smoke_files: Vec<(&String, &String)> = result.files.iter()
@@ -200,6 +201,126 @@ fn test_bun_types_in_dev_deps() {
         dev_deps.contains_key("bun-types"),
         "bun-types must be in dev deps so tsc can resolve bun:test imports: got {:?}", dev_deps
     );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Generate selector
+// ─────────────────────────────────────────────────────────────
+//
+// Each selector must produce exactly the expected file set and nothing else.
+// Regressions here would cause tendrils to silently produce wrong artifacts
+// when synapse-cc invokes hub-codegen with targeted selectors.
+
+/// `--generate transport`: only transport.ts, nothing else.
+#[test]
+fn test_selector_transport_only() {
+    let ir = minimal_ir();
+    let opts = GenerationOptions { generate: GenerateSelector::Transport, ..GenerationOptions::default() };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert_eq!(result.files.len(), 1, "GenTransport must emit exactly one file");
+    assert!(result.files.contains_key("transport.ts"), "GenTransport must emit transport.ts");
+}
+
+/// `--generate transport` with `--transport none`: no transport file emitted.
+#[test]
+fn test_selector_transport_none_emits_nothing() {
+    let ir = minimal_ir();
+    let opts = GenerationOptions {
+        generate: GenerateSelector::Transport,
+        transport: TransportEnv::None,
+        ..GenerationOptions::default()
+    };
+    let result = generate_typescript(&ir, &opts).unwrap();
+    assert!(result.files.is_empty(), "GenTransport + TransportNone must emit no files");
+}
+
+/// `--generate rpc`: types.ts, rpc.ts, index.ts — no transport, no package.json.
+#[test]
+fn test_selector_rpc_only() {
+    let ir = minimal_ir();
+    let opts = GenerationOptions { generate: GenerateSelector::Rpc, ..GenerationOptions::default() };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert!(result.files.contains_key("types.ts"), "GenRpc must emit types.ts");
+    assert!(result.files.contains_key("rpc.ts"), "GenRpc must emit rpc.ts");
+    assert!(result.files.contains_key("index.ts"), "GenRpc must emit index.ts");
+    assert!(!result.files.contains_key("transport.ts"), "GenRpc must not emit transport.ts");
+    assert!(!result.files.contains_key("package.json"), "GenRpc must not emit package.json");
+}
+
+/// `--generate plugins`: namespace client files only, no rpc.ts or transport.ts.
+#[test]
+fn test_selector_plugins_only() {
+    let ir = minimal_ir();
+    let opts = GenerationOptions { generate: GenerateSelector::Plugins, ..GenerationOptions::default() };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    // minimal_ir has "echo" namespace — expect echo/ files
+    assert!(
+        result.files.keys().any(|k| k.starts_with("echo/")),
+        "GenPlugins must emit namespace files; got: {:?}", result.files.keys().collect::<Vec<_>>()
+    );
+    assert!(!result.files.contains_key("rpc.ts"), "GenPlugins must not emit rpc.ts");
+    assert!(!result.files.contains_key("transport.ts"), "GenPlugins must not emit transport.ts");
+    assert!(!result.files.contains_key("package.json"), "GenPlugins must not emit package.json");
+}
+
+/// `--generate plugins --plugins nonexistent`: plugin filter produces no files.
+#[test]
+fn test_selector_plugins_filter_empty() {
+    let ir = minimal_ir();
+    let opts = GenerationOptions {
+        generate: GenerateSelector::Plugins,
+        plugins_filter: Some(vec!["nonexistent".to_string()]),
+        ..GenerationOptions::default()
+    };
+    let result = generate_typescript(&ir, &opts).unwrap();
+    assert!(
+        result.files.is_empty(),
+        "GenPlugins with non-matching filter must emit no files; got: {:?}",
+        result.files.keys().collect::<Vec<_>>()
+    );
+}
+
+/// `--generate smoke`: single smoke.ts file using _info schema walk, no bun:test framework.
+#[test]
+fn test_selector_smoke_schema_walk() {
+    let ir = minimal_ir();
+    let opts = GenerationOptions { generate: GenerateSelector::Smoke, ..GenerationOptions::default() };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert_eq!(result.files.len(), 1, "GenSmoke must emit exactly one file");
+    let smoke = result.files.get("smoke.ts").expect("GenSmoke must emit smoke.ts");
+
+    assert!(smoke.contains("_info"), "Schema walk smoke must call _info");
+    assert!(smoke.contains(".schema"), "Schema walk smoke must call {{backend}}.schema");
+    assert!(smoke.contains("activation_schema"), "Schema walk smoke must call activation_schema");
+    assert!(!smoke.contains("bun:test"), "Schema walk smoke must not use bun:test framework");
+    assert!(!smoke.contains("echo.ping"), "Schema walk smoke must not use domain-specific methods");
+}
+
+/// `--generate package`: only package.json.
+#[test]
+fn test_selector_package_only() {
+    let ir = minimal_ir();
+    let opts = GenerationOptions { generate: GenerateSelector::Package, ..GenerationOptions::default() };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert_eq!(result.files.len(), 1, "GenPackage must emit exactly one file");
+    assert!(result.files.contains_key("package.json"), "GenPackage must emit package.json");
+}
+
+/// `--generate all` (default): includes metadata file, all core artifacts.
+#[test]
+fn test_selector_all_includes_metadata() {
+    let ir = minimal_ir();
+    let result = generate_typescript(&ir, &GenerationOptions::default()).unwrap();
+
+    assert!(result.files.contains_key(".codegen-metadata.json"), "GenAll must emit .codegen-metadata.json");
+    assert!(result.files.contains_key("transport.ts"));
+    assert!(result.files.contains_key("package.json"));
+    assert!(result.files.contains_key("test/smoke.test.ts"));
 }
 
 // ─────────────────────────────────────────────────────────────

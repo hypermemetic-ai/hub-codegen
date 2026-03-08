@@ -67,6 +67,53 @@ test("{backend}.schema returns stream ending in done", async () => {{
 "#, backend = backend, import_line = import_line)
 }
 
+/// Generate schema walk smoke test (no test framework, plain executable TypeScript).
+///
+/// Uses well-known Plexus endpoints:
+///   `_info` → `{backend}.schema` → `{backend}.activation_schema`
+/// These exist on every conformant Plexus backend regardless of loaded plugins.
+pub fn generate_schema_walk_smoke(_ir: &IR, transport: TransportEnv, transport_path: &str) -> String {
+    let import_line = if transport != TransportEnv::None {
+        format!("import {{ PlexusRpcClient }} from \"{transport_path}\";")
+    } else {
+        "import { PlexusRpcClient } from '@plexus/rpc-client';".to_string()
+    };
+
+    format!(r#"// Auto-generated schema walk smoke test
+// Run with: bun smoke.ts  (no test framework required)
+
+{import_line}
+
+const URL = process.env.PLEXUS_URL ?? "ws://127.0.0.1:4444";
+const rpc = new PlexusRpcClient({{ url: URL }});
+
+function assert(cond: boolean, msg: string): asserts cond {{
+  if (!cond) {{ rpc.disconnect(); throw new Error(msg); }}
+}}
+
+await rpc.connect();
+
+// 1. _info — well-known, no namespace, proves connectivity
+const info = await rpc.callOnce("_info", null);
+assert(typeof info?.backend === "string", "_info must return {{ backend: string }}");
+const backend = info.backend;
+
+// 2. schema walk — discover all activations
+const schema = await rpc.callOnce(`${{backend}}.schema`, []);
+assert(Array.isArray(schema?.activations), `${{backend}}.schema must return activations`);
+assert(schema.activations.length > 0, `${{backend}}.schema returned 0 activations`);
+
+// 3. activation_schema per plugin — validates schema coherence
+for (const act of schema.activations) {{
+  const detail = await rpc.callOnce(`${{backend}}.activation_schema`, [act.namespace]);
+  assert(detail != null, `activation_schema for ${{act.namespace}} must respond`);
+}}
+
+rpc.disconnect();
+console.log(`\u2713 ${{schema.activations.length}} activations validated (${{backend}})`);
+"#)
+}
+
 /// Generate bidirectional smoke test content
 ///
 /// Tests the interactive.wizard method which exercises all bidir request types:

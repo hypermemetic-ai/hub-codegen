@@ -32,6 +32,23 @@ enum CliTransport {
     None,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum CliGenerate {
+    /// All artifacts (default)
+    #[default]
+    All,
+    /// transport.ts only
+    Transport,
+    /// Core RPC layer: types.ts, rpc.ts, index.ts
+    Rpc,
+    /// Plugin client files (<namespace>/types.ts, client.ts, index.ts)
+    Plugins,
+    /// Schema walk smoke test (smoke.ts, no test framework)
+    Smoke,
+    /// package.json only
+    Package,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CodegenOutput<'a> {
@@ -81,6 +98,18 @@ struct Args {
     /// Output format: files (write to --output dir) or json (emit JSON to stdout)
     #[arg(long, value_enum, default_value = "files")]
     output_format: OutputFormat,
+
+    /// Generate selector: which artifact subset to produce
+    #[arg(long, value_enum, default_value = "all")]
+    generate: CliGenerate,
+
+    /// Plugin name filter for --generate plugins (comma-separated, e.g. "echo,health")
+    #[arg(long)]
+    plugins: Option<String>,
+
+    /// Transport import path used in --generate smoke (default: ../transport)
+    #[arg(long, default_value = "../transport")]
+    smoke_transport_path: String,
 }
 
 fn main() -> Result<()> {
@@ -104,6 +133,18 @@ fn main() -> Result<()> {
             CliTransport::Browser => hub_codegen::generator::TransportEnv::Browser,
             CliTransport::None    => hub_codegen::generator::TransportEnv::None,
         },
+        generate: match args.generate {
+            CliGenerate::All       => hub_codegen::GenerateSelector::All,
+            CliGenerate::Transport => hub_codegen::GenerateSelector::Transport,
+            CliGenerate::Rpc       => hub_codegen::GenerateSelector::Rpc,
+            CliGenerate::Plugins   => hub_codegen::GenerateSelector::Plugins,
+            CliGenerate::Smoke     => hub_codegen::GenerateSelector::Smoke,
+            CliGenerate::Package   => hub_codegen::GenerateSelector::Package,
+        },
+        plugins_filter: args.plugins.map(|p| {
+            p.split(',').map(|s| s.trim().to_string()).collect()
+        }),
+        smoke_transport_path: args.smoke_transport_path,
     };
 
     // Generate based on target
