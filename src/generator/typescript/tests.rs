@@ -14,7 +14,7 @@ pub fn has_bidir_methods(ir: &IR) -> bool {
 }
 
 /// Generate smoke test content
-pub fn generate_smoke_test(ir: &IR, transport: TransportEnv) -> String {
+pub fn generate_smoke_test(ir: &IR, transport: TransportEnv, backend_url: &str) -> String {
     let backend = &ir.ir_backend;
 
     let import_line = if transport != TransportEnv::None {
@@ -30,7 +30,7 @@ import {{ test, expect, beforeAll, afterAll }} from "bun:test";
 {import_line}
 import type {{ PlexusStreamItem }} from "../types";
 
-const WS_URL = process.env.PLEXUS_URL ?? "ws://localhost:4444";
+const WS_URL = process.env.PLEXUS_URL ?? "{backend_url}";
 
 let client: PlexusRpcClient;
 
@@ -64,7 +64,7 @@ test("{backend}.schema returns stream ending in done", async () => {{
   expect(items.length).toBeGreaterThan(0);
   expect(items[items.length - 1].type).toBe("done");
 }}, 10_000);
-"#, backend = backend, import_line = import_line)
+"#, backend = backend, import_line = import_line, backend_url = backend_url)
 }
 
 /// Generate schema walk smoke test (no test framework, plain executable TypeScript).
@@ -120,7 +120,7 @@ console.log(`\u2713 ${{schema.activations.length}} activations validated (${{bac
 /// - prompt (text input)
 /// - select (option selection)
 /// - confirm (yes/no)
-pub fn generate_bidir_smoke_test(ir: &IR, transport: TransportEnv) -> String {
+pub fn generate_bidir_smoke_test(ir: &IR, transport: TransportEnv, backend_url: &str) -> String {
     let backend = &ir.ir_backend;
 
     let import_line = if transport != TransportEnv::None {
@@ -136,7 +136,7 @@ import {{ test, expect, beforeAll, afterAll }} from "bun:test";
 {import_line}
 import type {{ StandardRequest, StandardResponse }} from "../types";
 
-const WS_URL = process.env.PLEXUS_URL ?? "ws://localhost:4444";
+const WS_URL = process.env.PLEXUS_URL ?? "{backend_url}";
 
 let client: PlexusRpcClient;
 const requestsReceived: StandardRequest[] = [];
@@ -184,5 +184,5 @@ test("interactive.wizard receives all request types", async () => {{
   expect(requestsReceived.some(r => r.type === "select")).toBe(true);
   expect(requestsReceived.some(r => r.type === "confirm")).toBe(true);
 }}, 30_000);
-"#, backend = backend, import_line = import_line)
+"#, backend = backend, import_line = import_line, backend_url = backend_url)
 }

@@ -4,7 +4,11 @@ use crate::ir::{IR, TypeDef, TypeKind, TypeRef, FieldDef, VariantDef};
 use crate::HUB_CODEGEN_VERSION;
 use std::collections::{HashSet, HashMap};
 
-/// Generate enhanced file header with full toolchain information
+/// Generate file header with toolchain version information.
+/// Deliberately omits timestamps and IR hashes — those change on every build
+/// even when file content is unchanged, causing spurious cache churn.
+/// The IR hash is tracked in synapse.lock; timestamps are not useful in
+/// committed generated files.
 fn generate_header_comment(ir: &IR) -> Vec<String> {
     let mut header = vec![
         "/**".to_string(),
@@ -14,7 +18,6 @@ fn generate_header_comment(ir: &IR) -> Vec<String> {
     ];
 
     if let Some(metadata) = &ir.ir_metadata {
-        header.push(format!(" * Generated: {}", metadata.gm_timestamp));
         header.push(" * Toolchain:".to_string());
         for gen in &metadata.gm_generators {
             header.push(format!(" *   - {} v{}", gen.gi_tool, gen.gi_version));
@@ -25,10 +28,6 @@ fn generate_header_comment(ir: &IR) -> Vec<String> {
     }
 
     header.push(format!(" * Backend: {}", ir.ir_backend));
-    if let Some(hash) = &ir.ir_hash {
-        header.push(format!(" * Plexus Hash: {}", hash));
-    }
-
     header.push(" */".to_string());
     header
 }
@@ -467,8 +466,11 @@ fn collect_missing_types_for_namespace(ir: &IR, namespace: &str) -> Vec<String> 
     missing
 }
 
-/// Generate all namespace type files
-pub fn generate_namespace_types(ir: &IR) -> HashMap<String, String> {
+/// Generate namespace type files, optionally restricted to a set of namespaces.
+///
+/// `filter`: when `Some`, only namespaces that equal or are prefixed by an entry
+/// are generated.  `None` generates all namespaces (original behaviour).
+pub fn generate_namespace_types(ir: &IR, filter: Option<&[String]>) -> HashMap<String, String> {
     let mut files = HashMap::new();
 
     // Get unique namespaces from types
@@ -477,9 +479,16 @@ pub fn generate_namespace_types(ir: &IR) -> HashMap<String, String> {
         .collect();
 
     for namespace in namespaces {
-        // Skip empty namespace - those types are in global types.ts
+        // Skip empty namespace — those types live in global types.ts
         if namespace.is_empty() {
             continue;
+        }
+
+        // Skip namespaces that don't match the filter
+        if let Some(f) = filter {
+            if !ns_matches_filter(namespace, f) {
+                continue;
+            }
         }
 
         let content = generate_types_for_namespace(ir, namespace);
@@ -489,6 +498,13 @@ pub fn generate_namespace_types(ir: &IR) -> HashMap<String, String> {
     }
 
     files
+}
+
+/// Returns true if `namespace` equals any filter entry or is a child of one.
+/// E.g. filter=["solar.earth"] matches "solar.earth" and "solar.earth.luna"
+///      but not "solar.jupiter".
+fn ns_matches_filter(namespace: &str, filter: &[String]) -> bool {
+    filter.iter().any(|f| f == namespace || namespace.starts_with(&format!("{f}.")))
 }
 
 fn generate_typedef_in_namespace(typedef: &TypeDef, namespace: &str) -> String {

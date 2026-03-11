@@ -283,6 +283,184 @@ fn test_selector_plugins_filter_empty() {
     );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Multi-namespace IR fixture (for scoped-generation tests)
+// ─────────────────────────────────────────────────────────────
+
+/// IR with three namespaces:
+///   echo            — echo.ping
+///   health          — health.status
+///   solar.earth     — solar.earth.info
+fn multi_ns_ir() -> IR {
+    let mut ir_methods = HashMap::new();
+    ir_methods.insert(
+        "echo.ping".to_string(),
+        MethodDef {
+            md_name: "ping".to_string(),
+            md_full_path: "echo.ping".to_string(),
+            md_namespace: "echo".to_string(),
+            md_description: None,
+            md_streaming: false,
+            md_params: vec![],
+            md_returns: TypeRef::RefPrimitive("string".to_string(), None),
+            md_bidir_type: None,
+        },
+    );
+    ir_methods.insert(
+        "health.status".to_string(),
+        MethodDef {
+            md_name: "status".to_string(),
+            md_full_path: "health.status".to_string(),
+            md_namespace: "health".to_string(),
+            md_description: None,
+            md_streaming: false,
+            md_params: vec![],
+            md_returns: TypeRef::RefPrimitive("boolean".to_string(), None),
+            md_bidir_type: None,
+        },
+    );
+    ir_methods.insert(
+        "solar.earth.info".to_string(),
+        MethodDef {
+            md_name: "info".to_string(),
+            md_full_path: "solar.earth.info".to_string(),
+            md_namespace: "solar.earth".to_string(),
+            md_description: None,
+            md_streaming: false,
+            md_params: vec![],
+            md_returns: TypeRef::RefPrimitive("string".to_string(), None),
+            md_bidir_type: None,
+        },
+    );
+    let mut ir_plugins = HashMap::new();
+    ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
+    ir_plugins.insert("health".to_string(), vec!["status".to_string()]);
+    ir_plugins.insert("solar.earth".to_string(), vec!["info".to_string()]);
+    IR {
+        ir_version: "2.0".to_string(),
+        ir_backend: "test".to_string(),
+        ir_hash: Some("multi-hash-abc123".to_string()),
+        ir_metadata: None,
+        ir_types: HashMap::new(),
+        ir_methods,
+        ir_plugins,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Namespace-scoped generation (plugins_filter)
+// ─────────────────────────────────────────────────────────────
+
+/// Exact-match filter: only the named namespace is generated.
+#[test]
+fn test_plugins_filter_exact_match() {
+    let ir = multi_ns_ir();
+    let opts = GenerationOptions {
+        generate: GenerateSelector::Plugins,
+        plugins_filter: Some(vec!["echo".to_string()]),
+        ..GenerationOptions::default()
+    };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert!(
+        result.files.keys().any(|k| k.starts_with("echo/")),
+        "filter 'echo' must emit echo/ files"
+    );
+    assert!(
+        !result.files.keys().any(|k| k.starts_with("health/")),
+        "filter 'echo' must not emit health/ files; got: {:?}", result.files.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        !result.files.keys().any(|k| k.starts_with("solar/")),
+        "filter 'echo' must not emit solar/ files"
+    );
+}
+
+/// Prefix-match filter: a parent prefix matches child namespaces.
+/// Filter "solar" must match "solar.earth" (dot-segment aware).
+#[test]
+fn test_plugins_filter_prefix_match() {
+    let ir = multi_ns_ir();
+    let opts = GenerationOptions {
+        generate: GenerateSelector::Plugins,
+        plugins_filter: Some(vec!["solar".to_string()]),
+        ..GenerationOptions::default()
+    };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert!(
+        result.files.keys().any(|k| k.starts_with("solar/")),
+        "filter 'solar' must emit solar.earth/ files via prefix match"
+    );
+    assert!(
+        !result.files.keys().any(|k| k.starts_with("echo/")),
+        "filter 'solar' must not emit echo/ files"
+    );
+    assert!(
+        !result.files.keys().any(|k| k.starts_with("health/")),
+        "filter 'solar' must not emit health/ files"
+    );
+}
+
+/// Multi-entry filter: each entry is independently matched.
+#[test]
+fn test_plugins_filter_multi_entry() {
+    let ir = multi_ns_ir();
+    let opts = GenerationOptions {
+        generate: GenerateSelector::Plugins,
+        plugins_filter: Some(vec!["echo".to_string(), "health".to_string()]),
+        ..GenerationOptions::default()
+    };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert!(
+        result.files.keys().any(|k| k.starts_with("echo/")),
+        "filter ['echo','health'] must emit echo/ files"
+    );
+    assert!(
+        result.files.keys().any(|k| k.starts_with("health/")),
+        "filter ['echo','health'] must emit health/ files"
+    );
+    assert!(
+        !result.files.keys().any(|k| k.starts_with("solar/")),
+        "filter ['echo','health'] must not emit solar/ files"
+    );
+}
+
+/// No filter (None): all namespaces are generated (regression guard).
+#[test]
+fn test_plugins_filter_none_generates_all() {
+    let ir = multi_ns_ir();
+    let opts = GenerationOptions {
+        generate: GenerateSelector::Plugins,
+        plugins_filter: None,
+        ..GenerationOptions::default()
+    };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert!(result.files.keys().any(|k| k.starts_with("echo/")),   "no filter must emit echo/");
+    assert!(result.files.keys().any(|k| k.starts_with("health/")), "no filter must emit health/");
+    assert!(result.files.keys().any(|k| k.starts_with("solar/")),  "no filter must emit solar/");
+}
+
+/// Prefix must be dot-segment-aware: "sol" must NOT match "solar.earth".
+#[test]
+fn test_plugins_filter_no_substring_match() {
+    let ir = multi_ns_ir();
+    let opts = GenerationOptions {
+        generate: GenerateSelector::Plugins,
+        plugins_filter: Some(vec!["sol".to_string()]),
+        ..GenerationOptions::default()
+    };
+    let result = generate_typescript(&ir, &opts).unwrap();
+
+    assert!(
+        result.files.is_empty(),
+        "'sol' must not match 'solar.earth' (substring, not segment prefix); got: {:?}",
+        result.files.keys().collect::<Vec<_>>()
+    );
+}
+
 /// `--generate smoke`: single smoke.ts file using _info schema walk, no bun:test framework.
 #[test]
 fn test_selector_smoke_schema_walk() {

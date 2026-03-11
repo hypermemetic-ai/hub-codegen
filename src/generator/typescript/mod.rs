@@ -65,8 +65,8 @@ fn generate_all(ir: &IR, options: &GenerationOptions) -> HashMap<String, String>
 
     files.insert("types.ts".to_string(), types::generate_types(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
-    files.extend(types::generate_namespace_types(ir));
-    files.extend(namespaces::generate_namespaces(ir));
+    files.extend(types::generate_namespace_types(ir, None));
+    files.extend(namespaces::generate_namespaces(ir, None));
 
     if options.transport != TransportEnv::None {
         files.insert("transport.ts".to_string(), transport::generate_transport(options.transport));
@@ -76,10 +76,10 @@ fn generate_all(ir: &IR, options: &GenerationOptions) -> HashMap<String, String>
     files.insert("index.ts".to_string(), generate_index(ir, options.transport));
     files.insert("package.json".to_string(), package::generate_package_json(ir, options.transport, has_bidir));
     files.insert("tsconfig.json".to_string(), package::generate_tsconfig(options.transport));
-    files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport));
+    files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, &options.backend_url));
 
     if has_bidir {
-        files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport));
+        files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport, &options.backend_url));
     }
 
     files
@@ -104,22 +104,15 @@ fn generate_rpc_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, St
     files
 }
 
-/// GenPlugins: namespace client files with optional plugin filter
+/// GenPlugins: namespace client files with optional plugin filter.
+///
+/// The filter is applied before generation: only matching namespaces are
+/// generated, rather than generating all then discarding.
 fn generate_plugins_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    let filter = options.plugins_filter.as_deref();
     let mut files = HashMap::new();
-    files.extend(types::generate_namespace_types(ir));
-    files.extend(namespaces::generate_namespaces(ir));
-
-    // Apply plugin name filter if specified
-    if let Some(ref filter) = options.plugins_filter {
-        files.retain(|path, _| {
-            filter.iter().any(|plugin| {
-                let prefix = plugin.replace('.', "/");
-                path.starts_with(&format!("{prefix}/"))
-            })
-        });
-    }
-
+    files.extend(types::generate_namespace_types(ir, filter));
+    files.extend(namespaces::generate_namespaces(ir, filter));
     files
 }
 

@@ -110,6 +110,10 @@ struct Args {
     /// Transport import path used in --generate smoke (default: ../transport)
     #[arg(long, default_value = "../transport")]
     smoke_transport_path: String,
+
+    /// Backend WebSocket URL embedded as fallback in generated smoke tests
+    #[arg(long, default_value = "ws://localhost:4444")]
+    backend_url: String,
 }
 
 fn main() -> Result<()> {
@@ -145,6 +149,7 @@ fn main() -> Result<()> {
             p.split(',').map(|s| s.trim().to_string()).collect()
         }),
         smoke_transport_path: args.smoke_transport_path,
+        backend_url: args.backend_url,
     };
 
     // Generate based on target

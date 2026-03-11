@@ -67,6 +67,8 @@ pub struct GenerationOptions {
     pub plugins_filter: Option<Vec<String>>,
     /// Import path for PlexusRpcClient in the smoke test (default: "../transport")
     pub smoke_transport_path: String,
+    /// Backend WebSocket URL used as fallback in generated smoke tests
+    pub backend_url: String,
 }
 
 impl Default for GenerationOptions {
@@ -76,6 +78,7 @@ impl Default for GenerationOptions {
             generate: GenerateSelector::All,
             plugins_filter: None,
             smoke_transport_path: "../transport".to_string(),
+            backend_url: "ws://localhost:4444".to_string(),
         }
     }
 }
