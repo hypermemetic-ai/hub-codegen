@@ -9,7 +9,7 @@ pub mod tests;
 
 use crate::ir::IR;
 use crate::generator::{GenerationResult, Warning, GenerationOptions, GenerateSelector, TransportEnv};
-use crate::hash::compute_file_hashes;
+use crate::hash::{compute_file_hashes, compute_plugin_hash};
 use crate::HUB_CODEGEN_VERSION;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -59,8 +59,10 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     Ok(GenerationResult { files, warnings, file_hashes, dependencies, dev_dependencies })
 }
 
-/// GenAll: all artifacts (current behaviour)
-fn generate_all(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+/// Generate all code files except package.json.
+/// Used both by generate_all and generate_package_only to compute a
+/// content-stable version hash before generating package.json.
+fn generate_code_files(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
     let mut files = HashMap::new();
 
     files.insert("types.ts".to_string(), types::generate_types(ir));
@@ -72,16 +74,27 @@ fn generate_all(ir: &IR, options: &GenerationOptions) -> HashMap<String, String>
         files.insert("transport.ts".to_string(), transport::generate_transport(options.transport));
     }
 
-    let has_bidir = tests::has_bidir_methods(ir);
     files.insert("index.ts".to_string(), generate_index(ir, options.transport));
-    files.insert("package.json".to_string(), package::generate_package_json(ir, options.transport, has_bidir));
     files.insert("tsconfig.json".to_string(), package::generate_tsconfig(options.transport));
     files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, &options.backend_url));
 
-    if has_bidir {
+    if tests::has_bidir_methods(ir) {
         files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport, &options.backend_url));
     }
 
+    files
+}
+
+/// GenAll: all artifacts (current behaviour)
+fn generate_all(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    // Two-pass: generate code files first, derive a content-stable version hash,
+    // then generate package.json. This ensures package.json's version only changes
+    // when generated code changes — not when IR metadata (timestamps, unrelated
+    // plugin additions) changes.
+    let mut files = generate_code_files(ir, options);
+    let version_hash = compute_plugin_hash(&files);
+    let has_bidir = tests::has_bidir_methods(ir);
+    files.insert("package.json".to_string(), package::generate_package_json(options.transport, has_bidir, &version_hash));
     files
 }
 
@@ -124,11 +137,15 @@ fn generate_smoke_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, 
     files
 }
 
-/// GenPackage: package.json only
+/// GenPackage: package.json only.
+/// Generates all code files in memory to compute the content-stable version hash,
+/// then returns only package.json.
 fn generate_package_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    let code_files = generate_code_files(ir, options);
+    let version_hash = compute_plugin_hash(&code_files);
     let has_bidir = tests::has_bidir_methods(ir);
     let mut files = HashMap::new();
-    files.insert("package.json".to_string(), package::generate_package_json(ir, options.transport, has_bidir));
+    files.insert("package.json".to_string(), package::generate_package_json(options.transport, has_bidir, &version_hash));
     files
 }
 
@@ -147,6 +164,10 @@ fn generate_metadata_file(ir: &IR, file_hashes: &HashMap<String, String>) -> Str
         gi_version: HUB_CODEGEN_VERSION.to_string(),
     });
 
+    // Deliberately omit timestamp and plexus_hash — both change on every build
+    // even when code content is unchanged, causing spurious file-hash churn.
+    // The IR hash is tracked in synapse.lock (irHash field); build timestamps
+    // are not useful in committed generated files.
     let metadata = json!({
         "format_version": "2.0",
         "generation": {
@@ -154,12 +175,10 @@ fn generate_metadata_file(ir: &IR, file_hashes: &HashMap<String, String>) -> Str
                 "tool": g.gi_tool,
                 "version": g.gi_version,
             })).collect::<Vec<_>>(),
-            "timestamp": ir.ir_metadata.as_ref().map(|m| &m.gm_timestamp),
             "ir_version": &ir.ir_version,
         },
         "source": {
             "backend": &ir.ir_backend,
-            "plexus_hash": &ir.ir_hash,
         },
         "cache": {
             "file_hashes": file_hashes,
