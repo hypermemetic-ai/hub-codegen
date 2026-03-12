@@ -6,9 +6,12 @@
 use crate::ir::{IR, MethodDef, ParamDef};
 use std::collections::HashMap;
 
-/// Generate TypeScript namespace client files (one per namespace)
-/// Files are placed in `<namespace>/client.ts`
-pub fn generate_namespaces(ir: &IR) -> HashMap<String, String> {
+/// Generate TypeScript namespace client files (one per namespace).
+///
+/// `filter`: when `Some`, only namespaces that equal or are prefixed by an entry
+/// are generated.  `None` generates all namespaces (original behaviour).
+/// Files are placed in `<namespace>/client.ts` and `<namespace>/index.ts`.
+pub fn generate_namespaces(ir: &IR, filter: Option<&[String]>) -> HashMap<String, String> {
     let mut files = HashMap::new();
 
     // Group methods by namespace
@@ -22,9 +25,16 @@ pub fn generate_namespaces(ir: &IR) -> HashMap<String, String> {
 
     // Generate interface and implementation for each namespace
     for (namespace, methods) in methods_by_ns {
-        // Skip empty namespace - those are core plexus methods
+        // Skip empty namespace — those are core plexus methods
         if namespace.is_empty() {
             continue;
+        }
+
+        // Skip namespaces that don't match the filter
+        if let Some(f) = filter {
+            if !ns_matches_filter(&namespace, f) {
+                continue;
+            }
         }
 
         let content = generate_namespace(&namespace, &methods, ir);
@@ -41,6 +51,11 @@ pub fn generate_namespaces(ir: &IR) -> HashMap<String, String> {
     }
 
     files
+}
+
+/// Returns true if `namespace` equals any filter entry or is a child of one.
+fn ns_matches_filter(namespace: &str, filter: &[String]) -> bool {
+    filter.iter().any(|f| f == namespace || namespace.starts_with(&format!("{f}.")))
 }
 
 fn generate_namespace_index(namespace: &str, has_types: bool) -> String {

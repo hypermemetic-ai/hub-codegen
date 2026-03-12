@@ -32,6 +32,23 @@ enum CliTransport {
     None,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum CliGenerate {
+    /// All artifacts (default)
+    #[default]
+    All,
+    /// transport.ts only
+    Transport,
+    /// Core RPC layer: types.ts, rpc.ts, index.ts
+    Rpc,
+    /// Plugin client files (<namespace>/types.ts, client.ts, index.ts)
+    Plugins,
+    /// Schema walk smoke test (smoke.ts, no test framework)
+    Smoke,
+    /// package.json only
+    Package,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CodegenOutput<'a> {
@@ -81,21 +98,37 @@ struct Args {
     /// Output format: files (write to --output dir) or json (emit JSON to stdout)
     #[arg(long, value_enum, default_value = "files")]
     output_format: OutputFormat,
+
+    /// Generate selector: which artifact subset to produce
+    #[arg(long, value_enum, default_value = "all")]
+    generate: CliGenerate,
+
+    /// Plugin name filter for --generate plugins (comma-separated, e.g. "echo,health")
+    #[arg(long)]
+    plugins: Option<String>,
+
+    /// Transport import path used in --generate smoke (default: ../transport)
+    #[arg(long, default_value = "../transport")]
+    smoke_transport_path: String,
+
+    /// Backend WebSocket URL embedded as fallback in generated smoke tests
+    #[arg(long, default_value = "ws://localhost:4444")]
+    backend_url: String,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    // Read IR
-    let ir_json = if args.input.as_os_str() == "-" {
+    // Read IR — transport-only generation doesn't need IR (transport.ts is a static template)
+    let ir: hub_codegen::IR = if matches!(args.generate, CliGenerate::Transport) {
+        serde_json::from_str(r#"{"irVersion":"2.0","irBackend":"","irTypes":{},"irMethods":{},"irPlugins":{}}"#)?
+    } else if args.input.as_os_str() == "-" {
         let mut buf = String::new();
         io::stdin().read_to_string(&mut buf)?;
-        buf
+        serde_json::from_str(&buf)?
     } else {
-        std::fs::read_to_string(&args.input)?
+        serde_json::from_str(&std::fs::read_to_string(&args.input)?)?
     };
-
-    let ir: hub_codegen::IR = serde_json::from_str(&ir_json)?;
 
     // Create generation options
     let options = hub_codegen::GenerationOptions {
@@ -104,6 +137,19 @@ fn main() -> Result<()> {
             CliTransport::Browser => hub_codegen::generator::TransportEnv::Browser,
             CliTransport::None    => hub_codegen::generator::TransportEnv::None,
         },
+        generate: match args.generate {
+            CliGenerate::All       => hub_codegen::GenerateSelector::All,
+            CliGenerate::Transport => hub_codegen::GenerateSelector::Transport,
+            CliGenerate::Rpc       => hub_codegen::GenerateSelector::Rpc,
+            CliGenerate::Plugins   => hub_codegen::GenerateSelector::Plugins,
+            CliGenerate::Smoke     => hub_codegen::GenerateSelector::Smoke,
+            CliGenerate::Package   => hub_codegen::GenerateSelector::Package,
+        },
+        plugins_filter: args.plugins.map(|p| {
+            p.split(',').map(|s| s.trim().to_string()).collect()
+        }),
+        smoke_transport_path: args.smoke_transport_path,
+        backend_url: args.backend_url,
     };
 
     // Generate based on target
@@ -165,10 +211,16 @@ fn main() -> Result<()> {
                     let pkg_path = args.output.join("package.json");
                     if !pkg_path.exists() {
                         let has_bidir = hub_codegen::generator::typescript::tests::has_bidir_methods(&ir);
+                        // Version hash from code files only (exclude package.json and metadata sidecar)
+                        let code_files: std::collections::HashMap<_, _> = result.files.iter()
+                            .filter(|(k, _)| k.as_str() != "package.json" && k.as_str() != ".codegen-metadata.json")
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect();
+                        let version_hash = hub_codegen::hash::compute_plugin_hash(&code_files);
                         let pkg_content = hub_codegen::generator::typescript::package::generate_package_json(
-                            &ir,
                             options.transport,
                             has_bidir,
+                            &version_hash,
                         );
                         std::fs::write(&pkg_path, &pkg_content)?;
                     }

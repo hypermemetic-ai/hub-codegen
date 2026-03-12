@@ -3,17 +3,15 @@
 //! Generates package.json and tsconfig.json for the TypeScript client.
 
 use std::collections::HashMap;
-use crate::ir::IR;
 use crate::generator::TransportEnv;
 
-/// Generate package.json content
-pub fn generate_package_json(ir: &IR, transport: TransportEnv, has_bidir: bool) -> String {
-    let plexus_hash = ir.ir_hash.as_deref().unwrap_or("unknown");
-    let version_hash = if plexus_hash.len() >= 16 {
-        &plexus_hash[..16]
-    } else {
-        plexus_hash
-    };
+/// Generate package.json content.
+///
+/// `version_hash` should be a content-based hash computed from the other
+/// generated files — NOT the IR hash. This ensures the package version only
+/// changes when generated code changes, not when IR metadata (timestamps,
+/// unrelated plugin additions) changes.
+pub fn generate_package_json(transport: TransportEnv, has_bidir: bool, version_hash: &str) -> String {
 
     // Conditionally include deps based on transport
     let dependencies = match transport {
@@ -48,6 +46,7 @@ pub fn generate_package_json(ir: &IR, transport: TransportEnv, has_bidir: bool) 
   "version": "0.0.0-{version_hash}",
   "type": "module",
   "main": "index.ts",
+  "_generatedBy": "hub-codegen",
   "scripts": {{
     {scripts}
   }},

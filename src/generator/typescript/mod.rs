@@ -8,8 +8,8 @@ pub mod package;
 pub mod tests;
 
 use crate::ir::IR;
-use crate::generator::{GenerationResult, Warning, GenerationOptions, TransportEnv};
-use crate::hash::compute_file_hashes;
+use crate::generator::{GenerationResult, Warning, GenerationOptions, GenerateSelector, TransportEnv};
+use crate::hash::{compute_file_hashes, compute_plugin_hash};
 use crate::HUB_CODEGEN_VERSION;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -17,7 +17,6 @@ use serde_json::json;
 
 /// Generate TypeScript code from IR
 pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult> {
-    let mut files = HashMap::new();
     let mut warnings = Vec::new();
 
     // Validate IR version
@@ -33,68 +32,121 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     // Collect warnings for unknown types
     collect_warnings(ir, &mut warnings);
 
-    // Generate core types (PlexusStreamItem etc) - shared across all namespaces
-    let core_types_content = types::generate_types(ir);
-    files.insert("types.ts".to_string(), core_types_content);
+    // Dispatch to artifact-specific generator
+    let mut files = match options.generate {
+        GenerateSelector::All      => generate_all(ir, options),
+        GenerateSelector::Transport => generate_transport_only(ir, options),
+        GenerateSelector::Rpc      => generate_rpc_only(ir, options),
+        GenerateSelector::Plugins  => generate_plugins_only(ir, options),
+        GenerateSelector::Smoke    => generate_smoke_only(ir, options),
+        GenerateSelector::Package  => generate_package_only(ir, options),
+    };
 
-    // Generate RPC client interface (Layer 1)
-    let rpc_content = rpc::generate_rpc_client();
-    files.insert("rpc.ts".to_string(), rpc_content);
-
-    // Generate per-namespace type files (<namespace>/types.ts)
-    let namespace_type_files = types::generate_namespace_types(ir);
-    files.extend(namespace_type_files);
-
-    // Generate namespace client files (<namespace>/client.ts and <namespace>/index.ts)
-    let namespace_files = namespaces::generate_namespaces(ir);
-    files.extend(namespace_files);
-
-    // Generate WebSocket transport implementation (Layer 1 implementation)
-    // Only if transport is not None
-    if options.transport != TransportEnv::None {
-        let transport_content = transport::generate_transport(options.transport);
-        files.insert("transport.ts".to_string(), transport_content);
-    }
-
-    // Check if bidirectional methods exist (for package.json scripts)
-    let has_bidir = tests::has_bidir_methods(ir);
-
-    // Generate index
-    let index = generate_index(ir, options.transport);
-    files.insert("index.ts".to_string(), index);
-
-    // package.json is NOT inserted into files — deps are surfaced as structured data
-    // and package.json is handled by the caller (files mode: written if missing; json mode: emitted as fields)
-
-    // Generate tsconfig.json
-    let tsconfig = package::generate_tsconfig(options.transport);
-    files.insert("tsconfig.json".to_string(), tsconfig);
-
-    // Generate smoke test
-    let smoke_test = tests::generate_smoke_test(ir, options.transport);
-    files.insert("test/smoke.test.ts".to_string(), smoke_test);
-
-    // Generate bidirectional smoke test if bidir methods exist
-    if has_bidir {
-        let bidir_test = tests::generate_bidir_smoke_test(ir, options.transport);
-        files.insert("test/bidir-smoke.test.ts".to_string(), bidir_test);
-    }
-
-    // Compute file hashes for all files generated so far
+    // Compute file hashes
     let mut file_hashes = compute_file_hashes(&files);
 
-    // Generate metadata file with file hashes included
-    let metadata = generate_metadata_file(ir, &file_hashes);
-    files.insert(".codegen-metadata.json".to_string(), metadata.clone());
-
-    // Compute hash for metadata file itself
-    use crate::hash::compute_file_hash;
-    file_hashes.insert(".codegen-metadata.json".to_string(), compute_file_hash(&metadata));
+    // Metadata only for GenAll (other selectors produce partial outputs)
+    if options.generate == GenerateSelector::All {
+        let metadata = generate_metadata_file(ir, &file_hashes);
+        files.insert(".codegen-metadata.json".to_string(), metadata.clone());
+        use crate::hash::compute_file_hash;
+        file_hashes.insert(".codegen-metadata.json".to_string(), compute_file_hash(&metadata));
+    }
 
     let dependencies = package::get_runtime_deps(options.transport);
     let dev_dependencies = package::get_dev_deps(options.transport);
 
     Ok(GenerationResult { files, warnings, file_hashes, dependencies, dev_dependencies })
+}
+
+/// Generate all code files except package.json.
+/// Used both by generate_all and generate_package_only to compute a
+/// content-stable version hash before generating package.json.
+fn generate_code_files(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    let mut files = HashMap::new();
+
+    files.insert("types.ts".to_string(), types::generate_types(ir));
+    files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
+    files.extend(types::generate_namespace_types(ir, None));
+    files.extend(namespaces::generate_namespaces(ir, None));
+
+    if options.transport != TransportEnv::None {
+        files.insert("transport.ts".to_string(), transport::generate_transport(options.transport));
+    }
+
+    files.insert("index.ts".to_string(), generate_index(ir, options.transport));
+    files.insert("tsconfig.json".to_string(), package::generate_tsconfig(options.transport));
+    files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, &options.backend_url));
+
+    if tests::has_bidir_methods(ir) {
+        files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport, &options.backend_url));
+    }
+
+    files
+}
+
+/// GenAll: all artifacts (current behaviour)
+fn generate_all(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    // Two-pass: generate code files first, derive a content-stable version hash,
+    // then generate package.json. This ensures package.json's version only changes
+    // when generated code changes — not when IR metadata (timestamps, unrelated
+    // plugin additions) changes.
+    let mut files = generate_code_files(ir, options);
+    let version_hash = compute_plugin_hash(&files);
+    let has_bidir = tests::has_bidir_methods(ir);
+    files.insert("package.json".to_string(), package::generate_package_json(options.transport, has_bidir, &version_hash));
+    files
+}
+
+/// GenTransport: transport.ts only
+fn generate_transport_only(_ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    if options.transport == TransportEnv::None {
+        return HashMap::new();
+    }
+    let mut files = HashMap::new();
+    files.insert("transport.ts".to_string(), transport::generate_transport(options.transport));
+    files
+}
+
+/// GenRpc: core RPC layer — types.ts, rpc.ts, index.ts
+fn generate_rpc_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    let mut files = HashMap::new();
+    files.insert("types.ts".to_string(), types::generate_types(ir));
+    files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
+    files.insert("index.ts".to_string(), generate_index(ir, options.transport));
+    files
+}
+
+/// GenPlugins: namespace client files with optional plugin filter.
+///
+/// The filter is applied before generation: only matching namespaces are
+/// generated, rather than generating all then discarding.
+fn generate_plugins_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    let filter = options.plugins_filter.as_deref();
+    let mut files = HashMap::new();
+    files.extend(types::generate_namespace_types(ir, filter));
+    files.extend(namespaces::generate_namespaces(ir, filter));
+    files
+}
+
+/// GenSmoke: schema walk smoke test (no test framework)
+fn generate_smoke_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    let mut files = HashMap::new();
+    let content = tests::generate_schema_walk_smoke(ir, options.transport, &options.smoke_transport_path);
+    files.insert("smoke.ts".to_string(), content);
+    files
+}
+
+/// GenPackage: package.json only.
+/// Generates all code files in memory to compute the content-stable version hash,
+/// then returns only package.json.
+fn generate_package_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+    let code_files = generate_code_files(ir, options);
+    let version_hash = compute_plugin_hash(&code_files);
+    let has_bidir = tests::has_bidir_methods(ir);
+    let mut files = HashMap::new();
+    files.insert("package.json".to_string(), package::generate_package_json(options.transport, has_bidir, &version_hash));
+    files
 }
 
 /// Generate .codegen-metadata.json with full toolchain information
@@ -112,6 +164,10 @@ fn generate_metadata_file(ir: &IR, file_hashes: &HashMap<String, String>) -> Str
         gi_version: HUB_CODEGEN_VERSION.to_string(),
     });
 
+    // Deliberately omit timestamp and plexus_hash — both change on every build
+    // even when code content is unchanged, causing spurious file-hash churn.
+    // The IR hash is tracked in synapse.lock (irHash field); build timestamps
+    // are not useful in committed generated files.
     let metadata = json!({
         "format_version": "2.0",
         "generation": {
@@ -119,12 +175,10 @@ fn generate_metadata_file(ir: &IR, file_hashes: &HashMap<String, String>) -> Str
                 "tool": g.gi_tool,
                 "version": g.gi_version,
             })).collect::<Vec<_>>(),
-            "timestamp": ir.ir_metadata.as_ref().map(|m| &m.gm_timestamp),
             "ir_version": &ir.ir_version,
         },
         "source": {
             "backend": &ir.ir_backend,
-            "plexus_hash": &ir.ir_hash,
         },
         "cache": {
             "file_hashes": file_hashes,
