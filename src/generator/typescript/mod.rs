@@ -98,12 +98,15 @@ fn generate_all(ir: &IR, options: &GenerationOptions) -> HashMap<String, String>
     files
 }
 
-/// GenTransport: transport.ts only
+/// GenTransport: protocol types + RPC helpers + WebSocket transport.
+/// All three files are static (no IR content) — no backend connection needed.
 fn generate_transport_only(_ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
     if options.transport == TransportEnv::None {
         return HashMap::new();
     }
     let mut files = HashMap::new();
+    files.insert("types.ts".to_string(), types::generate_protocol_types());
+    files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
     files.insert("transport.ts".to_string(), transport::generate_transport(options.transport));
     files
 }
