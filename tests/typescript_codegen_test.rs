@@ -211,15 +211,28 @@ fn test_bun_types_in_dev_deps() {
 // Regressions here would cause tendrils to silently produce wrong artifacts
 // when synapse-cc invokes hub-codegen with targeted selectors.
 
-/// `--generate transport`: only transport.ts, nothing else.
+/// `--generate transport`: types.ts + rpc.ts + transport.ts (modular, no IR needed).
 #[test]
 fn test_selector_transport_only() {
     let ir = minimal_ir();
     let opts = GenerationOptions { generate: GenerateSelector::Transport, ..GenerationOptions::default() };
     let result = generate_typescript(&ir, &opts).unwrap();
 
-    assert_eq!(result.files.len(), 1, "GenTransport must emit exactly one file");
+    assert_eq!(result.files.len(), 3, "GenTransport must emit exactly three files");
+    assert!(result.files.contains_key("types.ts"),     "GenTransport must emit types.ts");
+    assert!(result.files.contains_key("rpc.ts"),       "GenTransport must emit rpc.ts");
     assert!(result.files.contains_key("transport.ts"), "GenTransport must emit transport.ts");
+
+    // transport.ts must import from ./types and ./rpc — not inline them
+    let transport = result.files.get("transport.ts").unwrap();
+    assert!(transport.contains("from './types'"), "transport.ts must import from ./types");
+    assert!(transport.contains("from './rpc'"),   "transport.ts must import from ./rpc");
+
+    // types.ts and rpc.ts must NOT contain PlexusRpcClient (that lives in transport)
+    let types = result.files.get("types.ts").unwrap();
+    assert!(!types.contains("PlexusRpcClient"), "types.ts must not contain PlexusRpcClient");
+    let rpc = result.files.get("rpc.ts").unwrap();
+    assert!(!rpc.contains("PlexusRpcClient"), "rpc.ts must not contain PlexusRpcClient");
 }
 
 /// `--generate transport` with `--transport none`: no transport file emitted.
