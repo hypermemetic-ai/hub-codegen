@@ -1,4 +1,5 @@
 /target
+/generated
 *.swp
 .DS_Store
 *.db
