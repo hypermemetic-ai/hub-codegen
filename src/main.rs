@@ -119,16 +119,16 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    // Read IR
-    let ir_json = if args.input.as_os_str() == "-" {
+    // Read IR — transport-only generation doesn't need IR (transport.ts is a static template)
+    let ir: hub_codegen::IR = if matches!(args.generate, CliGenerate::Transport) {
+        serde_json::from_str(r#"{"irVersion":"2.0","irBackend":"","irTypes":{},"irMethods":{},"irPlugins":{}}"#)?
+    } else if args.input.as_os_str() == "-" {
         let mut buf = String::new();
         io::stdin().read_to_string(&mut buf)?;
-        buf
+        serde_json::from_str(&buf)?
     } else {
-        std::fs::read_to_string(&args.input)?
+        serde_json::from_str(&std::fs::read_to_string(&args.input)?)?
     };
-
-    let ir: hub_codegen::IR = serde_json::from_str(&ir_json)?;
 
     // Create generation options
     let options = hub_codegen::GenerationOptions {
