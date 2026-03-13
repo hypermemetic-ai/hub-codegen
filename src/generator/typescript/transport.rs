@@ -134,7 +134,7 @@ export class PlexusRpcClient implements RpcClient {
     let msg: unknown;
     try { msg = JSON.parse(data); } catch { this.log('Failed to parse message:', data); return; }
     const obj = msg as Record<string, unknown>;
-    if ((obj.method === 'subscription' || obj.method === 'result') && !('id' in obj)) {
+    if ('method' in obj && !('id' in obj) && obj.params && typeof (obj.params as any).subscription !== 'undefined') {
       this.handleNotification(msg as JsonRpcNotification); return;
     }
     if ('id' in obj) { this.handleResponse(msg as JsonRpcResponse); return; }
