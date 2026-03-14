@@ -7,13 +7,134 @@ pub mod transport;
 pub mod package;
 pub mod tests;
 
-use crate::ir::IR;
+use crate::ir::{IR, TypeRef, TypeKind};
 use crate::generator::{GenerationResult, Warning, GenerationOptions, GenerateSelector, TransportEnv};
 use crate::hash::{compute_file_hashes, compute_plugin_hash};
 use crate::HUB_CODEGEN_VERSION;
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use serde_json::json;
+
+/// Result of partitioning plugins into requested and type-dependency-only sets.
+#[derive(Debug, Clone)]
+struct PluginPartition {
+    /// Plugins explicitly requested — get full generation (client.ts, types.ts, index.ts)
+    requested: HashSet<String>,
+    /// Namespaces not requested but needed for cross-plugin type references — types.ts only
+    type_deps: HashSet<String>,
+}
+
+impl PluginPartition {
+    /// Returns true if the namespace should get types.ts generated (either requested or dep)
+    #[allow(dead_code)]
+    fn needs_types(&self, ns: &str) -> bool {
+        self.requested.contains(ns) || self.type_deps.contains(ns)
+    }
+
+    /// Returns true if the namespace should get client.ts + index.ts (only requested plugins)
+    #[allow(dead_code)]
+    fn needs_client(&self, ns: &str) -> bool {
+        self.requested.contains(ns)
+    }
+}
+
+/// Resolve type dependencies transitively from a set of requested plugin namespaces.
+///
+/// Walks all `RefNamed` type references from types belonging to requested plugins.
+/// If a ref points to a namespace not in `requested`, that namespace is added to
+/// `type_deps`. Then we transitively resolve — dependency types may reference further
+/// namespaces. Repeats until stable (fixed point).
+fn resolve_type_dependencies(ir: &IR, requested: &[String]) -> PluginPartition {
+    let requested_set: HashSet<String> = requested.iter().cloned().collect();
+    let mut type_deps: HashSet<String> = HashSet::new();
+    let mut frontier: HashSet<String> = requested_set.clone();
+    let mut visited: HashSet<String> = HashSet::new();
+
+    loop {
+        let mut new_deps: HashSet<String> = HashSet::new();
+
+        for ns in &frontier {
+            if visited.contains(ns) {
+                continue;
+            }
+            visited.insert(ns.clone());
+
+            // Walk all types in this namespace and collect referenced namespaces
+            for typedef in ir.ir_types.values() {
+                if typedef.td_namespace != *ns {
+                    continue;
+                }
+                collect_ns_refs_from_kind(&typedef.td_kind, &mut new_deps);
+            }
+
+            // Also walk method params/returns for this namespace
+            for method in ir.ir_methods.values() {
+                if method.md_namespace != *ns {
+                    continue;
+                }
+                collect_ns_refs_from_typeref(&method.md_returns, &mut new_deps);
+                for param in &method.md_params {
+                    collect_ns_refs_from_typeref(&param.pd_type, &mut new_deps);
+                }
+                if let Some(bidir) = &method.md_bidir_type {
+                    collect_ns_refs_from_typeref(bidir, &mut new_deps);
+                }
+            }
+        }
+
+        // Remove already-known namespaces
+        new_deps.retain(|ns| !ns.is_empty() && !requested_set.contains(ns) && !type_deps.contains(ns));
+
+        if new_deps.is_empty() {
+            break;
+        }
+
+        // The new deps become the next frontier for transitive resolution
+        frontier = new_deps.clone();
+        type_deps.extend(new_deps);
+    }
+
+    PluginPartition {
+        requested: requested_set,
+        type_deps,
+    }
+}
+
+/// Collect namespace references from a TypeRef
+fn collect_ns_refs_from_typeref(tr: &TypeRef, namespaces: &mut HashSet<String>) {
+    match tr {
+        TypeRef::RefNamed(qn) => {
+            if let Some(ns) = qn.namespace() {
+                namespaces.insert(ns.to_string());
+            }
+        }
+        TypeRef::RefArray(inner) => collect_ns_refs_from_typeref(inner, namespaces),
+        TypeRef::RefOptional(inner) => collect_ns_refs_from_typeref(inner, namespaces),
+        _ => {}
+    }
+}
+
+/// Collect namespace references from a TypeKind (struct fields, enum variants, aliases)
+fn collect_ns_refs_from_kind(kind: &TypeKind, namespaces: &mut HashSet<String>) {
+    match kind {
+        TypeKind::KindStruct { ks_fields } => {
+            for field in ks_fields {
+                collect_ns_refs_from_typeref(&field.fd_type, namespaces);
+            }
+        }
+        TypeKind::KindEnum { ke_variants, .. } => {
+            for variant in ke_variants {
+                for field in &variant.vd_fields {
+                    collect_ns_refs_from_typeref(&field.fd_type, namespaces);
+                }
+            }
+        }
+        TypeKind::KindAlias { ka_target } => {
+            collect_ns_refs_from_typeref(ka_target, namespaces);
+        }
+        TypeKind::KindPrimitive { .. } | TypeKind::KindStringEnum { .. } => {}
+    }
+}
 
 /// Generate TypeScript code from IR
 pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult> {
@@ -67,14 +188,34 @@ fn generate_code_files(ir: &IR, options: &GenerationOptions) -> HashMap<String, 
 
     files.insert("types.ts".to_string(), types::generate_types(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
-    files.extend(types::generate_namespace_types(ir, None));
-    files.extend(namespaces::generate_namespaces(ir, None));
+
+    // When --plugins is specified, partition namespaces into requested (full gen)
+    // and type-dependency-only (types.ts stubs). Otherwise generate everything.
+    let partition = options.plugins_filter.as_ref().map(|pf| resolve_type_dependencies(ir, pf));
+
+    if let Some(ref part) = partition {
+        // Generate types for requested plugins AND their type dependencies
+        let all_type_ns: Vec<String> = part.requested.iter()
+            .chain(part.type_deps.iter())
+            .cloned()
+            .collect();
+        files.extend(types::generate_namespace_types(ir, Some(&all_type_ns)));
+
+        // Generate client + index only for requested plugins
+        let requested_vec: Vec<String> = part.requested.iter().cloned().collect();
+        files.extend(namespaces::generate_namespaces(ir, Some(&requested_vec)));
+    } else {
+        files.extend(types::generate_namespace_types(ir, None));
+        files.extend(namespaces::generate_namespaces(ir, None));
+    }
 
     if options.transport != TransportEnv::None {
         files.insert("transport.ts".to_string(), transport::generate_transport(options.transport));
     }
 
-    files.insert("index.ts".to_string(), generate_index(ir, options.transport));
+    // Top-level index.ts only re-exports requested plugins (or all if no filter)
+    let index_filter = partition.as_ref().map(|p| &p.requested);
+    files.insert("index.ts".to_string(), generate_index_filtered(ir, options.transport, index_filter));
     files.insert("tsconfig.json".to_string(), package::generate_tsconfig(options.transport));
     files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, &options.backend_url));
 
@@ -247,6 +388,13 @@ fn collect_warnings(ir: &IR, warnings: &mut Vec<Warning>) {
 }
 
 fn generate_index(ir: &IR, transport: TransportEnv) -> String {
+    generate_index_filtered(ir, transport, None)
+}
+
+/// Generate top-level index.ts, optionally restricting re-exports to a set of namespaces.
+/// When `only_namespaces` is `Some`, only those namespaces are re-exported (type-dep stubs
+/// are deliberately excluded from the barrel file).
+fn generate_index_filtered(ir: &IR, transport: TransportEnv, only_namespaces: Option<&HashSet<String>>) -> String {
     let mut lines = vec![
         "// Auto-generated by hub-codegen".to_string(),
         "".to_string(),
@@ -274,6 +422,13 @@ fn generate_index(ir: &IR, transport: TransportEnv) -> String {
         // Skip empty namespace (core plexus methods)
         if namespace.is_empty() {
             continue;
+        }
+
+        // If filtering, only re-export requested plugins (not type-dep stubs)
+        if let Some(only) = only_namespaces {
+            if !only.contains(namespace.as_str()) {
+                continue;
+            }
         }
 
         // Export namespace as a module
