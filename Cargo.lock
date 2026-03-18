@@ -682,3 +682,15 @@ name = "zmij"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3280a1b827474fcd5dbef4b35a674deb52ba5c312363aef9135317df179d81b"
+
+[[patch.unused]]
+name = "plexus-core"
+version = "0.3.13"
+
+[[patch.unused]]
+name = "plexus-macros"
+version = "0.3.10"
+
+[[patch.unused]]
+name = "plexus-transport"
+version = "0.1.8"
