@@ -1,5 +1,6 @@
 /target
 /generated
+/test-results
 *.swp
 .DS_Store
 *.db
