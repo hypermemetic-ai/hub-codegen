@@ -1,7 +1,7 @@
 //! Client generation for Rust
 
-use crate::ir::{IR, MethodDef, TypeDef, TypeRef};
-use std::collections::HashMap;
+use crate::ir::{IR, MethodDef, MethodRole, TypeDef, TypeRef};
+use std::collections::{BTreeSet, HashMap};
 
 /// Node in namespace hierarchy tree
 pub struct NamespaceNode {
@@ -294,11 +294,58 @@ fn generate_namespace_node(
             }
         }
 
+        // IR-9: Partition methods. DynamicChild methods are rendered as
+        // typed-handle structs implementing DynamicChild + (optionally)
+        // Listable / Searchable. Their sibling list/search methods are
+        // hidden from the flat-function surface.
+        let hidden_siblings: BTreeSet<String> = node
+            .methods
+            .iter()
+            .filter_map(|m| match &m.md_role {
+                MethodRole::DynamicChild { list_method, search_method } => Some(
+                    [list_method.clone(), search_method.clone()]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+
+        let mut dynamic_children: Vec<&MethodDef> = Vec::new();
+        let mut flat_methods: Vec<&MethodDef> = Vec::new();
+        for m in &node.methods {
+            match &m.md_role {
+                MethodRole::DynamicChild { .. } => dynamic_children.push(m),
+                _ => {
+                    if hidden_siblings.contains(&m.md_name) {
+                        continue;
+                    }
+                    flat_methods.push(m);
+                }
+            }
+        }
+
+        // IR-9: Emit DynamicChild trait + capability traits once per namespace
+        // that contains at least one dynamic child gate. Kept as a skeleton —
+        // traits are declared but full trait-impls bodies are marker-only.
+        if !dynamic_children.is_empty() {
+            content.push("// === IR-9 typed-handle traits (skeleton) ===".to_string());
+            content.push("".to_string());
+            content.push(generate_dynamic_child_trait_decls());
+            content.push("".to_string());
+            for method in &dynamic_children {
+                content.push(generate_dynamic_child_struct(method, ir, &node.full_path));
+                content.push("".to_string());
+            }
+        }
+
         // Generate methods for this namespace level
-        if !node.methods.is_empty() {
+        if !flat_methods.is_empty() {
             content.push("// === Methods ===".to_string());
             content.push("".to_string());
-            for method in &node.methods {
+            for method in &flat_methods {
                 content.push(generate_method(method, ir, &node.full_path));
                 content.push("".to_string());
             }
@@ -314,6 +361,99 @@ fn generate_namespace_node(
     for child in node.children.values() {
         generate_namespace_node(child, ir, files);
     }
+}
+
+/// IR-9: Declare the DynamicChild / Listable / Searchable traits.
+///
+/// Skeleton-only: trait method bodies are provided by per-gate structs.
+/// A future revision will consolidate these into a crate-level module to
+/// avoid repeated declarations per namespace.
+fn generate_dynamic_child_trait_decls() -> String {
+    r#"/// Typed handle for a dynamic-child activation (IR-9).
+///
+/// Provides a trait-bound abstraction over "look up child by name". The
+/// associated `Child` type is the child's generated client struct.
+#[allow(async_fn_in_trait)]
+pub trait DynamicChild {
+    type Child;
+    async fn get(&self, name: &str) -> anyhow::Result<Option<Self::Child>>;
+}
+
+/// Capability: the gate can enumerate available child names.
+#[allow(async_fn_in_trait)]
+pub trait Listable {
+    async fn list(&self) -> anyhow::Result<Vec<String>>;
+}
+
+/// Capability: the gate can search available child names.
+#[allow(async_fn_in_trait)]
+pub trait Searchable {
+    async fn search(&self, query: &str) -> anyhow::Result<Vec<String>>;
+}"#
+        .to_string()
+}
+
+/// IR-9: Emit a per-gate struct implementing DynamicChild plus the opt-in
+/// Listable / Searchable capabilities per the method's IR role.
+///
+/// Skeleton implementation — method bodies delegate to the RPC client via
+/// `call_single` / `call_stream`. The child `get` currently returns
+/// `Option<serde_json::Value>` because full child-client wiring for Rust
+/// is deferred to a follow-up ticket (Rust Plexus client classes are not
+/// yet emitted).
+fn generate_dynamic_child_struct(method: &MethodDef, _ir: &IR, namespace: &str) -> String {
+    let struct_name = format!("{}Gate", to_pascal(&method.md_name));
+    let (list_method, search_method) = match &method.md_role {
+        MethodRole::DynamicChild { list_method, search_method } => {
+            (list_method.clone(), search_method.clone())
+        }
+        _ => (None, None),
+    };
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "/// IR-9 typed handle for `{}.{}` (dynamic child gate).\n",
+        namespace, method.md_name
+    ));
+    out.push_str("pub struct ");
+    out.push_str(&struct_name);
+    out.push_str("<'a> {\n    pub client: &'a PlexusClient,\n}\n\n");
+
+    // DynamicChild impl
+    out.push_str(&format!("impl<'a> DynamicChild for {}<'a> {{\n", struct_name));
+    out.push_str("    type Child = serde_json::Value;\n");
+    out.push_str("    async fn get(&self, name: &str) -> anyhow::Result<Option<Self::Child>> {\n");
+    out.push_str(&format!(
+        "        let resp: serde_json::Value = self.client.call_single(\"{}.{}\", json!({{ \"name\": name }})).await?;\n",
+        namespace, method.md_name
+    ));
+    out.push_str("        if resp.is_null() { Ok(None) } else { Ok(Some(resp)) }\n");
+    out.push_str("    }\n");
+    out.push_str("}\n");
+
+    if let Some(list_name) = list_method {
+        out.push_str(&format!("\nimpl<'a> Listable for {}<'a> {{\n", struct_name));
+        out.push_str("    async fn list(&self) -> anyhow::Result<Vec<String>> {\n");
+        out.push_str(&format!(
+            "        self.client.call_single(\"{}.{}\", serde_json::Value::Null).await\n",
+            namespace, list_name
+        ));
+        out.push_str("    }\n");
+        out.push_str("}\n");
+    }
+
+    if let Some(search_name) = search_method {
+        out.push_str(&format!("\nimpl<'a> Searchable for {}<'a> {{\n", struct_name));
+        out.push_str("    async fn search(&self, query: &str) -> anyhow::Result<Vec<String>> {\n");
+        out.push_str(&format!(
+            "        self.client.call_single(\"{}.{}\", json!({{ \"query\": query }})).await\n",
+            namespace, search_name
+        ));
+        out.push_str("    }\n");
+        out.push_str("}\n");
+    }
+
+    out
 }
 
 fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {

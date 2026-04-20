@@ -88,6 +88,7 @@ mod tests {
                     qn_local_name: "Status".to_string(),
                 }),
                 md_bidir_type: None,
+                md_role: Default::default(),
             },
         );
 
@@ -112,6 +113,7 @@ mod tests {
                     qn_local_name: "Event".to_string(),
                 }),
                 md_bidir_type: None,
+                md_role: Default::default(),
             },
         );
 

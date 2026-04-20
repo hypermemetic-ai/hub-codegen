@@ -32,6 +32,7 @@ fn minimal_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
+            md_role: Default::default(),
         },
     );
     let mut ir_plugins = HashMap::new();
@@ -317,6 +318,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
+            md_role: Default::default(),
         },
     );
     ir_methods.insert(
@@ -330,6 +332,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("boolean".to_string(), None),
             md_bidir_type: None,
+            md_role: Default::default(),
         },
     );
     ir_methods.insert(
@@ -343,6 +346,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
+            md_role: Default::default(),
         },
     );
     let mut ir_plugins = HashMap::new();

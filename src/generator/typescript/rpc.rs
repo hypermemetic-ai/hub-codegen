@@ -122,5 +122,106 @@ export async function collectOne<T>(
 
 // Re-export PlexusError for convenience
 export { PlexusError } from './types';
+
+// ============================================================================
+// IR-9: Typed-handle runtime primitives for DynamicChild methods
+// ============================================================================
+//
+// Methods tagged MethodRole::DynamicChild generate a typed handle on the
+// parent client that exposes .get(name) plus the opt-in Listable / Searchable
+// capabilities. The typed-handle form gives compile-time errors when callers
+// invoke a capability (e.g., .search) that wasn't opted in via the IR's
+// list_method / search_method fields — instead of runtime errors.
+
+/**
+ * A handle to a dynamic child activation: the child's TYPE is known at codegen
+ * time, but the specific child INSTANCE's name is runtime data.
+ *
+ * @typeParam T - The child's generated client class.
+ */
+export interface DynamicChild<T> {
+  /** Resolve a child activation by name. Returns null if the child doesn't exist. */
+  get(name: string): Promise<T | null>;
+}
+
+/**
+ * Capability interface: the dynamic-child gate can enumerate available names.
+ * Mixed in via intersection when the IR's `list_method` is `Some`.
+ */
+export interface Listable {
+  list(): AsyncIterable<string>;
+}
+
+/**
+ * Capability interface: the dynamic-child gate can search available names.
+ * Mixed in via intersection when the IR's `search_method` is `Some`.
+ */
+export interface Searchable {
+  search(query: string): AsyncIterable<string>;
+}
+
+/**
+ * Configuration for makeDynamicChild.
+ *
+ * @internal This shape is stable within a generated artifact but is not
+ * intended for hand-written consumer code — the generator emits the call.
+ */
+export interface DynamicChildConfig<T> {
+  listMethod: string | null;
+  searchMethod: string | null;
+  childClient: new (rpc: RpcClient) => T;
+}
+
+/**
+ * Build a typed-handle instance for a DynamicChild method.
+ *
+ * The returned object always satisfies DynamicChild<T>. When `listMethod`
+ * is non-null, it also exposes `.list()`; when `searchMethod` is non-null,
+ * it also exposes `.search(query)`. The intersection type at the call site
+ * (e.g., `DynamicChild<T> & Listable`) ensures callers can only invoke
+ * capabilities that were opted in at codegen time.
+ */
+export function makeDynamicChild<T>(
+  rpc: RpcClient,
+  parentNamespace: string,
+  methodName: string,
+  config: DynamicChildConfig<T>,
+): DynamicChild<T> & Partial<Listable & Searchable> {
+  const handle: DynamicChild<T> & Partial<Listable & Searchable> = {
+    async get(name: string): Promise<T | null> {
+      const fullPath = `${parentNamespace}.${methodName}`;
+      try {
+        // Dynamic children pass `name` as the sole positional argument.
+        const stream = rpc.call(fullPath, { name });
+        const resolved = await collectOne<unknown>(stream);
+        if (resolved === null || resolved === undefined) return null;
+        // The child activation is addressable via the same RPC client; the
+        // child class is constructed over the same transport.
+        return new config.childClient(rpc);
+      } catch (e) {
+        if (e instanceof PlexusError && e.recoverable === false) throw e;
+        return null;
+      }
+    },
+  };
+
+  if (config.listMethod !== null) {
+    const listPath = `${parentNamespace}.${config.listMethod}`;
+    handle.list = async function* (): AsyncIterable<string> {
+      const stream = rpc.call(listPath, {});
+      yield* extractData<string>(stream);
+    };
+  }
+
+  if (config.searchMethod !== null) {
+    const searchPath = `${parentNamespace}.${config.searchMethod}`;
+    handle.search = async function* (query: string): AsyncIterable<string> {
+      const stream = rpc.call(searchPath, { query });
+      yield* extractData<string>(stream);
+    };
+  }
+
+  return handle;
+}
 "#.to_string()
 }

@@ -271,6 +271,59 @@ pub struct MethodDef {
     /// `bidirectional: true` but no `bidir_type` field, `None` is emitted.
     #[serde(default)]
     pub md_bidir_type: Option<TypeRef>,
+
+    /// Method role classification (IR-9).
+    ///
+    /// Mirrors plexus-core's `MethodRole`. Defaults to `Rpc` for backwards
+    /// compatibility with IR producers that pre-date IR-2 / IR-3, so pre-IR
+    /// JSON with no `mdRole` field still deserializes cleanly and produces
+    /// byte-identical codegen output.
+    ///
+    /// - `Rpc` — ordinary RPC method (default).
+    /// - `StaticChild` — method returns a child activation by static name.
+    /// - `DynamicChild { list_method, search_method }` — method gates a
+    ///   dynamic child keyed by its argument. Optionally carries sibling
+    ///   method names that enumerate / search the keyspace.
+    ///
+    /// # Schema field
+    ///
+    /// Populated from the `"mdRole"` field in the IR JSON. When synapse
+    /// (Haskell) adds a role field to `MethodDef`, it should be emitted
+    /// using the Haskell Aeson tag-encoding convention matching plexus-core's
+    /// `#[serde(tag = "kind", rename_all = "snake_case")]`:
+    ///
+    /// ```json
+    /// { "kind": "rpc" }
+    /// { "kind": "static_child" }
+    /// { "kind": "dynamic_child", "list_method": "names", "search_method": null }
+    /// ```
+    #[serde(default)]
+    pub md_role: MethodRole,
+}
+
+/// Method role classification.
+///
+/// Mirrors `plexus_core::MethodRole` (IR-2 / IR-3). Used by codegen
+/// backends to emit typed-handle clients for `DynamicChild` methods
+/// (IR-9), static accessors for `StaticChild`, and flat functions for
+/// `Rpc`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MethodRole {
+    /// Ordinary RPC method (the default).
+    #[default]
+    Rpc,
+    /// Method returns a child activation by static name.
+    StaticChild,
+    /// Method gates a dynamic child keyed by its argument.
+    DynamicChild {
+        /// Optional sibling method name that lists available keys.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        list_method: Option<String>,
+        /// Optional sibling method name that searches available keys.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        search_method: Option<String>,
+    },
 }
 
 /// Parameter definition
@@ -540,6 +593,81 @@ mod tests {
             assert_eq!(qn.qn_local_name, "WizardRequest");
         } else {
             panic!("Expected Some(RefNamed(...)) for typed bidirectional");
+        }
+    }
+
+    /// IR-9: `md_role` must default to `Rpc` when the field is absent,
+    /// preserving backwards compatibility with pre-IR-2 IR producers.
+    #[test]
+    fn test_method_def_role_defaults_to_rpc_when_absent() {
+        let json_no_role = r#"{
+            "mdName": "ping",
+            "mdFullPath": "echo.ping",
+            "mdNamespace": "echo",
+            "mdStreaming": false,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefPrimitive", "contents": ["string", null]}
+        }"#;
+        let method: MethodDef = serde_json::from_str(json_no_role).unwrap();
+        assert_eq!(method.md_role, MethodRole::Rpc);
+    }
+
+    /// IR-9: `MethodRole::DynamicChild` round-trips through serde with both
+    /// capability-method fields present and absent.
+    #[test]
+    fn test_method_role_dynamic_child_deserialization() {
+        // DynamicChild with both list and search hints
+        let json = r#"{"kind":"dynamic_child","list_method":"body_names","search_method":"search_bodies"}"#;
+        let role: MethodRole = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            role,
+            MethodRole::DynamicChild {
+                list_method: Some("body_names".to_string()),
+                search_method: Some("search_bodies".to_string()),
+            }
+        );
+
+        // DynamicChild with neither hint (defaults to None/None)
+        let json_bare = r#"{"kind":"dynamic_child"}"#;
+        let role: MethodRole = serde_json::from_str(json_bare).unwrap();
+        assert_eq!(
+            role,
+            MethodRole::DynamicChild {
+                list_method: None,
+                search_method: None,
+            }
+        );
+
+        // Rpc variant
+        let json_rpc = r#"{"kind":"rpc"}"#;
+        let role: MethodRole = serde_json::from_str(json_rpc).unwrap();
+        assert_eq!(role, MethodRole::Rpc);
+
+        // StaticChild variant
+        let json_static = r#"{"kind":"static_child"}"#;
+        let role: MethodRole = serde_json::from_str(json_static).unwrap();
+        assert_eq!(role, MethodRole::StaticChild);
+    }
+
+    /// IR-9: Full `MethodDef` with `mdRole` present deserializes correctly.
+    #[test]
+    fn test_method_def_with_dynamic_child_role() {
+        let json = r#"{
+            "mdName": "body",
+            "mdFullPath": "solar.body",
+            "mdNamespace": "solar",
+            "mdStreaming": false,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefAny"},
+            "mdRole": {"kind": "dynamic_child", "list_method": "names", "search_method": null}
+        }"#;
+        let method: MethodDef = serde_json::from_str(json).unwrap();
+        match method.md_role {
+            MethodRole::DynamicChild { list_method, search_method } => {
+                assert_eq!(list_method, Some("names".to_string()));
+                assert_eq!(search_method, None);
+            }
+            other => panic!("Expected DynamicChild, got {:?}", other),
         }
     }
 }
