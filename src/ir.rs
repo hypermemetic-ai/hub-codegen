@@ -47,6 +47,37 @@ pub struct IR {
     pub ir_methods: HashMap<String, MethodDef>,
     /// Plugin -> method names mapping
     pub ir_plugins: HashMap<String, Vec<String>>,
+    /// Optional per-plugin (activation) deprecation information (IR-7).
+    ///
+    /// When a plugin name appears here, the activation itself is deprecated;
+    /// generated client classes for that plugin should carry a deprecation
+    /// annotation. Pre-IR IRs omit this field entirely and deserialize with
+    /// an empty map, producing byte-identical codegen output to pre-ticket.
+    #[serde(default)]
+    pub ir_plugin_deprecations: HashMap<String, DeprecationInfo>,
+}
+
+/// Deprecation metadata for an IR surface (IR-7).
+///
+/// Mirrors `plexus_core::schema::DeprecationInfo`. Carries:
+/// - `since`: version at which deprecation began (e.g. `"0.5"`).
+/// - `removed_in`: planned removal version (e.g. `"0.6"`).
+/// - `message`: migration guidance for consumers.
+///
+/// When any `MethodDef`, `ParamDef`, `FieldDef`, `TypeDef`, or plugin entry
+/// in the IR carries a `Some(DeprecationInfo)`, hub-codegen treats the IR
+/// as post-IR and emits target-language deprecation annotations above the
+/// generated surface. When all deprecation fields are `None` / absent, the
+/// IR is treated as pre-IR and no annotations are emitted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeprecationInfo {
+    /// Version at which deprecation began (e.g. `"0.5"`).
+    pub since: String,
+    /// Planned removal version (e.g. `"0.6"`).
+    pub removed_in: String,
+    /// Human-readable migration guidance, emitted verbatim into annotations.
+    pub message: String,
 }
 
 /// Type definition
@@ -58,6 +89,11 @@ pub struct TypeDef {
     #[serde(default)]
     pub td_description: Option<String>,
     pub td_kind: TypeKind,
+    /// Optional deprecation metadata (IR-7). Populated from the upstream
+    /// schema's `deprecation: Some(DeprecationInfo)` field when present.
+    /// Pre-IR IRs omit this field and deserialize to `None`.
+    #[serde(default)]
+    pub td_deprecation: Option<DeprecationInfo>,
 }
 
 impl TypeDef {
@@ -115,6 +151,11 @@ pub struct FieldDef {
     pub fd_required: bool,
     #[serde(default)]
     pub fd_default: Option<serde_json::Value>,
+    /// Optional field-level deprecation metadata (IR-7).
+    /// Populated from `ParamSchema.field_deprecations` in the upstream schema
+    /// when this field's name matches a deprecated key.
+    #[serde(default)]
+    pub fd_deprecation: Option<DeprecationInfo>,
 }
 
 /// Variant in an enum
@@ -299,6 +340,18 @@ pub struct MethodDef {
     /// ```
     #[serde(default)]
     pub md_role: MethodRole,
+
+    /// Optional method-level deprecation metadata (IR-7).
+    ///
+    /// Mirrors `plexus_core::MethodSchema.deprecation`. When `Some`, the
+    /// generated client method carries a target-language deprecation
+    /// annotation (TypeScript `@deprecated` JSDoc plus `// DEPRECATED`
+    /// comment; Rust `#[deprecated(...)]` attribute).
+    ///
+    /// Absence (`None` or missing field in JSON) means "not deprecated" —
+    /// pre-IR IR producers predate this field and deserialize to `None`.
+    #[serde(default)]
+    pub md_deprecation: Option<DeprecationInfo>,
 }
 
 /// Method role classification.
@@ -338,6 +391,10 @@ pub struct ParamDef {
     pub pd_required: bool,
     #[serde(default)]
     pub pd_default: Option<serde_json::Value>,
+    /// Optional parameter-level deprecation metadata (IR-7).
+    /// Mirrors `plexus_core::ParamSchema.deprecation`.
+    #[serde(default)]
+    pub pd_deprecation: Option<DeprecationInfo>,
 }
 
 // === Helper methods for code generation ===

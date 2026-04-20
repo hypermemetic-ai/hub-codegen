@@ -48,8 +48,7 @@ fn dynamic_child_ir(
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: MethodRole::Rpc,
-        },
+            md_role: MethodRole::Rpc, md_deprecation: None,},
     );
 
     // A marker type the dynamic-child return refers to.
@@ -58,14 +57,14 @@ fn dynamic_child_ir(
         TypeDef {
             td_name: "CelestialBody".to_string(),
             td_namespace: "solar.body".to_string(),
-            td_description: None,
+            td_description: None, td_deprecation: None,
             td_kind: TypeKind::KindStruct {
                 ks_fields: vec![FieldDef {
                     fd_name: "name".to_string(),
                     fd_type: TypeRef::RefPrimitive("string".to_string(), None),
                     fd_description: None,
                     fd_required: true,
-                    fd_default: None,
+                    fd_default: None, fd_deprecation: None,
                 }],
             },
         },
@@ -88,7 +87,7 @@ fn dynamic_child_ir(
                 pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                 pd_description: None,
                 pd_required: true,
-                pd_default: None,
+                pd_default: None, pd_deprecation: None,
             }],
             md_returns: TypeRef::RefOptional(Box::new(TypeRef::RefNamed(QualifiedName {
                 qn_namespace: "solar.body".to_string(),
@@ -98,8 +97,7 @@ fn dynamic_child_ir(
             md_role: MethodRole::DynamicChild {
                 list_method: list_method.map(String::from),
                 search_method: search_method.map(String::from),
-            },
-        },
+            }, md_deprecation: None,},
     );
 
     if let Some(name) = list_method {
@@ -114,8 +112,7 @@ fn dynamic_child_ir(
                 md_params: vec![],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                 md_bidir_type: None,
-                md_role: MethodRole::Rpc,
-            },
+                md_role: MethodRole::Rpc, md_deprecation: None,},
         );
         solar_methods.push(name.to_string());
     }
@@ -134,12 +131,11 @@ fn dynamic_child_ir(
                     pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                     pd_description: None,
                     pd_required: true,
-                    pd_default: None,
+                    pd_default: None, pd_deprecation: None,
                 }],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                 md_bidir_type: None,
-                md_role: MethodRole::Rpc,
-            },
+                md_role: MethodRole::Rpc, md_deprecation: None,},
         );
         solar_methods.push(name.to_string());
     }
@@ -153,7 +149,7 @@ fn dynamic_child_ir(
         ir_metadata: None,
         ir_types,
         ir_methods,
-        ir_plugins,
+        ir_plugins, ir_plugin_deprecations: Default::default(),
     }
 }
 
@@ -322,8 +318,7 @@ fn test_pre_ir_regression_no_dynamic_child() {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods: HashMap::new(),
-        ir_plugins: HashMap::new(),
-    };
+        ir_plugins: HashMap::new(), ir_plugin_deprecations: Default::default(),};
     ir.ir_methods.insert(
         "echo.ping".to_string(),
         MethodDef {
@@ -335,8 +330,7 @@ fn test_pre_ir_regression_no_dynamic_child() {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: MethodRole::Rpc,
-        },
+            md_role: MethodRole::Rpc, md_deprecation: None,},
     );
     ir.ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
 

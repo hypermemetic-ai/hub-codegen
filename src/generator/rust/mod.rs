@@ -8,6 +8,7 @@ mod tests;
 
 use crate::ir::IR;
 use crate::generator::{GenerationResult, Warning};
+use crate::deprecation::{self, DeprecationOptions, DeprecationWarning};
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -31,10 +32,17 @@ fn namespace_to_file_path(path: &[String]) -> String {
     }
 }
 
-/// Generate Rust code from IR
+/// Generate Rust code from IR (legacy entry — deprecation annotations
+/// disabled by default to match pre-IR-7 callers).
 pub fn generate(ir: &IR) -> Result<GenerationResult> {
+    generate_with_options(ir, DeprecationOptions { enabled: false })
+}
+
+/// Generate Rust code from IR with explicit deprecation toggle (IR-7).
+pub fn generate_with_options(ir: &IR, deprecation_opts: DeprecationOptions) -> Result<GenerationResult> {
     let mut files = HashMap::new();
     let mut warnings = Vec::new();
+    let mut deprecation_warnings: Vec<DeprecationWarning> = Vec::new();
 
     // Validate IR version
     if ir.ir_version != "2.0" {
@@ -49,6 +57,8 @@ pub fn generate(ir: &IR) -> Result<GenerationResult> {
     // Collect warnings for unknown types
     collect_warnings(ir, &mut warnings);
 
+    let emit_deprecation = deprecation_opts.enabled && deprecation::is_post_ir(ir);
+
     // Generate lib.rs (re-exports all modules)
     let lib_content = generate_lib(ir);
     files.insert("src/lib.rs".to_string(), lib_content);
@@ -62,7 +72,11 @@ pub fn generate(ir: &IR) -> Result<GenerationResult> {
     files.insert("src/client.rs".to_string(), client_content);
 
     // Generate namespace modules (methods + types, one file per namespace)
-    let namespace_files = client::generate_namespace_modules(ir);
+    let namespace_files = client::generate_namespace_modules_with_deprecation(
+        ir,
+        emit_deprecation,
+        &mut deprecation_warnings,
+    );
     files.extend(namespace_files);
 
     // Generate Cargo.toml
@@ -75,6 +89,7 @@ pub fn generate(ir: &IR) -> Result<GenerationResult> {
         file_hashes: HashMap::new(),
         dependencies: HashMap::new(),
         dev_dependencies: HashMap::new(),
+        deprecation_warnings,
     })
 }
 

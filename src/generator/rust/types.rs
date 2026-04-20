@@ -1,6 +1,7 @@
 //! Type generation for Rust
 
 use crate::ir::{FieldDef, IR, TypeDef, TypeKind, TypeRef, VariantDef};
+use crate::deprecation::{self, DeprecationWarning};
 
 /// Generate only core transport types (PlexusStreamItem, etc.)
 pub fn generate_core_types(_ir: &IR) -> String {
@@ -103,6 +104,44 @@ pub struct PlexusError {
     .to_string()
 }
 
+/// IR-7: Generate a single type definition, threading deprecation
+/// annotations onto struct fields when present. Records one
+/// `DeprecationWarning` per deprecated field.
+pub fn generate_typedef_with_deprecation(
+    typedef: &TypeDef,
+    emit_deprecation: bool,
+    file_path: &str,
+    warnings: &mut Vec<DeprecationWarning>,
+) -> String {
+    let doc_comment = if let Some(desc) = &typedef.td_description {
+        desc.lines()
+            .map(|line| format!("/// {}\n", line.trim()))
+            .collect::<String>()
+    } else {
+        String::new()
+    };
+
+    let type_name = to_pascal(&typedef.td_name);
+
+    match &typedef.td_kind {
+        TypeKind::KindStruct { ks_fields } => {
+            format!(
+                "{}#[derive(Debug, Clone, Serialize, Deserialize)]\npub struct {} {{\n{}\n}}",
+                doc_comment,
+                type_name,
+                generate_fields_annotated(
+                    ks_fields,
+                    emit_deprecation,
+                    &typedef.full_name(),
+                    file_path,
+                    warnings,
+                )
+            )
+        }
+        _ => generate_typedef(typedef),
+    }
+}
+
 /// Generate a single type definition
 pub fn generate_typedef(typedef: &TypeDef) -> String {
     let doc_comment = if let Some(desc) = &typedef.td_description {
@@ -169,6 +208,59 @@ fn escape_keyword(name: &str) -> String {
         "unsafe" | "use" | "where" | "while" | "yield" => format!("r#{}", name),
         _ => name.to_string(),
     }
+}
+
+/// IR-7: Generate struct fields with optional deprecation attributes.
+fn generate_fields_annotated(
+    fields: &[FieldDef],
+    emit_deprecation: bool,
+    typedef_full_name: &str,
+    file_path: &str,
+    warnings: &mut Vec<DeprecationWarning>,
+) -> String {
+    fields
+        .iter()
+        .map(|field| {
+            let doc = if let Some(desc) = &field.fd_description {
+                desc.lines()
+                    .map(|line| format!("    /// {}\n", line.trim()))
+                    .collect::<String>()
+            } else {
+                String::new()
+            };
+
+            let field_name = escape_keyword(&to_snake(&field.fd_name));
+            let field_type = type_ref_to_rust(&field.fd_type);
+
+            // Add serde rename if field name differs from original
+            let serde_rename = if to_snake(&field.fd_name) != field.fd_name {
+                format!("    #[serde(rename = \"{}\")]\n", field.fd_name)
+            } else {
+                String::new()
+            };
+
+            let depr_attr = if emit_deprecation {
+                if let Some(info) = &field.fd_deprecation {
+                    warnings.push(DeprecationWarning {
+                        kind: "field".into(),
+                        name: format!("{}.{}", typedef_full_name, field.fd_name),
+                        file: file_path.into(),
+                        message: info.message.clone(),
+                        since: info.since.clone(),
+                        removed_in: info.removed_in.clone(),
+                    });
+                    format!("    {}\n", deprecation::format_rust(info))
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            format!("{}{}{}    pub {}: {},", doc, depr_attr, serde_rename, field_name, field_type)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Generate struct fields

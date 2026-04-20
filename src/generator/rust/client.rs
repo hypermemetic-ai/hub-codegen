@@ -1,6 +1,7 @@
 //! Client generation for Rust
 
 use crate::ir::{IR, MethodDef, MethodRole, TypeDef, TypeRef};
+use crate::deprecation::{self, DeprecationWarning};
 use std::collections::{BTreeSet, HashMap};
 
 /// Node in namespace hierarchy tree
@@ -231,13 +232,27 @@ fn insert_type_at_path(node: &mut NamespaceNode, path: &[String], typedef: TypeD
 
 /// Generate namespace modules as hierarchical directories
 pub fn generate_namespace_modules(ir: &IR) -> HashMap<String, String> {
+    // Legacy entry — no deprecation emission (preserves pre-IR-7 output).
+    let mut discarded: Vec<DeprecationWarning> = Vec::new();
+    generate_namespace_modules_with_deprecation(ir, false, &mut discarded)
+}
+
+/// IR-7: Generate namespace modules with deprecation toggle. When
+/// `emit_deprecation` is true, generated method bodies are preceded by
+/// `#[deprecated(...)]` attributes and `// DEPRECATED` comments where
+/// applicable; one `DeprecationWarning` is pushed per surface consumed.
+pub fn generate_namespace_modules_with_deprecation(
+    ir: &IR,
+    emit_deprecation: bool,
+    warnings: &mut Vec<DeprecationWarning>,
+) -> HashMap<String, String> {
     let mut files = HashMap::new();
 
     // Build namespace tree
     let root = build_namespace_tree(ir);
 
     // Recursively generate modules from tree
-    generate_namespace_node(&root, ir, &mut files);
+    generate_namespace_node(&root, ir, &mut files, emit_deprecation, warnings);
 
     files
 }
@@ -247,6 +262,8 @@ fn generate_namespace_node(
     node: &NamespaceNode,
     ir: &IR,
     files: &mut HashMap<String, String>,
+    emit_deprecation: bool,
+    warnings: &mut Vec<DeprecationWarning>,
 ) {
     // Skip root node (it has no file)
     if !node.full_path.is_empty() {
@@ -288,8 +305,28 @@ fn generate_namespace_node(
         if !node.types.is_empty() {
             content.push("// === Types ===".to_string());
             content.push("".to_string());
+            let file_path = super::namespace_to_file_path(&super::parse_namespace_path(&node.full_path));
             for typedef in &node.types {
-                content.push(super::types::generate_typedef(typedef));
+                // IR-7: emit #[deprecated] attribute above the type when applicable.
+                if emit_deprecation {
+                    if let Some(info) = &typedef.td_deprecation {
+                        warnings.push(DeprecationWarning {
+                            kind: "type".into(),
+                            name: typedef.full_name(),
+                            file: file_path.clone(),
+                            message: info.message.clone(),
+                            since: info.since.clone(),
+                            removed_in: info.removed_in.clone(),
+                        });
+                        content.push(deprecation::format_rust(info));
+                    }
+                }
+                content.push(super::types::generate_typedef_with_deprecation(
+                    typedef,
+                    emit_deprecation,
+                    &file_path,
+                    warnings,
+                ));
                 content.push("".to_string());
             }
         }
@@ -345,7 +382,41 @@ fn generate_namespace_node(
         if !flat_methods.is_empty() {
             content.push("// === Methods ===".to_string());
             content.push("".to_string());
+            let file_path = super::namespace_to_file_path(&super::parse_namespace_path(&node.full_path));
             for method in &flat_methods {
+                // IR-7: record warning + emit #[deprecated] above the fn.
+                if emit_deprecation {
+                    if let Some(info) = &method.md_deprecation {
+                        warnings.push(DeprecationWarning {
+                            kind: "method".into(),
+                            name: method.md_full_path.clone(),
+                            file: file_path.clone(),
+                            message: info.message.clone(),
+                            since: info.since.clone(),
+                            removed_in: info.removed_in.clone(),
+                        });
+                        content.push(deprecation::format_rust(info));
+                    }
+                    // Param-level deprecation — record warnings; Rust has no
+                    // per-param attribute so we emit a comment above the fn.
+                    for p in &method.md_params {
+                        if let Some(info) = &p.pd_deprecation {
+                            warnings.push(DeprecationWarning {
+                                kind: "param".into(),
+                                name: format!("{}({})", method.md_full_path, p.pd_name),
+                                file: file_path.clone(),
+                                message: info.message.clone(),
+                                since: info.since.clone(),
+                                removed_in: info.removed_in.clone(),
+                            });
+                            content.push(format!(
+                                "// DEPRECATED param `{}`: {}",
+                                p.pd_name,
+                                deprecation::format_body(info)
+                            ));
+                        }
+                    }
+                }
                 content.push(generate_method(method, ir, &node.full_path));
                 content.push("".to_string());
             }
@@ -359,7 +430,7 @@ fn generate_namespace_node(
 
     // Recursively generate children
     for child in node.children.values() {
-        generate_namespace_node(child, ir, files);
+        generate_namespace_node(child, ir, files, emit_deprecation, warnings);
     }
 }
 

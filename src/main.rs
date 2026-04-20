@@ -114,6 +114,17 @@ struct Args {
     /// Backend WebSocket URL embedded as fallback in generated smoke tests
     #[arg(long, default_value = "ws://localhost:4444")]
     backend_url: String,
+
+    /// IR-7: Exit with a non-zero status after writing files when generated
+    /// code consumes any deprecated IR surface. stderr still carries one
+    /// `WARNING:` line per deprecated consumption.
+    #[arg(long)]
+    fail_on_deprecated: bool,
+
+    /// IR-7: Suppress deprecation annotations and the associated stderr
+    /// warnings. Codegen behaves as if the IR were pre-IR.
+    #[arg(long)]
+    no_deprecation_annotations: bool,
 }
 
 fn main() -> Result<()> {
@@ -128,6 +139,10 @@ fn main() -> Result<()> {
         serde_json::from_str(&buf)?
     } else {
         serde_json::from_str(&std::fs::read_to_string(&args.input)?)?
+    };
+
+    let deprecation_opts = hub_codegen::deprecation::DeprecationOptions {
+        enabled: !args.no_deprecation_annotations,
     };
 
     // Create generation options
@@ -150,6 +165,7 @@ fn main() -> Result<()> {
         }),
         smoke_transport_path: args.smoke_transport_path,
         backend_url: args.backend_url,
+        deprecation: deprecation_opts,
     };
 
     // Generate based on target
@@ -162,12 +178,19 @@ fn main() -> Result<()> {
         }
 
         #[cfg(feature = "rust")]
-        CodegenTarget::Rust => hub_codegen::generate_rust(&ir)?,
+        CodegenTarget::Rust => hub_codegen::generator::rust::generate_with_options(&ir, deprecation_opts)?,
         #[cfg(not(feature = "rust"))]
         CodegenTarget::Rust => {
             anyhow::bail!("Rust codegen not enabled. Rebuild with --features rust");
         }
     };
+
+    // IR-7: emit deprecation warnings to stderr (one line per deprecated
+    // consumption). Always printed when the schema-level warnings list is
+    // populated — suppression is handled earlier by the options toggle.
+    for dw in &result.deprecation_warnings {
+        eprintln!("{}", dw.format_stderr());
+    }
 
     // Print warnings to stderr
     if !result.warnings.is_empty() {
@@ -290,6 +313,12 @@ fn main() -> Result<()> {
                 write_cache_manifest(target_name, &backend, &manifest)?;
             }
         }
+    }
+
+    // IR-7: Escalate to non-zero exit after files are written when
+    // --fail-on-deprecated is set and any deprecated surface was consumed.
+    if args.fail_on_deprecated && !result.deprecation_warnings.is_empty() {
+        std::process::exit(2);
     }
 
     Ok(())

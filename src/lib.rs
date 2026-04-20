@@ -8,6 +8,7 @@ pub mod generator;
 pub mod hash;
 pub mod cache;
 pub mod merge;
+pub mod deprecation;
 
 pub use ir::IR;
 pub use generator::{GenerationResult, Warning, GenerationOptions, TransportEnv, GenerateSelector};

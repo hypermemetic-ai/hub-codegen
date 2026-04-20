@@ -4,6 +4,7 @@
 //! unwrap PlexusStreamItem and return domain types.
 
 use crate::ir::{IR, MethodDef, MethodRole, ParamDef, TypeRef};
+use crate::deprecation::{self, DeprecationWarning};
 use std::collections::{BTreeSet, HashMap};
 
 /// Generate TypeScript namespace client files (one per namespace).
@@ -11,7 +12,12 @@ use std::collections::{BTreeSet, HashMap};
 /// `filter`: when `Some`, only namespaces that equal or are prefixed by an entry
 /// are generated.  `None` generates all namespaces (original behaviour).
 /// Files are placed in `<namespace>/client.ts` and `<namespace>/index.ts`.
-pub fn generate_namespaces(ir: &IR, filter: Option<&[String]>) -> HashMap<String, String> {
+pub fn generate_namespaces(
+    ir: &IR,
+    filter: Option<&[String]>,
+    emit_deprecation: bool,
+    warnings: &mut Vec<DeprecationWarning>,
+) -> HashMap<String, String> {
     let mut files = HashMap::new();
 
     // IR-9: Pre-pass. Collect the set of namespaces that appear as the target
@@ -30,8 +36,12 @@ pub fn generate_namespaces(ir: &IR, filter: Option<&[String]>) -> HashMap<String
             .push(method);
     }
 
+    // Sort namespaces for deterministic warning order.
+    let mut sorted: Vec<(String, Vec<&MethodDef>)> = methods_by_ns.into_iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+
     // Generate interface and implementation for each namespace
-    for (namespace, methods) in methods_by_ns {
+    for (namespace, methods) in sorted {
         // Skip empty namespace — those are core plexus methods
         if namespace.is_empty() {
             continue;
@@ -45,7 +55,7 @@ pub fn generate_namespaces(ir: &IR, filter: Option<&[String]>) -> HashMap<String
         }
 
         let export_impl = dynamic_child_target_namespaces.contains(&namespace);
-        let content = generate_namespace(&namespace, &methods, ir, export_impl);
+        let content = generate_namespace(&namespace, &methods, ir, export_impl, emit_deprecation, warnings);
         // Convert dotted namespace to directory path
         let path = namespace.replace('.', "/");
         files.insert(format!("{}/client.ts", path), content);
@@ -114,8 +124,24 @@ fn generate_namespace_index(namespace: &str, has_types: bool) -> String {
     )
 }
 
-fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR, export_impl: bool) -> String {
+fn generate_namespace(
+    namespace: &str,
+    methods: &[&MethodDef],
+    ir: &IR,
+    export_impl: bool,
+    emit_deprecation: bool,
+    warnings: &mut Vec<DeprecationWarning>,
+) -> String {
     let interface_name = to_pascal(namespace);
+    let namespace_path = namespace.replace('.', "/");
+    let file_path = format!("{}/client.ts", namespace_path);
+
+    // IR-7: plugin-level deprecation — emitted above the interface and impl class.
+    let plugin_depr = if emit_deprecation {
+        ir.ir_plugin_deprecations.get(namespace).cloned()
+    } else {
+        None
+    };
 
     // Calculate relative path to root based on namespace depth
     let depth = namespace.matches('.').count();
@@ -249,12 +275,41 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR, export_i
 
     // Generate interface
     lines.push(format!("/** Typed client interface for {} plugin */", namespace));
+    // IR-7: plugin-level deprecation — record once (interface) and emit above.
+    if let Some(info) = &plugin_depr {
+        warnings.push(DeprecationWarning {
+            kind: "plugin".into(),
+            name: namespace.to_string(),
+            file: file_path.clone(),
+            message: info.message.clone(),
+            since: info.since.clone(),
+            removed_in: info.removed_in.clone(),
+        });
+        for line in deprecation::format_ts(info) {
+            lines.push(line);
+        }
+    }
     lines.push(format!("export interface {}Client {{", interface_name));
 
     // IR-9: DynamicChild properties appear as readonly typed handles
     for method in &dynamic_children {
         let method_name = to_camel(&method.md_name);
         let handle_type = dynamic_child_handle_type(method, ir);
+        if emit_deprecation {
+            if let Some(info) = &method.md_deprecation {
+                warnings.push(DeprecationWarning {
+                    kind: "method".into(),
+                    name: method.md_full_path.clone(),
+                    file: file_path.clone(),
+                    message: info.message.clone(),
+                    since: info.since.clone(),
+                    removed_in: info.removed_in.clone(),
+                });
+                for line in deprecation::format_ts(info) {
+                    lines.push(format!("  {}", line));
+                }
+            }
+        }
         if let Some(desc) = &method.md_description {
             lines.push(format!("  /** {} */", desc));
         }
@@ -263,7 +318,14 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR, export_i
 
     for method in &flat_methods {
         let method_name = to_camel(&method.md_name);
-        let params = generate_params(&method.md_params, namespace);
+        let params = generate_params_annotated(
+            &method.md_params,
+            namespace,
+            emit_deprecation,
+            &method.md_full_path,
+            &file_path,
+            warnings,
+        );
         let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Streaming methods return AsyncGenerator, non-streaming return Promise
@@ -273,6 +335,21 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR, export_i
             format!("Promise<{}>", return_type)
         };
 
+        if emit_deprecation {
+            if let Some(info) = &method.md_deprecation {
+                warnings.push(DeprecationWarning {
+                    kind: "method".into(),
+                    name: method.md_full_path.clone(),
+                    file: file_path.clone(),
+                    message: info.message.clone(),
+                    since: info.since.clone(),
+                    removed_in: info.removed_in.clone(),
+                });
+                for line in deprecation::format_ts(info) {
+                    lines.push(format!("  {}", line));
+                }
+            }
+        }
         if let Some(desc) = &method.md_description {
             lines.push(format!("  /** {} */", desc));
         }
@@ -284,6 +361,12 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR, export_i
 
     // Generate implementation class
     lines.push(format!("/** Typed client implementation for {} plugin */", namespace));
+    // IR-7: plugin-level deprecation on the impl class too.
+    if let Some(info) = &plugin_depr {
+        for line in deprecation::format_ts(info) {
+            lines.push(line);
+        }
+    }
     // IR-9: Export the impl when this namespace is the target of a DynamicChild
     // gate — parents need to reference it as a constructor at runtime.
     // Namespaces not referenced as dynamic-child targets keep the pre-ticket
@@ -340,12 +423,24 @@ fn generate_namespace(namespace: &str, methods: &[&MethodDef], ir: &IR, export_i
     for (i, method) in flat_methods.iter().enumerate() {
         let method_name = to_camel(&method.md_name);
         let full_path = &method.md_full_path;
+        // IR-7: impl methods use the non-warning-emitting param formatter
+        // (warnings were already recorded at interface emission to avoid
+        // double-counting).
         let params_signature = generate_params(&method.md_params, namespace);
         let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Build params object for RPC call
         let params_object = generate_params_object(&method.md_params);
 
+        // IR-7: annotate the impl method too — the consumer may navigate
+        // to the class method directly.
+        if emit_deprecation {
+            if let Some(info) = &method.md_deprecation {
+                for line in deprecation::format_ts(info) {
+                    lines.push(format!("  {}", line));
+                }
+            }
+        }
         if method.md_streaming {
             lines.push(format!("  async *{}({}): AsyncGenerator<{}> {{", method_name, params_signature, return_type));
             lines.push(format!("    const stream = this.rpc.call('{}', {});", full_path, params_object));
@@ -572,6 +667,52 @@ fn generate_params(params: &[ParamDef], namespace: &str) -> String {
             let optional = if p.pd_required { "" } else { "?" };
             let ts_type = p.pd_type.to_ts_in_namespace(namespace);
             format!("{}{}: {}", to_camel(&p.pd_name), optional, ts_type)
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// IR-7: Emit param list with trailing `/* DEPRECATED ... */` block
+/// comments after any deprecated parameter. TypeScript tolerates block
+/// comments inside argument lists, so consumers still see the note
+/// alongside the declaration. Parameter-level deprecation also records a
+/// warning entry per deprecated param.
+fn generate_params_annotated(
+    params: &[ParamDef],
+    namespace: &str,
+    emit_deprecation: bool,
+    method_full_path: &str,
+    file_path: &str,
+    warnings: &mut Vec<DeprecationWarning>,
+) -> String {
+    // Sort parameters: required first, then optional (same as generate_params).
+    let mut sorted_params = params.to_vec();
+    sorted_params.sort_by_key(|p| (!p.pd_required, p.pd_name.clone()));
+
+    sorted_params
+        .iter()
+        .map(|p| {
+            let optional = if p.pd_required { "" } else { "?" };
+            let ts_type = p.pd_type.to_ts_in_namespace(namespace);
+            let base = format!("{}{}: {}", to_camel(&p.pd_name), optional, ts_type);
+            if emit_deprecation {
+                if let Some(info) = &p.pd_deprecation {
+                    warnings.push(DeprecationWarning {
+                        kind: "param".into(),
+                        name: format!("{}({})", method_full_path, p.pd_name),
+                        file: file_path.into(),
+                        message: info.message.clone(),
+                        since: info.since.clone(),
+                        removed_in: info.removed_in.clone(),
+                    });
+                    return format!(
+                        "{} /* @deprecated {} */",
+                        base,
+                        deprecation::format_body(info)
+                    );
+                }
+            }
+            base
         })
         .collect::<Vec<_>>()
         .join(", ")

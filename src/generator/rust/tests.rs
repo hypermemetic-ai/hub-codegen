@@ -18,6 +18,7 @@ mod tests {
                 td_name: "Status".to_string(),
                 td_namespace: "health".to_string(),
                 td_description: Some("Health status response".to_string()),
+                td_deprecation: None,
                 td_kind: TypeKind::KindStruct {
                     ks_fields: vec![
                         FieldDef {
@@ -26,6 +27,7 @@ mod tests {
                             fd_description: Some("Whether the service is healthy".to_string()),
                             fd_required: true,
                             fd_default: None,
+                            fd_deprecation: None,
                         },
                         FieldDef {
                             fd_name: "uptime".to_string(),
@@ -33,6 +35,7 @@ mod tests {
                             fd_description: Some("Uptime in seconds".to_string()),
                             fd_required: true,
                             fd_default: None,
+                            fd_deprecation: None,
                         },
                     ],
                 },
@@ -46,6 +49,7 @@ mod tests {
                 td_name: "Event".to_string(),
                 td_namespace: "health".to_string(),
                 td_description: Some("Health check event".to_string()),
+                td_deprecation: None,
                 td_kind: TypeKind::KindEnum {
                     ke_discriminator: "type".to_string(),
                     ke_variants: vec![
@@ -66,6 +70,7 @@ mod tests {
                                 fd_description: Some("Final status".to_string()),
                                 fd_required: true,
                                 fd_default: None,
+                                fd_deprecation: None,
                             }],
                         },
                     ],
@@ -89,6 +94,7 @@ mod tests {
                 }),
                 md_bidir_type: None,
                 md_role: Default::default(),
+                md_deprecation: None,
             },
         );
 
@@ -107,6 +113,7 @@ mod tests {
                     pd_description: Some("Interval in seconds".to_string()),
                     pd_required: false,
                     pd_default: Some(serde_json::json!(5)),
+                    pd_deprecation: None,
                 }],
                 md_returns: TypeRef::RefNamed(QualifiedName {
                     qn_namespace: "health".to_string(),
@@ -114,6 +121,7 @@ mod tests {
                 }),
                 md_bidir_type: None,
                 md_role: Default::default(),
+                md_deprecation: None,
             },
         );
 
@@ -127,6 +135,7 @@ mod tests {
             ir_types,
             ir_methods,
             ir_plugins,
+            ir_plugin_deprecations: Default::default(),
         }
     }
 

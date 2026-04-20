@@ -33,6 +33,11 @@ pub struct GenerationResult {
     pub dependencies: HashMap<String, String>,
     /// npm dev dependencies (name -> version range)
     pub dev_dependencies: HashMap<String, String>,
+    /// IR-7: Deprecation consumption records. One entry per generated
+    /// code surface that consumes a deprecated schema entry. Runner
+    /// prints these to stderr and optionally escalates to a non-zero
+    /// exit code via `--fail-on-deprecated`.
+    pub deprecation_warnings: Vec<crate::deprecation::DeprecationWarning>,
 }
 
 /// Transport environment for generated code
@@ -69,6 +74,11 @@ pub struct GenerationOptions {
     pub smoke_transport_path: String,
     /// Backend WebSocket URL used as fallback in generated smoke tests
     pub backend_url: String,
+    /// IR-7: Deprecation annotation emission toggle.
+    /// Default `enabled: true` — annotations + stderr warnings are emitted
+    /// when the IR is post-IR. Set to `enabled: false` via
+    /// `--no-deprecation-annotations` to suppress both.
+    pub deprecation: crate::deprecation::DeprecationOptions,
 }
 
 impl Default for GenerationOptions {
@@ -79,6 +89,7 @@ impl Default for GenerationOptions {
             plugins_filter: None,
             smoke_transport_path: "../transport".to_string(),
             backend_url: "ws://localhost:4444".to_string(),
+            deprecation: crate::deprecation::DeprecationOptions::default(),
         }
     }
 }

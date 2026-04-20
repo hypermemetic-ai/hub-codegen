@@ -22,7 +22,7 @@ fn create_comprehensive_test_ir() -> IR {
         TypeDef {
             td_name: "Message".to_string(),
             td_namespace: "echo".to_string(),
-            td_description: Some("A simple message".to_string()),
+            td_description: Some("A simple message".to_string()), td_deprecation: None,
             td_kind: TypeKind::KindStruct {
                 ks_fields: vec![
                     FieldDef {
@@ -30,14 +30,14 @@ fn create_comprehensive_test_ir() -> IR {
                         fd_type: TypeRef::RefPrimitive("string".to_string(), None),
                         fd_description: Some("Message text".to_string()),
                         fd_required: true,
-                        fd_default: None,
+                        fd_default: None, fd_deprecation: None,
                     },
                     FieldDef {
                         fd_name: "count".to_string(),
                         fd_type: TypeRef::RefPrimitive("integer".to_string(), Some("int64".to_string())),
                         fd_description: Some("Repeat count".to_string()),
                         fd_required: false,
-                        fd_default: Some(serde_json::json!(1)),
+                        fd_default: Some(serde_json::json!(1)), fd_deprecation: None,
                     },
                 ],
             },
@@ -50,7 +50,7 @@ fn create_comprehensive_test_ir() -> IR {
         TypeDef {
             td_name: "EchoEvent".to_string(),
             td_namespace: "echo".to_string(),
-            td_description: Some("Echo operation event".to_string()),
+            td_description: Some("Echo operation event".to_string()), td_deprecation: None,
             td_kind: TypeKind::KindEnum {
                 ke_discriminator: "type".to_string(),
                 ke_variants: vec![
@@ -71,14 +71,13 @@ fn create_comprehensive_test_ir() -> IR {
                                 }),
                                 fd_description: Some("The echoed message".to_string()),
                                 fd_required: true,
-                                fd_default: None,
-                            },
+                                fd_default: None, fd_deprecation: None,},
                             FieldDef {
                                 fd_name: "iteration".to_string(),
                                 fd_type: TypeRef::RefPrimitive("integer".to_string(), Some("int64".to_string())),
                                 fd_description: Some("Current iteration".to_string()),
                                 fd_required: true,
-                                fd_default: None,
+                                fd_default: None, fd_deprecation: None,
                             },
                         ],
                     },
@@ -90,7 +89,7 @@ fn create_comprehensive_test_ir() -> IR {
                             fd_type: TypeRef::RefPrimitive("integer".to_string(), Some("int64".to_string())),
                             fd_description: Some("Total echoes".to_string()),
                             fd_required: true,
-                            fd_default: None,
+                            fd_default: None, fd_deprecation: None,
                         }],
                     },
                 ],
@@ -104,7 +103,7 @@ fn create_comprehensive_test_ir() -> IR {
         TypeDef {
             td_name: "EchoResponse".to_string(),
             td_namespace: "echo".to_string(),
-            td_description: Some("Echo response".to_string()),
+            td_description: Some("Echo response".to_string()), td_deprecation: None,
             td_kind: TypeKind::KindStruct {
                 ks_fields: vec![
                     FieldDef {
@@ -112,14 +111,14 @@ fn create_comprehensive_test_ir() -> IR {
                         fd_type: TypeRef::RefArray(Box::new(TypeRef::RefPrimitive("string".to_string(), None))),
                         fd_description: Some("All echoed messages".to_string()),
                         fd_required: true,
-                        fd_default: None,
+                        fd_default: None, fd_deprecation: None,
                     },
                     FieldDef {
                         fd_name: "error".to_string(),
                         fd_type: TypeRef::RefOptional(Box::new(TypeRef::RefPrimitive("string".to_string(), None))),
                         fd_description: Some("Error message if any".to_string()),
                         fd_required: false,
-                        fd_default: None,
+                        fd_default: None, fd_deprecation: None,
                     },
                 ],
             },
@@ -142,15 +141,14 @@ fn create_comprehensive_test_ir() -> IR {
                 pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                 pd_description: Some("Message to echo".to_string()),
                 pd_required: true,
-                pd_default: None,
+                pd_default: None, pd_deprecation: None,
             }],
             md_returns: TypeRef::RefNamed(QualifiedName {
                 qn_namespace: "echo".to_string(),
                 qn_local_name: "EchoResponse".to_string(),
             }),
             md_bidir_type: None,
-            md_role: Default::default(),
-        },
+            md_role: Default::default(), md_deprecation: None,},
     );
 
     // Streaming method with multiple params
@@ -168,14 +166,14 @@ fn create_comprehensive_test_ir() -> IR {
                     pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                     pd_description: Some("Message to echo".to_string()),
                     pd_required: true,
-                    pd_default: None,
+                    pd_default: None, pd_deprecation: None,
                 },
                 ParamDef {
                     pd_name: "count".to_string(),
                     pd_type: TypeRef::RefPrimitive("integer".to_string(), Some("int64".to_string())),
                     pd_description: Some("Number of times to echo".to_string()),
                     pd_required: false,
-                    pd_default: Some(serde_json::json!(1)),
+                    pd_default: Some(serde_json::json!(1)), pd_deprecation: None,
                 },
             ],
             md_returns: TypeRef::RefNamed(QualifiedName {
@@ -183,8 +181,7 @@ fn create_comprehensive_test_ir() -> IR {
                 qn_local_name: "EchoEvent".to_string(),
             }),
             md_bidir_type: None,
-            md_role: Default::default(),
-        },
+            md_role: Default::default(), md_deprecation: None,},
     );
 
     ir_plugins.insert("echo".to_string(), vec!["once".to_string(), "echo".to_string()]);
@@ -196,7 +193,7 @@ fn create_comprehensive_test_ir() -> IR {
         ir_metadata: None,
         ir_types,
         ir_methods,
-        ir_plugins,
+        ir_plugins, ir_plugin_deprecations: Default::default(),
     }
 }
 

@@ -54,10 +54,9 @@ impl TestIRBuilder {
                         fd_type: TypeRef::RefPrimitive("string".to_string(), None),
                         fd_description: Some("Test field".to_string()),
                         fd_required: true,
-                        fd_default: None,
+                        fd_default: None, fd_deprecation: None,
                     }],
-                },
-            },
+                }, td_deprecation: None,},
         );
         self
     }
@@ -84,12 +83,11 @@ impl TestIRBuilder {
                         pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                         pd_description: Some("Test input".to_string()),
                         pd_required: true,
-                        pd_default: None,
+                        pd_default: None, pd_deprecation: None,
                     }],
                     md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                     md_bidir_type: None,
-                    md_role: Default::default(),
-                },
+                    md_role: Default::default(), md_deprecation: None,},
             );
         }
 
@@ -110,7 +108,7 @@ impl TestIRBuilder {
             ir_metadata: None,
             ir_types,
             ir_methods,
-            ir_plugins,
+            ir_plugins, ir_plugin_deprecations: Default::default(),
         }
     }
 }

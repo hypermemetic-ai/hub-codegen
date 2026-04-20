@@ -10,6 +10,7 @@ pub mod tests;
 use crate::ir::{IR, TypeRef, TypeKind};
 use crate::generator::{GenerationResult, Warning, GenerationOptions, GenerateSelector, TransportEnv};
 use crate::hash::{compute_file_hashes, compute_plugin_hash};
+use crate::deprecation::{self, DeprecationWarning};
 use crate::HUB_CODEGEN_VERSION;
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
@@ -153,12 +154,16 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     // Collect warnings for unknown types
     collect_warnings(ir, &mut warnings);
 
+    // IR-7: resolve effective deprecation toggle. Post-IR + enabled → emit.
+    let emit_deprecation = options.deprecation.enabled && deprecation::is_post_ir(ir);
+    let mut deprecation_warnings: Vec<DeprecationWarning> = Vec::new();
+
     // Dispatch to artifact-specific generator
     let mut files = match options.generate {
-        GenerateSelector::All      => generate_all(ir, options),
+        GenerateSelector::All      => generate_all(ir, options, emit_deprecation, &mut deprecation_warnings),
         GenerateSelector::Transport => generate_transport_only(ir, options),
-        GenerateSelector::Rpc      => generate_rpc_only(ir, options),
-        GenerateSelector::Plugins  => generate_plugins_only(ir, options),
+        GenerateSelector::Rpc      => generate_rpc_only(ir, options, emit_deprecation, &mut deprecation_warnings),
+        GenerateSelector::Plugins  => generate_plugins_only(ir, options, emit_deprecation, &mut deprecation_warnings),
         GenerateSelector::Smoke    => generate_smoke_only(ir, options),
         GenerateSelector::Package  => generate_package_only(ir, options),
     };
@@ -177,13 +182,18 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     let dependencies = package::get_runtime_deps(options.transport);
     let dev_dependencies = package::get_dev_deps(options.transport);
 
-    Ok(GenerationResult { files, warnings, file_hashes, dependencies, dev_dependencies })
+    Ok(GenerationResult { files, warnings, file_hashes, dependencies, dev_dependencies, deprecation_warnings })
 }
 
 /// Generate all code files except package.json.
 /// Used both by generate_all and generate_package_only to compute a
 /// content-stable version hash before generating package.json.
-fn generate_code_files(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+fn generate_code_files(
+    ir: &IR,
+    options: &GenerationOptions,
+    emit_deprecation: bool,
+    deprecation_warnings: &mut Vec<DeprecationWarning>,
+) -> HashMap<String, String> {
     let mut files = HashMap::new();
 
     files.insert("types.ts".to_string(), types::generate_types(ir));
@@ -199,14 +209,14 @@ fn generate_code_files(ir: &IR, options: &GenerationOptions) -> HashMap<String, 
             .chain(part.type_deps.iter())
             .cloned()
             .collect();
-        files.extend(types::generate_namespace_types(ir, Some(&all_type_ns)));
+        files.extend(types::generate_namespace_types(ir, Some(&all_type_ns), emit_deprecation, deprecation_warnings));
 
         // Generate client + index only for requested plugins
         let requested_vec: Vec<String> = part.requested.iter().cloned().collect();
-        files.extend(namespaces::generate_namespaces(ir, Some(&requested_vec)));
+        files.extend(namespaces::generate_namespaces(ir, Some(&requested_vec), emit_deprecation, deprecation_warnings));
     } else {
-        files.extend(types::generate_namespace_types(ir, None));
-        files.extend(namespaces::generate_namespaces(ir, None));
+        files.extend(types::generate_namespace_types(ir, None, emit_deprecation, deprecation_warnings));
+        files.extend(namespaces::generate_namespaces(ir, None, emit_deprecation, deprecation_warnings));
     }
 
     if options.transport != TransportEnv::None {
@@ -227,12 +237,17 @@ fn generate_code_files(ir: &IR, options: &GenerationOptions) -> HashMap<String, 
 }
 
 /// GenAll: all artifacts (current behaviour)
-fn generate_all(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+fn generate_all(
+    ir: &IR,
+    options: &GenerationOptions,
+    emit_deprecation: bool,
+    deprecation_warnings: &mut Vec<DeprecationWarning>,
+) -> HashMap<String, String> {
     // Two-pass: generate code files first, derive a content-stable version hash,
     // then generate package.json. This ensures package.json's version only changes
     // when generated code changes — not when IR metadata (timestamps, unrelated
     // plugin additions) changes.
-    let mut files = generate_code_files(ir, options);
+    let mut files = generate_code_files(ir, options, emit_deprecation, deprecation_warnings);
     let version_hash = compute_plugin_hash(&files);
     let has_bidir = tests::has_bidir_methods(ir);
     files.insert("package.json".to_string(), package::generate_package_json(options.transport, has_bidir, &version_hash));
@@ -253,7 +268,12 @@ fn generate_transport_only(_ir: &IR, options: &GenerationOptions) -> HashMap<Str
 }
 
 /// GenRpc: core RPC layer — types.ts, rpc.ts, index.ts
-fn generate_rpc_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+fn generate_rpc_only(
+    ir: &IR,
+    options: &GenerationOptions,
+    _emit_deprecation: bool,
+    _deprecation_warnings: &mut Vec<DeprecationWarning>,
+) -> HashMap<String, String> {
     let mut files = HashMap::new();
     files.insert("types.ts".to_string(), types::generate_types(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
@@ -265,11 +285,16 @@ fn generate_rpc_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, St
 ///
 /// The filter is applied before generation: only matching namespaces are
 /// generated, rather than generating all then discarding.
-fn generate_plugins_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+fn generate_plugins_only(
+    ir: &IR,
+    options: &GenerationOptions,
+    emit_deprecation: bool,
+    deprecation_warnings: &mut Vec<DeprecationWarning>,
+) -> HashMap<String, String> {
     let filter = options.plugins_filter.as_deref();
     let mut files = HashMap::new();
-    files.extend(types::generate_namespace_types(ir, filter));
-    files.extend(namespaces::generate_namespaces(ir, filter));
+    files.extend(types::generate_namespace_types(ir, filter, emit_deprecation, deprecation_warnings));
+    files.extend(namespaces::generate_namespaces(ir, filter, emit_deprecation, deprecation_warnings));
     files
 }
 
@@ -285,7 +310,13 @@ fn generate_smoke_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, 
 /// Generates all code files in memory to compute the content-stable version hash,
 /// then returns only package.json.
 fn generate_package_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
-    let code_files = generate_code_files(ir, options);
+    // IR-7: Do not surface deprecation warnings from the throwaway hash pass —
+    // they would double-count when generate_all later emits the same files.
+    // `emit_deprecation` stays live because the hash must reflect the real
+    // generated content (which includes annotations when post-IR).
+    let emit_deprecation = options.deprecation.enabled && deprecation::is_post_ir(ir);
+    let mut scratch = Vec::new();
+    let code_files = generate_code_files(ir, options, emit_deprecation, &mut scratch);
     let version_hash = compute_plugin_hash(&code_files);
     let has_bidir = tests::has_bidir_methods(ir);
     let mut files = HashMap::new();

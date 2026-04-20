@@ -32,8 +32,7 @@ fn minimal_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(),
-        },
+            md_role: Default::default(), md_deprecation: None,},
     );
     let mut ir_plugins = HashMap::new();
     ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
@@ -44,7 +43,7 @@ fn minimal_ir() -> IR {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods,
-        ir_plugins,
+        ir_plugins, ir_plugin_deprecations: Default::default(),
     }
 }
 
@@ -318,8 +317,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(),
-        },
+            md_role: Default::default(), md_deprecation: None,},
     );
     ir_methods.insert(
         "health.status".to_string(),
@@ -332,8 +330,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("boolean".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(),
-        },
+            md_role: Default::default(), md_deprecation: None,},
     );
     ir_methods.insert(
         "solar.earth.info".to_string(),
@@ -346,8 +343,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(),
-        },
+            md_role: Default::default(), md_deprecation: None,},
     );
     let mut ir_plugins = HashMap::new();
     ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
@@ -360,7 +356,7 @@ fn multi_ns_ir() -> IR {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods,
-        ir_plugins,
+        ir_plugins, ir_plugin_deprecations: Default::default(),
     }
 }
 
