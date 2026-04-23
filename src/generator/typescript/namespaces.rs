@@ -310,8 +310,29 @@ fn generate_namespace(
                 }
             }
         }
-        if let Some(desc) = &method.md_description {
-            lines.push(format!("  /** {} */", desc));
+        // REQ-7 (minimal): emit JSDoc breadcrumbs from activation-level psRequest
+        let req_lines = render_request_jsdoc(namespace, ir);
+        let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
+        match (desc_opt, req_lines.is_empty()) {
+            (Some(desc), false) => {
+                lines.push("  /**".to_string());
+                lines.push(format!("   * {}", desc));
+                for rl in &req_lines {
+                    lines.push(format!("   * {}", rl));
+                }
+                lines.push("   */".to_string());
+            }
+            (Some(desc), true) => {
+                lines.push(format!("  /** {} */", desc));
+            }
+            (None, false) => {
+                lines.push("  /**".to_string());
+                for rl in &req_lines {
+                    lines.push(format!("   * {}", rl));
+                }
+                lines.push("   */".to_string());
+            }
+            (None, true) => {}
         }
         lines.push(format!("  readonly {}: {};", method_name, handle_type));
     }
@@ -350,8 +371,29 @@ fn generate_namespace(
                 }
             }
         }
-        if let Some(desc) = &method.md_description {
-            lines.push(format!("  /** {} */", desc));
+        // REQ-7 (minimal): emit JSDoc breadcrumbs from activation-level psRequest
+        let req_lines = render_request_jsdoc(namespace, ir);
+        let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
+        match (desc_opt, req_lines.is_empty()) {
+            (Some(desc), false) => {
+                lines.push("  /**".to_string());
+                lines.push(format!("   * {}", desc));
+                for rl in &req_lines {
+                    lines.push(format!("   * {}", rl));
+                }
+                lines.push("   */".to_string());
+            }
+            (Some(desc), true) => {
+                lines.push(format!("  /** {} */", desc));
+            }
+            (None, false) => {
+                lines.push("  /**".to_string());
+                for rl in &req_lines {
+                    lines.push(format!("   * {}", rl));
+                }
+                lines.push("   */".to_string());
+            }
+            (None, true) => {}
         }
         lines.push(format!("  {}({}): {};", method_name, params, full_return));
     }
@@ -467,6 +509,55 @@ fn generate_namespace(
     lines.push("}".to_string());
 
     lines.join("\n")
+}
+
+/// REQ-7 (minimal): emit JSDoc breadcrumbs from the activation-level
+/// `psRequest` schema for a given namespace. Returns an empty Vec when
+/// the namespace has no request schema, so callers can no-op cleanly.
+///
+/// Each property in the request schema produces one line:
+/// - `@requiresAuth — Cookie: <name>` for required cookie sources
+/// - `@reads-cookie <name>` for non-required cookie sources
+/// - `@reads-header <name>` for header sources
+/// - `@reads-query <name>` for query sources
+/// - `@server-derived <field-name>` for derived sources
+fn render_request_jsdoc(namespace: &str, ir: &IR) -> Vec<String> {
+    let Some(req_schema) = ir.ir_plugin_requests.get(namespace) else {
+        return Vec::new();
+    };
+    let Some(props) = req_schema.get("properties").and_then(|v| v.as_object()) else {
+        return Vec::new();
+    };
+    let required: Vec<&str> = req_schema
+        .get("required")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    let mut lines = Vec::new();
+    let mut sorted_props: Vec<_> = props.iter().collect();
+    sorted_props.sort_by_key(|(k, _)| k.as_str());
+    for (name, prop) in sorted_props {
+        let source = prop.get("x-plexus-source").and_then(|v| v.as_object());
+        let from = source.and_then(|s| s.get("from")).and_then(|v| v.as_str()).unwrap_or("unknown");
+        let key = source.and_then(|s| s.get("key")).and_then(|v| v.as_str());
+        let is_required = required.iter().any(|r| *r == name.as_str());
+        let line = match from {
+            "cookie" => {
+                let k = key.unwrap_or(name.as_str());
+                if is_required {
+                    format!("@requiresAuth — Cookie: {}", k)
+                } else {
+                    format!("@reads-cookie {}", k)
+                }
+            }
+            "header" => format!("@reads-header {}", key.unwrap_or(name.as_str())),
+            "query"  => format!("@reads-query {}", key.unwrap_or(name.as_str())),
+            "derived" => format!("@server-derived {}", name),
+            _ => format!("@request-field {} (source: {})", name, from),
+        };
+        lines.push(line);
+    }
+    lines
 }
 
 /// IR-9: Compute the declared type for a DynamicChild gate

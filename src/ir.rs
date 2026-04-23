@@ -55,6 +55,16 @@ pub struct IR {
     /// an empty map, producing byte-identical codegen output to pre-ticket.
     #[serde(default)]
     pub ir_plugin_deprecations: HashMap<String, DeprecationInfo>,
+    /// Optional per-plugin PlexusRequest schema (REQ-5).
+    ///
+    /// When a plugin namespace appears here, the activation declared
+    /// `request = MyRequest` in plexus-macros; the value is the JSON Schema
+    /// of the request struct, with `x-plexus-source` extensions on each
+    /// field describing where it comes from (cookie/header/query/derived).
+    /// REQ-7 uses this to emit JSDoc breadcrumbs on every method whose
+    /// activation has a request schema.
+    #[serde(default)]
+    pub ir_plugin_requests: HashMap<String, serde_json::Value>,
 }
 
 /// Deprecation metadata for an IR surface (IR-7).
