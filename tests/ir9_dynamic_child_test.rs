@@ -87,7 +87,7 @@ fn dynamic_child_ir(
                 pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                 pd_description: None,
                 pd_required: true,
-                pd_default: None, pd_deprecation: None,
+                pd_default: None, pd_deprecation: None, pd_source: None,
             }],
             md_returns: TypeRef::RefOptional(Box::new(TypeRef::RefNamed(QualifiedName {
                 qn_namespace: "solar.body".to_string(),
@@ -131,7 +131,7 @@ fn dynamic_child_ir(
                     pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                     pd_description: None,
                     pd_required: true,
-                    pd_default: None, pd_deprecation: None,
+                    pd_default: None, pd_deprecation: None, pd_source: None,
                 }],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                 md_bidir_type: None,
@@ -149,7 +149,7 @@ fn dynamic_child_ir(
         ir_metadata: None,
         ir_types,
         ir_methods,
-        ir_plugins, ir_plugin_deprecations: Default::default(),
+        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
     }
 }
 
@@ -318,7 +318,7 @@ fn test_pre_ir_regression_no_dynamic_child() {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods: HashMap::new(),
-        ir_plugins: HashMap::new(), ir_plugin_deprecations: Default::default(),};
+        ir_plugins: HashMap::new(), ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),};
     ir.ir_methods.insert(
         "echo.ping".to_string(),
         MethodDef {

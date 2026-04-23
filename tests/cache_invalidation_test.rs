@@ -83,7 +83,7 @@ impl TestIRBuilder {
                         pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                         pd_description: Some("Test input".to_string()),
                         pd_required: true,
-                        pd_default: None, pd_deprecation: None,
+                        pd_default: None, pd_deprecation: None, pd_source: None,
                     }],
                     md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                     md_bidir_type: None,
@@ -108,7 +108,7 @@ impl TestIRBuilder {
             ir_metadata: None,
             ir_types,
             ir_methods,
-            ir_plugins, ir_plugin_deprecations: Default::default(),
+            ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
         }
     }
 }

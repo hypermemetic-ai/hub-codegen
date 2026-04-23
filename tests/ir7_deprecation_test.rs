@@ -79,6 +79,7 @@ fn post_ir_fixture() -> IR {
         ir_methods,
         ir_plugins,
         ir_plugin_deprecations: HashMap::new(),
+        ir_plugin_requests: HashMap::new(),
     }
 }
 
@@ -506,6 +507,7 @@ fn test_param_level_deprecation_annotates_parameter() {
             removed_in: "0.7".to_string(),
             message: "no longer honored".to_string(),
         }),
+        pd_source: None,
     });
 
     let result = generate_typescript(&ir, &default_options()).unwrap();

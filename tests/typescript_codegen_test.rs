@@ -43,7 +43,7 @@ fn minimal_ir() -> IR {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods,
-        ir_plugins, ir_plugin_deprecations: Default::default(),
+        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
     }
 }
 
@@ -356,7 +356,7 @@ fn multi_ns_ir() -> IR {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods,
-        ir_plugins, ir_plugin_deprecations: Default::default(),
+        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
     }
 }
 

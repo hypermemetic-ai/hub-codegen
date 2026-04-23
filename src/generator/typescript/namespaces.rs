@@ -310,8 +310,12 @@ fn generate_namespace(
                 }
             }
         }
-        // REQ-7 (minimal): emit JSDoc breadcrumbs from activation-level psRequest
-        let req_lines = render_request_jsdoc(namespace, ir);
+        // REQ-9: prefer per-method annotations (from `pd_source` on each ParamDef —
+        // populated by REQ-6's macro path). Falls back to activation-level
+        // `irPluginRequests` (REQ-7 minimal) when the method has no per-param
+        // source annotations — this keeps backends on plexus-macros 0.4.x
+        // working until they upgrade to 0.5+.
+        let req_lines = render_method_jsdoc(method, namespace, ir);
         let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
         match (desc_opt, req_lines.is_empty()) {
             (Some(desc), false) => {
@@ -371,8 +375,12 @@ fn generate_namespace(
                 }
             }
         }
-        // REQ-7 (minimal): emit JSDoc breadcrumbs from activation-level psRequest
-        let req_lines = render_request_jsdoc(namespace, ir);
+        // REQ-9: prefer per-method annotations (from `pd_source` on each ParamDef —
+        // populated by REQ-6's macro path). Falls back to activation-level
+        // `irPluginRequests` (REQ-7 minimal) when the method has no per-param
+        // source annotations — this keeps backends on plexus-macros 0.4.x
+        // working until they upgrade to 0.5+.
+        let req_lines = render_method_jsdoc(method, namespace, ir);
         let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
         match (desc_opt, req_lines.is_empty()) {
             (Some(desc), false) => {
@@ -511,17 +519,51 @@ fn generate_namespace(
     lines.join("\n")
 }
 
-/// REQ-7 (minimal): emit JSDoc breadcrumbs from the activation-level
-/// `psRequest` schema for a given namespace. Returns an empty Vec when
-/// the namespace has no request schema, so callers can no-op cleanly.
+/// REQ-9: emit JSDoc breadcrumbs for one method, preferring per-param
+/// `x-plexus-source` annotations (populated by REQ-6's macro path) and
+/// falling back to the activation-level `ir.ir_plugin_requests` when a
+/// method has zero per-param source annotations.
 ///
-/// Each property in the request schema produces one line:
-/// - `@requiresAuth — Cookie: <name>` for required cookie sources
-/// - `@reads-cookie <name>` for non-required cookie sources
-/// - `@reads-header <name>` for header sources
-/// - `@reads-query <name>` for query sources
-/// - `@server-derived <field-name>` for derived sources
-fn render_request_jsdoc(namespace: &str, ir: &IR) -> Vec<String> {
+/// Returns an empty Vec when nothing semantic to emit.
+fn render_method_jsdoc(method: &crate::ir::MethodDef, namespace: &str, ir: &IR) -> Vec<String> {
+    // REQ-6 path: per-param pd_source. When any param has an annotation,
+    // this path wins and the activation-level fallback is ignored — ensures
+    // methods with `request = ()` override emit no derived tags even if the
+    // activation has a psRequest (fixes health.check false-positive).
+    let per_param: Vec<String> = method
+        .md_params
+        .iter()
+        .filter_map(|p| {
+            let src = p.pd_source.as_ref()?.as_object()?;
+            let from = src.get("from").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let key = src.get("key").and_then(|v| v.as_str());
+            let resolver = src.get("resolver").and_then(|v| v.as_str());
+            Some(match from {
+                "auth" => match resolver {
+                    Some(r) => format!("@requiresAuth — resolver: {}", r),
+                    None    => "@requiresAuth".to_string(),
+                },
+                "cookie" => format!("@reads-cookie {}", key.unwrap_or(p.pd_name.as_str())),
+                "header" => format!("@reads-header {}", key.unwrap_or(p.pd_name.as_str())),
+                "query"  => format!("@reads-query {}", key.unwrap_or(p.pd_name.as_str())),
+                "derived" => format!("@server-derived {}", p.pd_name),
+                "rpc"    => return None,
+                other    => format!("@request-field {} (source: {})", p.pd_name, other),
+            })
+        })
+        .collect();
+    if !per_param.is_empty() {
+        return per_param;
+    }
+    // Fallback: REQ-7-minimal's activation-level emission for pre-REQ-6 backends.
+    render_request_jsdoc_fallback(namespace, ir)
+}
+
+/// Activation-level JSDoc emission. Preserved as a fallback for backends
+/// on plexus-macros < 0.5 whose method schemas don't carry per-param
+/// `x-plexus-source` yet. Can be removed once REQ-11 verifies uscis
+/// on the newer plexus-macros.
+fn render_request_jsdoc_fallback(namespace: &str, ir: &IR) -> Vec<String> {
     let Some(req_schema) = ir.ir_plugin_requests.get(namespace) else {
         return Vec::new();
     };

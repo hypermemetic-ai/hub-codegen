@@ -405,6 +405,22 @@ pub struct ParamDef {
     /// Mirrors `plexus_core::ParamSchema.deprecation`.
     #[serde(default)]
     pub pd_deprecation: Option<DeprecationInfo>,
+    /// REQ-6/REQ-9: `x-plexus-source` annotation on the param's JSON Schema.
+    ///
+    /// When the upstream schema declared where this param's value comes from,
+    /// the annotation is preserved here as the raw JSON object:
+    ///
+    /// - `{ "from": "auth", "resolver": "..." }` — from `#[from_auth(expr)]`
+    /// - `{ "from": "cookie", "key": "access_token" }` — from `#[from_cookie("...")]`
+    /// - `{ "from": "header", "key": "origin" }` — from `#[from_header("...")]`
+    /// - `{ "from": "query", "key": "..." }` — from `#[from_query("...")]`
+    /// - `{ "from": "derived" }` — from `#[from_peer]` / `PlexusRequestField` newtypes
+    /// - (`None`) — unannotated; treat as RPC-sourced
+    ///
+    /// REQ-9 uses this to emit per-method JSDoc breadcrumbs (`@requiresAuth`,
+    /// `@reads-cookie`, `@server-derived`, etc.) in generated client code.
+    #[serde(default)]
+    pub pd_source: Option<serde_json::Value>,
 }
 
 // === Helper methods for code generation ===
