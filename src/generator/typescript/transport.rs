@@ -71,6 +71,53 @@ interface JsonRpcSuccess { jsonrpc: '2.0'; id: number; result: unknown; }
 interface JsonRpcError   { jsonrpc: '2.0'; id: number; error: { code: number; message: string; data?: unknown }; }
 type JsonRpcResponse = JsonRpcSuccess | JsonRpcError;
 
+// ─── Typed RPC errors (REQ-7) ────────────────────────────────────────────
+//
+// Semantic JSON-RPC error codes per plexus-core's `plexus_error_to_jsonrpc`:
+//   -32001  Authentication required
+//   -32602  Invalid parameters
+//   -32601  Method not found
+//   -32000  Server-side execution error
+// Transport dispatches to the appropriate subclass so client code can
+// `catch (e) { if (e instanceof AuthenticationError) … }` rather than
+// string-match on error messages.
+
+export class PlexusRpcError extends Error {
+  readonly code: number;
+  readonly data?: unknown;
+  constructor(code: number, message: string, data?: unknown) {
+    super(`RPC error ${code}: ${message}`);
+    this.name = 'PlexusRpcError';
+    this.code = code;
+    this.data = data;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export class AuthenticationError extends PlexusRpcError {
+  constructor(message: string, data?: unknown) { super(-32001, message, data); this.name = 'AuthenticationError'; }
+}
+export class InvalidParamsError extends PlexusRpcError {
+  constructor(message: string, data?: unknown) { super(-32602, message, data); this.name = 'InvalidParamsError'; }
+}
+export class MethodNotFoundError extends PlexusRpcError {
+  constructor(message: string, data?: unknown) { super(-32601, message, data); this.name = 'MethodNotFoundError'; }
+}
+export class ExecutionError extends PlexusRpcError {
+  constructor(message: string, data?: unknown) { super(-32000, message, data); this.name = 'ExecutionError'; }
+}
+
+/** Construct the appropriate typed error for a JSON-RPC error payload. */
+function rpcErrorFor(code: number, message: string, data?: unknown): PlexusRpcError {
+  switch (code) {
+    case -32001: return new AuthenticationError(message, data);
+    case -32602: return new InvalidParamsError(message, data);
+    case -32601: return new MethodNotFoundError(message, data);
+    case -32000: return new ExecutionError(message, data);
+    default:     return new PlexusRpcError(code, message, data);
+  }
+}
+
 interface JsonRpcNotification {
   jsonrpc: '2.0';
   method: 'subscription';
@@ -168,7 +215,7 @@ export class PlexusRpcClient implements RpcClient {
     const pending = this.pendingRequests.get(resp.id);
     if (!pending) { this.log('Unknown request id:', resp.id); return; }
     this.pendingRequests.delete(resp.id);
-    if ('error' in resp) { pending.reject(new Error(`RPC error ${resp.error.code}: ${resp.error.message}`)); }
+    if ('error' in resp) { pending.reject(rpcErrorFor(resp.error.code, resp.error.message, resp.error.data)); }
     else { pending.resolve(resp.result as number); }
   }
 
