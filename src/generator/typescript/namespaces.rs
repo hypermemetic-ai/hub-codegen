@@ -519,18 +519,17 @@ fn generate_namespace(
     lines.join("\n")
 }
 
-/// REQ-9: emit JSDoc breadcrumbs for one method, preferring per-param
-/// `x-plexus-source` annotations (populated by REQ-6's macro path) and
-/// falling back to the activation-level `ir.ir_plugin_requests` when a
-/// method has zero per-param source annotations.
+/// REQ-9: emit JSDoc breadcrumbs for one method from per-param
+/// `x-plexus-source` annotations (populated by REQ-6's macro path).
 ///
-/// Returns an empty Vec when nothing semantic to emit.
-fn render_method_jsdoc(method: &crate::ir::MethodDef, namespace: &str, ir: &IR) -> Vec<String> {
-    // REQ-6 path: per-param pd_source. When any param has an annotation,
-    // this path wins and the activation-level fallback is ignored — ensures
-    // methods with `request = ()` override emit no derived tags even if the
-    // activation has a psRequest (fixes health.check false-positive).
-    let per_param: Vec<String> = method
+/// Returns an empty Vec when the method has no non-RPC params —
+/// which correctly suppresses tags for methods that opt out via
+/// `#[plexus::method(request = ())]`. There is no activation-level
+/// fallback: pre-REQ-6 backends produce no pd_source anywhere and
+/// simply get no breadcrumbs. This is the intended REQ-9 contract
+/// per the ticket ("Delete the activation-level emission").
+fn render_method_jsdoc(method: &crate::ir::MethodDef, _namespace: &str, _ir: &IR) -> Vec<String> {
+    method
         .md_params
         .iter()
         .filter_map(|p| {
@@ -551,18 +550,13 @@ fn render_method_jsdoc(method: &crate::ir::MethodDef, namespace: &str, ir: &IR) 
                 other    => format!("@request-field {} (source: {})", p.pd_name, other),
             })
         })
-        .collect();
-    if !per_param.is_empty() {
-        return per_param;
-    }
-    // Fallback: REQ-7-minimal's activation-level emission for pre-REQ-6 backends.
-    render_request_jsdoc_fallback(namespace, ir)
+        .collect()
 }
 
-/// Activation-level JSDoc emission. Preserved as a fallback for backends
-/// on plexus-macros < 0.5 whose method schemas don't carry per-param
-/// `x-plexus-source` yet. Can be removed once REQ-11 verifies uscis
-/// on the newer plexus-macros.
+/// Activation-level JSDoc emission. DEPRECATED — kept as dead code for
+/// one release cycle in case someone wants to opt back in. REQ-9 deletes
+/// this path; pre-REQ-6 backends simply produce no breadcrumbs.
+#[allow(dead_code)]
 fn render_request_jsdoc_fallback(namespace: &str, ir: &IR) -> Vec<String> {
     let Some(req_schema) = ir.ir_plugin_requests.get(namespace) else {
         return Vec::new();

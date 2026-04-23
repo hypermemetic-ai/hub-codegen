@@ -227,9 +227,14 @@ fn per_method_sources_take_precedence_over_activation_level_fallback() {
 }
 
 #[test]
-fn activation_level_fallback_fires_only_when_no_per_method_sources() {
-    // Legacy backend: no per-param pd_source anywhere, but the activation
-    // has psRequest. Fallback path kicks in.
+fn activation_level_fallback_is_deleted() {
+    // REQ-9 final contract: there is NO activation-level fallback.
+    // A method with no per-param pd_source emits no breadcrumbs
+    // regardless of whether the activation has ir_plugin_requests.
+    //
+    // This is the key fix for health.check's false-positive: under
+    // REQ-6 the override produces a method with empty mdParams;
+    // without a fallback, that correctly yields clean JSDoc.
     let m = method("list", vec![rpc_param("search")]);
     let mut ir = ir_with_methods(vec![m]);
     ir.ir_plugin_requests.insert(
@@ -246,8 +251,13 @@ fn activation_level_fallback_fires_only_when_no_per_method_sources() {
     let client = out.files.get("svc/client.ts").unwrap();
 
     assert!(
-        client.contains("@server-derived origin"),
-        "activation-level fallback must fire when no per-method sources exist. Got:\n{}",
+        !client.contains("@server-derived origin"),
+        "REQ-9: no activation-level fallback; method with no per-param sources produces no tags. Got:\n{}",
+        client
+    );
+    assert!(
+        !client.contains("@requiresAuth"),
+        "REQ-9: no fallback means no @requiresAuth either. Got:\n{}",
         client
     );
 }
