@@ -63,8 +63,20 @@ pub struct IR {
     /// field describing where it comes from (cookie/header/query/derived).
     /// REQ-7 uses this to emit JSDoc breadcrumbs on every method whose
     /// activation has a request schema.
-    #[serde(default)]
+    ///
+    /// Synapse emits this field as `null` when the backend has no
+    /// `psRequest` schemas; the custom deserializer below turns both `null`
+    /// and absent into an empty map.
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_map")]
     pub ir_plugin_requests: HashMap<String, serde_json::Value>,
+}
+
+fn deserialize_null_as_empty_map<'de, D>(de: D) -> Result<HashMap<String, serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    Option::<HashMap<String, serde_json::Value>>::deserialize(de).map(|o| o.unwrap_or_default())
 }
 
 /// Deprecation metadata for an IR surface (IR-7).
