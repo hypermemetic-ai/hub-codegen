@@ -20,6 +20,11 @@ pub fn generate_transport(env: TransportEnv) -> String {
 
 fn get_transport_template() -> String {
     r#"// Plexus WebSocket transport
+// SAFE-7-cookie-auth-marker: this transport uses cookies for JWT auth on WS upgrade.
+// URL-query token construction is intentionally NOT supported — plexus-transport removed
+// that path. Set the access_token cookie via Node's headers option (below) or, in
+// browsers, ensure the same-origin cookie store has access_token set before connect().
+//
 // Depends on ./types (protocol types) and ./rpc (RpcClient interface + helpers).
 import WebSocket from 'ws';
 import type {
@@ -38,6 +43,17 @@ export interface PlexusRpcConfig {
   connectionTimeout?: number;
   debug?: boolean;
   onBidirectionalRequest?: BidirectionalRequestHandler;
+  /**
+   * JWT auth token to attach as a Cookie on the WebSocket upgrade.
+   *
+   * - Node.js: passed as `Cookie: access_token=<jwt>` upgrade header.
+   * - Browser: ignored — the browser's WebSocket API does not allow custom headers.
+   *   Browsers must set `document.cookie` for the same origin before calling connect();
+   *   the cookie is then sent automatically.
+   *
+   * SAFE-7: cookie-only WS auth migration. URL-query token paths are not supported.
+   */
+  authToken?: string;
 }
 
 export type BidirectionalRequestHandler = (
@@ -88,6 +104,7 @@ export class PlexusRpcClient implements RpcClient {
       url: config.url,
       connectionTimeout: config.connectionTimeout ?? 5000,
       debug: config.debug ?? false,
+      authToken: config.authToken ?? '',
     };
     this.onBidirectionalRequest = config.onBidirectionalRequest;
   }
@@ -109,7 +126,13 @@ export class PlexusRpcClient implements RpcClient {
         reject(new Error(`Connection timeout after ${this.config.connectionTimeout}ms`));
       }, this.config.connectionTimeout);
 
-      this.ws = new WebSocket(this.config.url);
+      // SAFE-7: pass auth token as Cookie header on WS upgrade (Node only).
+      // In browsers, the WebSocket constructor only accepts (url, protocols) — the
+      // 'ws' library wraps native WebSocket and ignores extra args, so this is safe.
+      const wsOpts = this.config.authToken
+        ? ({ headers: { Cookie: 'access_token=' + this.config.authToken } } as any)
+        : undefined;
+      this.ws = new WebSocket(this.config.url, wsOpts);
       this.ws.onopen  = () => { clearTimeout(timeout); this.log('Connected to', this.config.url); resolve(); };
       this.ws.onerror = (event) => { clearTimeout(timeout); this.log('WebSocket error:', event); reject(new Error('WebSocket connection failed')); };
       this.ws.onclose = (event) => { this.log('WebSocket closed:', event.code, event.reason); this.handleDisconnect(); };
