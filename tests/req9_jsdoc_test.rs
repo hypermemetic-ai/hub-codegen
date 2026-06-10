@@ -52,6 +52,9 @@ fn method(name: &str, params: Vec<ParamDef>) -> MethodDef {
         md_bidir_type: None,
         md_role: Default::default(),
         md_deprecation: None,
+            md_requires_credential: None,
+            md_auth_posture: None,
+            md_public: false,
     }
 }
 

@@ -95,6 +95,9 @@ mod tests {
                 md_bidir_type: None,
                 md_role: Default::default(),
                 md_deprecation: None,
+            md_requires_credential: None,
+            md_auth_posture: None,
+            md_public: false,
             },
         );
 
@@ -113,7 +116,7 @@ mod tests {
                     pd_description: Some("Interval in seconds".to_string()),
                     pd_required: false,
                     pd_default: Some(serde_json::json!(5)),
-                    pd_deprecation: None,
+                    pd_deprecation: None, pd_source: None,
                 }],
                 md_returns: TypeRef::RefNamed(QualifiedName {
                     qn_namespace: "health".to_string(),
@@ -122,6 +125,9 @@ mod tests {
                 md_bidir_type: None,
                 md_role: Default::default(),
                 md_deprecation: None,
+            md_requires_credential: None,
+            md_auth_posture: None,
+            md_public: false,
             },
         );
 
@@ -135,7 +141,7 @@ mod tests {
             ir_types,
             ir_methods,
             ir_plugins,
-            ir_plugin_deprecations: Default::default(),
+            ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
         }
     }
 

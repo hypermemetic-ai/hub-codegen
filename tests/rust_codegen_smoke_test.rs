@@ -141,14 +141,14 @@ fn create_comprehensive_test_ir() -> IR {
                 pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                 pd_description: Some("Message to echo".to_string()),
                 pd_required: true,
-                pd_default: None, pd_deprecation: None,
+                pd_default: None, pd_deprecation: None, pd_source: None,
             }],
             md_returns: TypeRef::RefNamed(QualifiedName {
                 qn_namespace: "echo".to_string(),
                 qn_local_name: "EchoResponse".to_string(),
             }),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
     );
 
     // Streaming method with multiple params
@@ -166,14 +166,14 @@ fn create_comprehensive_test_ir() -> IR {
                     pd_type: TypeRef::RefPrimitive("string".to_string(), None),
                     pd_description: Some("Message to echo".to_string()),
                     pd_required: true,
-                    pd_default: None, pd_deprecation: None,
+                    pd_default: None, pd_deprecation: None, pd_source: None,
                 },
                 ParamDef {
                     pd_name: "count".to_string(),
                     pd_type: TypeRef::RefPrimitive("integer".to_string(), Some("int64".to_string())),
                     pd_description: Some("Number of times to echo".to_string()),
                     pd_required: false,
-                    pd_default: Some(serde_json::json!(1)), pd_deprecation: None,
+                    pd_default: Some(serde_json::json!(1)), pd_deprecation: None, pd_source: None,
                 },
             ],
             md_returns: TypeRef::RefNamed(QualifiedName {
@@ -181,7 +181,7 @@ fn create_comprehensive_test_ir() -> IR {
                 qn_local_name: "EchoEvent".to_string(),
             }),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
     );
 
     ir_plugins.insert("echo".to_string(), vec!["once".to_string(), "echo".to_string()]);
@@ -193,7 +193,7 @@ fn create_comprehensive_test_ir() -> IR {
         ir_metadata: None,
         ir_types,
         ir_methods,
-        ir_plugins, ir_plugin_deprecations: Default::default(),
+        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
     }
 }
 

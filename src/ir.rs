@@ -102,6 +102,142 @@ pub struct DeprecationInfo {
     pub message: String,
 }
 
+/// Credential requirement for a method (R-4).
+///
+/// Mirrors `plexus_core::schema::RequiredCredential` (R-2, commit `80eaba7`
+/// on plexus-core `feature/R-2-credential-wire`). Carried verbatim through
+/// the IR by synapse (R-3) under the wire key `requires_credential` on each
+/// method definition.
+///
+/// Surfacing only — generated clients display/introspect the requirement;
+/// enforcement happens server-side at the gate (R-5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RequiredCredential {
+    /// Specific kind a candidate credential must have, or `None` for
+    /// "any kind whose scope set matches".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<CredentialKind>,
+    /// Required scope set (conjunction — the caller must satisfy ALL).
+    /// Scopes are plain strings on the wire (`facet.write`-style).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
+    /// Preferred attach site for the client. Advisory only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_hint: Option<AttachmentSite>,
+}
+
+/// Credential kind (R-4). Mirrors `plexus_auth_core::CredentialKind` —
+/// internally tagged on the wire: `{"kind": "bearer"}`,
+/// `{"kind": "oauth_access"}`, `{"kind": "other", "name": "..."}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CredentialKind {
+    /// Static or short-lived bearer token (JWT, opaque token).
+    Bearer,
+    /// Cookie-shaped session credential.
+    Cookie,
+    /// OAuth/OIDC access token.
+    OauthAccess,
+    /// OAuth/OIDC refresh token.
+    OauthRefresh,
+    /// OIDC ID token.
+    OidcId,
+    /// AWS STS credential set.
+    AwsSts,
+    /// Macaroon-style capability token.
+    Macaroon,
+    /// Custom kind for backends with bespoke schemes.
+    Other {
+        /// Opaque name supplied by the backend.
+        name: String,
+    },
+}
+
+impl CredentialKind {
+    /// Human/codegen display form: the snake_case tag, with `other:<name>`
+    /// for the escape-valve variant.
+    pub fn display(&self) -> String {
+        match self {
+            CredentialKind::Bearer => "bearer".to_string(),
+            CredentialKind::Cookie => "cookie".to_string(),
+            CredentialKind::OauthAccess => "oauth_access".to_string(),
+            CredentialKind::OauthRefresh => "oauth_refresh".to_string(),
+            CredentialKind::OidcId => "oidc_id".to_string(),
+            CredentialKind::AwsSts => "aws_sts".to_string(),
+            CredentialKind::Macaroon => "macaroon".to_string(),
+            CredentialKind::Other { name } => format!("other:{}", name),
+        }
+    }
+}
+
+/// Where a credential is attached on the wire (R-4). Mirrors
+/// `plexus_auth_core::AttachmentSite` — internally tagged:
+/// `{"site": "header", "name": "authorization"}` etc.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "site", rename_all = "snake_case")]
+pub enum AttachmentSite {
+    /// HTTP header.
+    Header { name: String },
+    /// HTTP cookie.
+    Cookie { name: String },
+    /// First-frame WS auth via a setup method parameter.
+    FirstFrame { setup_method: String, param: String },
+    /// In-RPC parameter on every credential-requiring method.
+    InRpcParam { param: String },
+}
+
+impl AttachmentSite {
+    /// Human/codegen display form, e.g. `header:authorization`,
+    /// `cookie:plexus_session`, `first_frame:login#token`, `in_rpc_param:token`.
+    pub fn display(&self) -> String {
+        match self {
+            AttachmentSite::Header { name } => format!("header:{}", name),
+            AttachmentSite::Cookie { name } => format!("cookie:{}", name),
+            AttachmentSite::FirstFrame { setup_method, param } => {
+                format!("first_frame:{}#{}", setup_method, param)
+            }
+            AttachmentSite::InRpcParam { param } => format!("in_rpc_param:{}", param),
+        }
+    }
+}
+
+/// Declared auth posture of the activation a method belongs to (R-4).
+///
+/// Mirrors `plexus_core::schema::AuthPosture` — a snake_case string on the
+/// wire: `"required" | "optional" | "mixed" | "none"`. `None` (absent field)
+/// means the activation never declared a posture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthPosture {
+    /// Every method is auth-gated or explicitly public.
+    Required,
+    /// No enforcement; auth may be asymmetric across methods.
+    Optional,
+    /// Asymmetric auth, explicitly acknowledged.
+    Mixed,
+    /// Affirmatively public activation; no method takes auth.
+    None,
+}
+
+impl AuthPosture {
+    /// The snake_case wire string for this posture.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AuthPosture::Required => "required",
+            AuthPosture::Optional => "optional",
+            AuthPosture::Mixed => "mixed",
+            AuthPosture::None => "none",
+        }
+    }
+}
+
+/// `skip_serializing_if` helper: omit `false` booleans from the wire so the
+/// additive `public` flag keeps pre-R JSON byte-identical (mirrors
+/// `plexus_core::schema::is_false`).
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
 /// Type definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -374,6 +510,34 @@ pub struct MethodDef {
     /// pre-IR IR producers predate this field and deserialize to `None`.
     #[serde(default)]
     pub md_deprecation: Option<DeprecationInfo>,
+
+    /// Credential requirement derived from the method's scope tagging (R-4).
+    ///
+    /// Mirrors `plexus_core::MethodSchema.requires_credential` (R-2);
+    /// synapse (R-3) passes the field through verbatim, so the IR wire key
+    /// is the upstream snake_case `requires_credential` — NOT camelCase.
+    /// Pre-R IRs omit the field and deserialize to `None`.
+    ///
+    /// Surfacing only: generated clients expose the requirement as typed
+    /// metadata + doc comments; they do NOT enforce it.
+    #[serde(default, rename = "requires_credential", skip_serializing_if = "Option::is_none")]
+    pub md_requires_credential: Option<RequiredCredential>,
+
+    /// Declared auth posture of the activation this method belongs to (R-4).
+    ///
+    /// Wire key `auth_posture` (verbatim from `MethodSchema.auth_posture`),
+    /// a snake_case string enum. `None` = posture-silent activation or
+    /// pre-R IR.
+    #[serde(default, rename = "auth_posture", skip_serializing_if = "Option::is_none")]
+    pub md_auth_posture: Option<AuthPosture>,
+
+    /// Whether this method is explicitly public — exempt from the
+    /// default-deny gate (R-4). Wire key `public` (verbatim from
+    /// `MethodSchema.public`); omitted on the wire when `false`, so pre-R
+    /// IRs deserialize to `false`. Mutually exclusive with a populated
+    /// `requires_credential` by upstream macro construction.
+    #[serde(default, rename = "public", skip_serializing_if = "is_false")]
+    pub md_public: bool,
 }
 
 /// Method role classification.
@@ -742,6 +906,108 @@ mod tests {
         let json_static = r#"{"kind":"static_child"}"#;
         let role: MethodRole = serde_json::from_str(json_static).unwrap();
         assert_eq!(role, MethodRole::StaticChild);
+    }
+
+    /// R-4: A pre-R IR method JSON (no `requires_credential`, `auth_posture`,
+    /// or `public` fields) must keep parsing, defaulting to None/None/false.
+    #[test]
+    fn test_method_def_credential_fields_default_when_absent() {
+        let json = r#"{
+            "mdName": "ping",
+            "mdFullPath": "echo.ping",
+            "mdNamespace": "echo",
+            "mdStreaming": false,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefPrimitive", "contents": ["string", null]}
+        }"#;
+        let method: MethodDef = serde_json::from_str(json).unwrap();
+        assert!(method.md_requires_credential.is_none());
+        assert!(method.md_auth_posture.is_none());
+        assert!(!method.md_public);
+    }
+
+    /// R-4: Decode the exact R-2 wire shape (plexus-core `MethodSchema`,
+    /// commit 80eaba7) carried verbatim through the IR by synapse (R-3):
+    /// - `requires_credential`: object with internally-tagged `kind`
+    ///   (`{"kind": "oauth_access"}`), string-array `scopes`, and
+    ///   internally-tagged `site_hint` (`{"site": "header", "name": ...}`).
+    /// - `auth_posture`: snake_case string enum.
+    /// - `public`: bool, omitted on the wire when false.
+    #[test]
+    fn test_method_def_credential_fields_decode_wire_shape() {
+        let json = r#"{
+            "mdName": "send_message",
+            "mdFullPath": "cone.send_message",
+            "mdNamespace": "cone",
+            "mdStreaming": false,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefPrimitive", "contents": ["string", null]},
+            "requires_credential": {
+                "kind": {"kind": "oauth_access"},
+                "scopes": ["facet.write", "facet.read"],
+                "site_hint": {"site": "header", "name": "authorization"}
+            },
+            "auth_posture": "required"
+        }"#;
+        let method: MethodDef = serde_json::from_str(json).unwrap();
+        let req = method.md_requires_credential.expect("requires_credential should decode");
+        assert_eq!(req.kind, Some(CredentialKind::OauthAccess));
+        assert_eq!(req.scopes, vec!["facet.write".to_string(), "facet.read".to_string()]);
+        assert_eq!(
+            req.site_hint,
+            Some(AttachmentSite::Header { name: "authorization".to_string() })
+        );
+        assert_eq!(method.md_auth_posture, Some(AuthPosture::Required));
+        assert!(!method.md_public);
+    }
+
+    /// R-4: `public: true` decodes; `requires_credential: null` (explicit
+    /// null, R-2's "omitted on the wire when None" tolerance) decodes to None.
+    #[test]
+    fn test_method_def_public_and_null_requirement() {
+        let json = r#"{
+            "mdName": "ping",
+            "mdFullPath": "echo.ping",
+            "mdNamespace": "echo",
+            "mdStreaming": false,
+            "mdParams": [],
+            "mdReturns": {"tag": "RefPrimitive", "contents": ["string", null]},
+            "requires_credential": null,
+            "public": true,
+            "auth_posture": "mixed"
+        }"#;
+        let method: MethodDef = serde_json::from_str(json).unwrap();
+        assert!(method.md_requires_credential.is_none());
+        assert!(method.md_public);
+        assert_eq!(method.md_auth_posture, Some(AuthPosture::Mixed));
+    }
+
+    /// R-4: The `other` credential kind carries its opaque name; minimal
+    /// `requires_credential` (scopes only) decodes with kind/site None.
+    #[test]
+    fn test_required_credential_variants() {
+        let other: CredentialKind =
+            serde_json::from_str(r#"{"kind": "other", "name": "bespoke"}"#).unwrap();
+        assert_eq!(other, CredentialKind::Other { name: "bespoke".to_string() });
+        assert_eq!(other.display(), "other:bespoke");
+
+        let minimal: RequiredCredential =
+            serde_json::from_str(r#"{"scopes": ["facet.write"]}"#).unwrap();
+        assert_eq!(minimal.kind, None);
+        assert_eq!(minimal.scopes, vec!["facet.write".to_string()]);
+        assert_eq!(minimal.site_hint, None);
+
+        // All four AuthPosture wire strings round-trip.
+        for (s, expected) in [
+            ("\"required\"", AuthPosture::Required),
+            ("\"optional\"", AuthPosture::Optional),
+            ("\"mixed\"", AuthPosture::Mixed),
+            ("\"none\"", AuthPosture::None),
+        ] {
+            let p: AuthPosture = serde_json::from_str(s).unwrap();
+            assert_eq!(p, expected);
+            assert_eq!(serde_json::to_string(&p).unwrap(), s.replace('\\', ""));
+        }
     }
 
     /// IR-9: Full `MethodDef` with `mdRole` present deserializes correctly.

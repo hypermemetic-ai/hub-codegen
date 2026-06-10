@@ -9,6 +9,7 @@ pub mod hash;
 pub mod cache;
 pub mod merge;
 pub mod deprecation;
+pub mod credential_surface;
 
 pub use ir::IR;
 pub use generator::{GenerationResult, Warning, GenerationOptions, TransportEnv, GenerateSelector};

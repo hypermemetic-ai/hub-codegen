@@ -48,7 +48,7 @@ fn dynamic_child_ir(
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: MethodRole::Rpc, md_deprecation: None,},
+            md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
     );
 
     // A marker type the dynamic-child return refers to.
@@ -97,7 +97,7 @@ fn dynamic_child_ir(
             md_role: MethodRole::DynamicChild {
                 list_method: list_method.map(String::from),
                 search_method: search_method.map(String::from),
-            }, md_deprecation: None,},
+            }, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
     );
 
     if let Some(name) = list_method {
@@ -112,7 +112,7 @@ fn dynamic_child_ir(
                 md_params: vec![],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                 md_bidir_type: None,
-                md_role: MethodRole::Rpc, md_deprecation: None,},
+                md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
         );
         solar_methods.push(name.to_string());
     }
@@ -135,7 +135,7 @@ fn dynamic_child_ir(
                 }],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                 md_bidir_type: None,
-                md_role: MethodRole::Rpc, md_deprecation: None,},
+                md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
         );
         solar_methods.push(name.to_string());
     }
@@ -330,7 +330,7 @@ fn test_pre_ir_regression_no_dynamic_child() {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: MethodRole::Rpc, md_deprecation: None,},
+            md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
     );
     ir.ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
 

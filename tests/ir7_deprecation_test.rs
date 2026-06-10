@@ -45,6 +45,9 @@ fn post_ir_fixture() -> IR {
                 removed_in: "0.7".to_string(),
                 message: "use foo2".to_string(),
             }),
+            md_requires_credential: None,
+            md_auth_posture: None,
+            md_public: false,
         },
     );
 
@@ -61,6 +64,9 @@ fn post_ir_fixture() -> IR {
             md_bidir_type: None,
             md_role: Default::default(),
             md_deprecation: None,
+            md_requires_credential: None,
+            md_auth_posture: None,
+            md_public: false,
         },
     );
 

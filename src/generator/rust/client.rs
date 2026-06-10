@@ -1,6 +1,7 @@
 //! Client generation for Rust
 
 use crate::ir::{IR, MethodDef, MethodRole, TypeDef, TypeRef};
+use crate::credential_surface;
 use crate::deprecation::{self, DeprecationWarning};
 use std::collections::{BTreeSet, HashMap};
 
@@ -32,6 +33,19 @@ impl NamespaceNode {
             children: HashMap::new(),
         }
     }
+}
+
+/// R-4: Generate the base client, appending the credential-requirement
+/// metadata type declarations when any method in the IR carries a surface.
+/// IRs with no requirement fields produce byte-identical pre-R-4 output.
+pub fn generate_base_client_with_ir(ir: &IR) -> String {
+    let mut content = generate_base_client();
+    if credential_surface::ir_has_surface(ir) {
+        content.push('\n');
+        content.push_str(credential_surface::rust_metadata_decls());
+        content.push('\n');
+    }
+    content
 }
 
 /// Generate base client struct with WebSocket transport
@@ -373,6 +387,11 @@ fn generate_namespace_node(
             content.push(generate_dynamic_child_trait_decls());
             content.push("".to_string());
             for method in &dynamic_children {
+                // R-4: credential-requirement metadata const for the gate.
+                if let Some(auth_const) = credential_surface::format_rust_const(method, &auth_const_name(&method.md_name)) {
+                    content.push(auth_const);
+                    content.push("".to_string());
+                }
                 content.push(generate_dynamic_child_struct(method, ir, &node.full_path));
                 content.push("".to_string());
             }
@@ -416,6 +435,12 @@ fn generate_namespace_node(
                             ));
                         }
                     }
+                }
+                // R-4: typed credential-requirement metadata const above the
+                // fn (surfacing only — enforcement is server-side).
+                if let Some(auth_const) = credential_surface::format_rust_const(method, &auth_const_name(&method.md_name)) {
+                    content.push(auth_const);
+                    content.push("".to_string());
                 }
                 content.push(generate_method(method, ir, &node.full_path));
                 content.push("".to_string());
@@ -539,6 +564,15 @@ fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
         }
     } else {
         doc_lines.push(format!("/// Call {}", method.md_full_path));
+    }
+
+    // R-4: credential-requirement doc lines (surfacing only).
+    let auth_doc = credential_surface::format_rust_doc(method);
+    if !auth_doc.is_empty() {
+        doc_lines.push("///".to_string());
+        for line in auth_doc {
+            doc_lines.push(format!("/// {}", line));
+        }
     }
 
     // Generate parameter serialization
@@ -684,6 +718,13 @@ fn to_pascal(s: &str) -> String {
 fn to_snake(s: &str) -> String {
     use heck::ToSnekCase;
     s.to_snek_case()
+}
+
+/// R-4: const name for a method's credential-requirement metadata,
+/// e.g. `send_message` → `SEND_MESSAGE_AUTH`.
+fn auth_const_name(method_name: &str) -> String {
+    use heck::ToShoutySnekCase;
+    format!("{}_AUTH", method_name.TO_SHOUTY_SNEK_CASE())
 }
 
 /// Escape Rust keywords by prefixing with r#

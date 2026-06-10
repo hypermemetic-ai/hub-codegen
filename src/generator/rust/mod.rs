@@ -67,8 +67,9 @@ pub fn generate_with_options(ir: &IR, deprecation_opts: DeprecationOptions) -> R
     let types_content = types::generate_core_types(ir);
     files.insert("src/types.rs".to_string(), types_content);
 
-    // Generate base client struct and transport
-    let client_content = client::generate_base_client();
+    // Generate base client struct and transport (R-4: appends
+    // credential-requirement metadata types when the IR surfaces any).
+    let client_content = client::generate_base_client_with_ir(ir);
     files.insert("src/client.rs".to_string(), client_content);
 
     // Generate namespace modules (methods + types, one file per namespace)

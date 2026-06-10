@@ -4,6 +4,7 @@
 //! unwrap PlexusStreamItem and return domain types.
 
 use crate::ir::{IR, MethodDef, MethodRole, ParamDef, TypeRef};
+use crate::credential_surface;
 use crate::deprecation::{self, DeprecationWarning};
 use std::collections::{BTreeSet, HashMap};
 
@@ -315,7 +316,10 @@ fn generate_namespace(
         // `irPluginRequests` (REQ-7 minimal) when the method has no per-param
         // source annotations — this keeps backends on plexus-macros 0.4.x
         // working until they upgrade to 0.5+.
-        let req_lines = render_method_jsdoc(method, namespace, ir);
+        let mut req_lines = render_method_jsdoc(method, namespace, ir);
+        // R-4: credential-requirement breadcrumbs (surfacing only —
+        // enforcement is server-side at the gate).
+        req_lines.extend(credential_surface::format_ts_jsdoc(method));
         let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
         match (desc_opt, req_lines.is_empty()) {
             (Some(desc), false) => {
@@ -380,7 +384,10 @@ fn generate_namespace(
         // `irPluginRequests` (REQ-7 minimal) when the method has no per-param
         // source annotations — this keeps backends on plexus-macros 0.4.x
         // working until they upgrade to 0.5+.
-        let req_lines = render_method_jsdoc(method, namespace, ir);
+        let mut req_lines = render_method_jsdoc(method, namespace, ir);
+        // R-4: credential-requirement breadcrumbs (surfacing only —
+        // enforcement is server-side at the gate).
+        req_lines.extend(credential_surface::format_ts_jsdoc(method));
         let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
         match (desc_opt, req_lines.is_empty()) {
             (Some(desc), false) => {
@@ -515,6 +522,35 @@ fn generate_namespace(
     lines.push(format!("export function create{}Client(rpc: RpcClient): {}Client {{", interface_name, interface_name));
     lines.push(format!("  return new {}ClientImpl(rpc);", interface_name));
     lines.push("}".to_string());
+
+    // R-4: typed per-method credential-requirement metadata. Emitted only
+    // when at least one method in this namespace carries a surface — IRs
+    // with no requirement fields produce byte-identical pre-R-4 output.
+    let mut auth_entries: Vec<(String, String)> = Vec::new();
+    for method in dynamic_children.iter().chain(flat_methods.iter()) {
+        if let Some(value) = credential_surface::format_ts_metadata_value(method) {
+            auth_entries.push((to_camel(&method.md_name), value));
+        }
+    }
+    if !auth_entries.is_empty() {
+        lines.push("".to_string());
+        for decl_line in credential_surface::ts_metadata_interface().lines() {
+            lines.push(decl_line.to_string());
+        }
+        lines.push("".to_string());
+        lines.push(format!(
+            "/** Credential requirements for {} methods (R-4). Surfacing only — the gate enforces server-side. */",
+            namespace
+        ));
+        lines.push(format!(
+            "export const {}MethodAuth: {{ readonly [method: string]: MethodAuthMetadata }} = {{",
+            interface_name
+        ));
+        for (key, value) in &auth_entries {
+            lines.push(format!("  {}: {},", key, value));
+        }
+        lines.push("};".to_string());
+    }
 
     lines.join("\n")
 }
