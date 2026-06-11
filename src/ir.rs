@@ -367,7 +367,7 @@ impl QualifiedName {
 /// - Unit variants: {"tag": "RefAny"} (no contents field)
 ///
 /// We use a custom deserializer to handle both cases.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub enum TypeRef {
     /// Named type reference
     RefNamed(QualifiedName),
@@ -403,7 +403,21 @@ impl<'de> serde::Deserialize<'de> for TypeRef {
                     .ok_or_else(|| D::Error::custom("RefNamed requires contents"))?;
                 let qname: QualifiedName = serde_json::from_value(contents.clone())
                     .map_err(|e| D::Error::custom(format!("RefNamed contents must be QualifiedName: {}", e)))?;
-                Ok(TypeRef::RefNamed(qname))
+                // Normalize primitive-named refs at the decode boundary (CA-2
+                // e2e finding): synapse builds methods whose return schema is
+                // a bare JSON-schema scalar (e.g. fidget-spinner's
+                // `spinner.spin` -> {"title": "string", "type": "string"}) as
+                // `RefNamed { local: "string", ns: <plugin> }`. No such named
+                // type exists in irTypes, so codegen would import a phantom
+                // `String` from a types module that is never generated.
+                // Generated type names are PascalCase titles; the lowercase
+                // JSON-schema type keywords can only mean the primitive.
+                match qname.qn_local_name.as_str() {
+                    "string" | "integer" | "number" | "boolean" | "object" | "array" | "null" => {
+                        Ok(TypeRef::RefPrimitive(qname.qn_local_name, None))
+                    }
+                    _ => Ok(TypeRef::RefNamed(qname)),
+                }
             }
             "RefPrimitive" => {
                 let contents = obj.get("contents")
@@ -732,6 +746,33 @@ mod tests {
         } else {
             panic!("Expected RefNamed variant");
         }
+    }
+
+    /// CA-2 e2e finding: synapse emits bare JSON-schema scalar returns
+    /// (e.g. fidget-spinner's `spinner.spin` -> `{"title": "string"}`) as
+    /// `RefNamed { local: "string", ns: "spinner" }`. The decoder must
+    /// normalize these to RefPrimitive — otherwise codegen imports a phantom
+    /// `String` type from a namespace types module that is never generated.
+    #[test]
+    fn test_primitive_named_ref_normalizes_to_primitive() {
+        for keyword in ["string", "integer", "number", "boolean", "object", "array", "null"] {
+            let json = format!(
+                r#"{{"tag": "RefNamed", "contents": {{"qnNamespace": "spinner", "qnLocalName": "{}"}}}}"#,
+                keyword
+            );
+            let type_ref: TypeRef = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                type_ref,
+                TypeRef::RefPrimitive(keyword.to_string(), None),
+                "RefNamed '{}' must normalize to RefPrimitive",
+                keyword
+            );
+        }
+
+        // PascalCase titles (real generated types) stay RefNamed.
+        let json = r#"{"tag": "RefNamed", "contents": {"qnNamespace": "spinner", "qnLocalName": "String"}}"#;
+        let type_ref: TypeRef = serde_json::from_str(json).unwrap();
+        assert!(matches!(type_ref, TypeRef::RefNamed(_)));
     }
 
     #[test]
