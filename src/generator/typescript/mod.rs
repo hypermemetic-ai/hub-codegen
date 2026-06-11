@@ -220,7 +220,7 @@ fn generate_code_files(
     }
 
     if options.transport != TransportEnv::None {
-        files.insert("transport.ts".to_string(), transport::generate_transport(options.transport));
+        files.insert("transport.ts".to_string(), transport::generate_transport(options.transport, ir));
     }
 
     // Top-level index.ts only re-exports requested plugins (or all if no filter)
@@ -255,15 +255,16 @@ fn generate_all(
 }
 
 /// GenTransport: protocol types + RPC helpers + WebSocket transport.
-/// All three files are static (no IR content) — no backend connection needed.
-fn generate_transport_only(_ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
+/// types.ts and rpc.ts are static; since CA-2 the transport carries the
+/// IR-derived method-auth registry (empty registry for surface-free IRs).
+fn generate_transport_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
     if options.transport == TransportEnv::None {
         return HashMap::new();
     }
     let mut files = HashMap::new();
     files.insert("types.ts".to_string(), types::generate_protocol_types());
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
-    files.insert("transport.ts".to_string(), transport::generate_transport(options.transport));
+    files.insert("transport.ts".to_string(), transport::generate_transport(options.transport, ir));
     files
 }
 

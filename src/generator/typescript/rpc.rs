@@ -9,7 +9,7 @@ pub fn generate_rpc_client() -> String {
 // This is Layer 1: raw RPC that returns PlexusStreamItem
 
 import type { PlexusStreamItem } from './types';
-import { PlexusError } from './types';
+import { PlexusError, errorFromStreamItem } from './types';
 
 /**
  * Raw RPC client interface for hub communication.
@@ -56,7 +56,8 @@ function transformKeys(obj: unknown): unknown {
 
 /**
  * Helper to extract data content from a PlexusStreamItem stream.
- * Throws PlexusError on error events.
+ * Throws PlexusError (or a typed subclass — ForbiddenError for "-32003",
+ * UnauthenticatedError for "-32001") on error events.
  * Automatically transforms response field names from snake_case to camelCase.
  *
  * @param stream - AsyncGenerator of PlexusStreamItem
@@ -71,12 +72,7 @@ export async function* extractData<T>(
         yield transformKeys(item.content) as T;
         break;
       case 'error':
-        throw new PlexusError(
-          item.message,
-          item.code,
-          item.recoverable,
-          item.metadata
-        );
+        throw errorFromStreamItem(item);
       case 'progress':
         // Progress events are informational, skip
         break;
@@ -89,7 +85,8 @@ export async function* extractData<T>(
 
 /**
  * Helper to collect a single result from a non-streaming method.
- * Throws PlexusError on error events.
+ * Throws PlexusError (or a typed subclass — ForbiddenError for "-32003",
+ * UnauthenticatedError for "-32001") on error events.
  * Throws if no data is received.
  * Automatically transforms response field names from snake_case to camelCase.
  *
@@ -104,12 +101,7 @@ export async function collectOne<T>(
       case 'data':
         return transformKeys(item.content) as T;
       case 'error':
-        throw new PlexusError(
-          item.message,
-          item.code,
-          item.recoverable,
-          item.metadata
-        );
+        throw errorFromStreamItem(item);
       case 'progress':
         // Progress events are informational, skip
         break;
@@ -120,8 +112,8 @@ export async function collectOne<T>(
   throw new Error('No data received from method call');
 }
 
-// Re-export PlexusError for convenience
-export { PlexusError } from './types';
+// Re-export error types for convenience
+export { PlexusError, ForbiddenError, UnauthenticatedError } from './types';
 
 // ============================================================================
 // IR-9: Typed-handle runtime primitives for DynamicChild methods

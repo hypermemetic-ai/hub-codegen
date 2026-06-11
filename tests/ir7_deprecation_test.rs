@@ -250,10 +250,13 @@ fn test_no_deprecation_annotations_suppresses_output() {
             .collect::<Vec<_>>()
     );
 
-    // Zero annotations in generated files.
+    // Zero IR-driven annotations in generated files. (CA-2: the static
+    // transport template carries one hand-authored `@deprecated Legacy`
+    // JSDoc on the legacy `authToken` config field — that is template
+    // text, not an IR-driven annotation, and is excluded here.)
     for (path, content) in &result.files {
         assert!(
-            !content.contains("@deprecated"),
+            !has_ir_driven_deprecation(content),
             "File {} contained @deprecated when suppressed. Content:\n{}",
             path,
             content
@@ -264,6 +267,17 @@ fn test_no_deprecation_annotations_suppresses_output() {
             path
         );
     }
+}
+
+/// True when `content` carries an IR-driven `@deprecated` annotation.
+/// The CA-2 transport template's static `@deprecated Legacy SAFE-7`
+/// JSDoc (on the legacy `authToken` config field) is template-authored
+/// and exempt.
+fn has_ir_driven_deprecation(content: &str) -> bool {
+    content
+        .lines()
+        .filter(|l| !l.contains("@deprecated Legacy SAFE-7"))
+        .any(|l| l.contains("@deprecated"))
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -307,10 +321,12 @@ fn test_pre_ir_byte_identical_output() {
         assert_eq!(lc, rc, "file {} differed between annotation modes", lp);
     }
 
-    // Additionally, pre-IR output must contain NO deprecation annotations.
+    // Additionally, pre-IR output must contain NO IR-driven deprecation
+    // annotations (the CA-2 transport template's static `@deprecated
+    // Legacy SAFE-7` JSDoc is template text — see has_ir_driven_deprecation).
     for (path, content) in &result_default.files {
         assert!(
-            !content.contains("@deprecated"),
+            !has_ir_driven_deprecation(content),
             "Pre-IR file {} unexpectedly contains @deprecated",
             path
         );

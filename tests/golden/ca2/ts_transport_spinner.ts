@@ -1,86 +1,4 @@
-//! WebSocket transport generation
-//!
-//! Generates the WebSocket transport class. Imports protocol types from ./types
-//! and the RpcClient interface from ./rpc — no duplication across the three files.
-//!
-//! CA-2 (trak facet `0281174b-4459-471e-b197-ba5a770eb979`): the transport is
-//! no longer a fully static template — it carries a schema-directed method-auth
-//! registry rendered from the IR (`METHOD_AUTH`) plus the connection-level
-//! attachment hint derived from the per-method `site_hint`s CA-1 populates
-//! (`CONNECTION_SITE_HINT`). IRs with no credential surface render an empty
-//! registry and an `undefined` hint — the runtime then behaves exactly like
-//! the pre-CA-2 convention-based transport.
-
-use crate::credential_surface;
-use crate::generator::TransportEnv;
-use crate::ir::{AttachmentSite, IR};
-
-/// Generate the WebSocket transport implementation
-pub fn generate_transport(env: TransportEnv, ir: &IR) -> String {
-    let template = get_transport_template()
-        .replace("__METHOD_AUTH_INTERFACE__", credential_surface::ts_metadata_interface())
-        .replace("__METHOD_AUTH__", &render_method_auth_registry(ir))
-        .replace("__CONNECTION_SITE_HINT__", &render_connection_site_hint(ir));
-    if env == TransportEnv::Browser {
-        template.lines()
-            .filter(|l| *l != "import WebSocket from 'ws';")
-            .collect::<Vec<_>>()
-            .join("\n")
-    } else {
-        template
-    }
-}
-
-/// Render the `METHOD_AUTH` object literal: one entry per method that
-/// carries a credential surface (same renderer as the per-namespace
-/// `<Ns>MethodAuth` consts — `credential_surface::format_ts_metadata_value`),
-/// keyed by the FULL method path, sorted for determinism.
-///
-/// Absence contract: an IR with no surfaced method renders `{}`.
-fn render_method_auth_registry(ir: &IR) -> String {
-    let mut paths: Vec<&String> = ir.ir_methods.keys().collect();
-    paths.sort();
-    let mut lines: Vec<String> = Vec::new();
-    for path in paths {
-        let method = &ir.ir_methods[path];
-        if let Some(value) = credential_surface::format_ts_metadata_value(method) {
-            lines.push(format!("  '{}': {},", path, value));
-        }
-    }
-    if lines.is_empty() {
-        "{}".to_string()
-    } else {
-        format!("{{\n{}\n}}", lines.join("\n"))
-    }
-}
-
-/// Derive the connection-level attachment site for the WS upgrade from the
-/// schema: the first `header:`/`cookie:` `site_hint` in sorted method order.
-/// Post-CA-1 backends derive a uniform hint from their advertised auth
-/// capabilities, so "first" is also "unanimous" in practice; `first_frame`
-/// and `in_rpc_param` sites are NOT upgrade-time sites and are skipped.
-///
-/// Returns the TS literal (`'header:authorization'` or `undefined`).
-fn render_connection_site_hint(ir: &IR) -> String {
-    let mut paths: Vec<&String> = ir.ir_methods.keys().collect();
-    paths.sort();
-    for path in paths {
-        if let Some(req) = &ir.ir_methods[path].md_requires_credential {
-            if let Some(site) = &req.site_hint {
-                match site {
-                    AttachmentSite::Header { .. } | AttachmentSite::Cookie { .. } => {
-                        return format!("'{}'", site.display());
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-    "undefined".to_string()
-}
-
-fn get_transport_template() -> String {
-    r#"// Plexus WebSocket transport
+// Plexus WebSocket transport
 //
 // Auth on the Plexus wire happens at the WebSocket UPGRADE: the server's
 // CombinedAuthMiddleware accepts a `Cookie:` header (validator disambiguates,
@@ -133,7 +51,22 @@ export type CredentialSupplier = () => string | Promise<string>;
  */
 export type Credentials = string | CredentialSupplier | CredentialStore;
 
-__METHOD_AUTH_INTERFACE__
+/** Per-method credential-requirement metadata (R-4). Surfacing only — enforcement is server-side. */
+export interface MethodAuthMetadata {
+  /** Credential the caller must hold. Absent = no scope-derived requirement. */
+  readonly requiresCredential?: {
+    /** Required credential kind (e.g. 'bearer', 'oauth_access'). Absent = any kind whose scopes match. */
+    readonly kind?: string;
+    /** Required scope set — the caller must satisfy ALL listed scopes. */
+    readonly scopes: readonly string[];
+    /** Preferred attach site (advisory), e.g. 'header:authorization'. */
+    readonly siteHint?: string;
+  };
+  /** Explicitly public — exempt from the default-deny gate. */
+  readonly public?: boolean;
+  /** Declared auth posture of the owning activation. */
+  readonly authPosture?: 'required' | 'optional' | 'mixed' | 'none';
+}
 
 /**
  * Normalized credential requirements for one method, as returned by
@@ -155,7 +88,10 @@ export interface MethodRequirements {
  * (CA-2). Keys are full method paths. Methods absent from this registry
  * advertised no credential surface.
  */
-const METHOD_AUTH: { readonly [fullPath: string]: MethodAuthMetadata } = __METHOD_AUTH__;
+const METHOD_AUTH: { readonly [fullPath: string]: MethodAuthMetadata } = {
+  'spinner.spin': { requiresCredential: { scopes: ['spinner.spin'], siteHint: 'header:authorization' } },
+  'spinner.status': { public: true },
+};
 
 /**
  * Connection-level attachment hint derived from the schema's per-method
@@ -163,7 +99,7 @@ const METHOD_AUTH: { readonly [fullPath: string]: MethodAuthMetadata } = __METHO
  * capabilities, so they are uniform per backend). `undefined` when the
  * schema advertises no upgrade-time (header/cookie) site.
  */
-const CONNECTION_SITE_HINT: string | undefined = __CONNECTION_SITE_HINT__;
+const CONNECTION_SITE_HINT: string | undefined = 'header:authorization';
 
 /** Fallback attach convention when neither override nor schema names a site. */
 const CONVENTION_SITE = 'cookie:access_token';
@@ -635,152 +571,4 @@ export class PlexusRpcClient implements RpcClient {
 
 export function createClient(config: PlexusRpcConfig): PlexusRpcClient {
   return new PlexusRpcClient(config);
-}
-"#.to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ir::{
-        AttachmentSite, AuthPosture, MethodDef, RequiredCredential, TypeRef,
-    };
-    use std::collections::HashMap;
-
-    fn method(
-        ns: &str,
-        name: &str,
-        requires: Option<RequiredCredential>,
-        public: bool,
-    ) -> MethodDef {
-        MethodDef {
-            md_name: name.to_string(),
-            md_full_path: format!("{}.{}", ns, name),
-            md_namespace: ns.to_string(),
-            md_description: None,
-            md_streaming: false,
-            md_params: vec![],
-            md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_bidir_type: None,
-            md_role: Default::default(),
-            md_deprecation: None,
-            md_requires_credential: requires,
-            md_auth_posture: if public { Some(AuthPosture::Required) } else { None },
-            md_public: public,
-        }
-    }
-
-    fn ir_with(methods: Vec<MethodDef>) -> IR {
-        let mut ir_methods = HashMap::new();
-        let mut ir_plugins: HashMap<String, Vec<String>> = HashMap::new();
-        for m in methods {
-            ir_plugins
-                .entry(m.md_namespace.clone())
-                .or_default()
-                .push(m.md_name.clone());
-            ir_methods.insert(m.md_full_path.clone(), m);
-        }
-        IR {
-            ir_version: "2.0".to_string(),
-            ir_backend: "test".to_string(),
-            ir_hash: Some("ca2".to_string()),
-            ir_metadata: None,
-            ir_types: HashMap::new(),
-            ir_methods,
-            ir_plugins,
-            ir_plugin_deprecations: HashMap::new(),
-            ir_plugin_requests: HashMap::new(),
-        }
-    }
-
-    fn spinner_requirement() -> RequiredCredential {
-        RequiredCredential {
-            kind: None,
-            scopes: vec!["spinner.spin".to_string()],
-            site_hint: Some(AttachmentSite::Header {
-                name: "authorization".to_string(),
-            }),
-        }
-    }
-
-    #[test]
-    fn registry_renders_surfaced_methods_sorted_by_full_path() {
-        let ir = ir_with(vec![
-            method("spinner", "spin", Some(spinner_requirement()), false),
-            method("spinner", "status", None, true),
-            method("spinner", "noop", None, false), // no surface — excluded
-        ]);
-        let registry = render_method_auth_registry(&ir);
-        assert_eq!(
-            registry,
-            "{\n  'spinner.spin': { requiresCredential: { scopes: ['spinner.spin'], siteHint: 'header:authorization' } },\n  'spinner.status': { public: true, authPosture: 'required' },\n}"
-        );
-    }
-
-    #[test]
-    fn registry_empty_when_no_surface() {
-        let ir = ir_with(vec![method("svc", "ping", None, false)]);
-        assert_eq!(render_method_auth_registry(&ir), "{}");
-        assert_eq!(render_connection_site_hint(&ir), "undefined");
-    }
-
-    #[test]
-    fn connection_hint_derives_from_header_site() {
-        let ir = ir_with(vec![
-            method("spinner", "spin", Some(spinner_requirement()), false),
-            method("spinner", "status", None, true),
-        ]);
-        assert_eq!(render_connection_site_hint(&ir), "'header:authorization'");
-    }
-
-    #[test]
-    fn connection_hint_skips_non_upgrade_sites() {
-        let ir = ir_with(vec![method(
-            "svc",
-            "send",
-            Some(RequiredCredential {
-                kind: None,
-                scopes: vec!["svc.send".to_string()],
-                site_hint: Some(AttachmentSite::InRpcParam {
-                    param: "token".to_string(),
-                }),
-            }),
-            false,
-        )]);
-        assert_eq!(render_connection_site_hint(&ir), "undefined");
-    }
-
-    #[test]
-    fn connection_hint_cookie_site() {
-        let ir = ir_with(vec![method(
-            "svc",
-            "send",
-            Some(RequiredCredential {
-                kind: None,
-                scopes: vec!["svc.send".to_string()],
-                site_hint: Some(AttachmentSite::Cookie {
-                    name: "plexus_session".to_string(),
-                }),
-            }),
-            false,
-        )]);
-        assert_eq!(render_connection_site_hint(&ir), "'cookie:plexus_session'");
-    }
-
-    #[test]
-    fn template_has_no_unreplaced_placeholders() {
-        let ir = ir_with(vec![method("svc", "ping", None, false)]);
-        let out = generate_transport(TransportEnv::Ws, &ir);
-        assert!(!out.contains("__METHOD_AUTH__"));
-        assert!(!out.contains("__CONNECTION_SITE_HINT__"));
-        assert!(!out.contains("__METHOD_AUTH_INTERFACE__"));
-        assert!(out.contains("export interface MethodAuthMetadata"));
-    }
-
-    #[test]
-    fn browser_variant_strips_ws_import() {
-        let ir = ir_with(vec![method("svc", "ping", None, false)]);
-        let out = generate_transport(TransportEnv::Browser, &ir);
-        assert!(!out.contains("import WebSocket from 'ws';"));
-    }
 }

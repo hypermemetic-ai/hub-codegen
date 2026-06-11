@@ -227,6 +227,66 @@ export class PlexusError extends Error {
     this.metadata = metadata;
   }
 }
+
+// === CA-2: typed authorization errors ===
+//
+// The server delivers dispatch-time auth failures as stream error items on
+// the accepted subscription (plexus-core's `<backend>.call` handler maps
+// `PlexusError` to a stream item carrying the semantic JSON-RPC code as a
+// string):
+//   "-32001"  Unauthenticated — no/invalid session
+//   "-32003"  Forbidden — authenticated but not authorized (e.g. the R-5
+//             scope gate: "Forbidden: missing required scope '<scope>'")
+
+/**
+ * Authenticated but not authorized (stream error code "-32003").
+ *
+ * When the denial came from the scope gate, `missingScope` carries the
+ * unmet scope parsed from the server message
+ * (`Forbidden: missing required scope '<scope>'`).
+ */
+export class ForbiddenError extends PlexusError {
+  readonly missingScope: string | undefined;
+  constructor(
+    message: string,
+    recoverable: boolean = false,
+    metadata?: StreamMetadata
+  ) {
+    super(message, '-32003', recoverable, metadata);
+    this.name = 'ForbiddenError';
+    const m = /missing required scope '([^']+)'/.exec(message);
+    this.missingScope = m ? m[1] : undefined;
+  }
+}
+
+/** No/invalid session where one was required (stream error code "-32001"). */
+export class UnauthenticatedError extends PlexusError {
+  constructor(
+    message: string,
+    recoverable: boolean = false,
+    metadata?: StreamMetadata
+  ) {
+    super(message, '-32001', recoverable, metadata);
+    this.name = 'UnauthenticatedError';
+  }
+}
+
+/**
+ * Construct the appropriate typed error for a stream error item (CA-2).
+ * Falls back to plain PlexusError for codes without a dedicated class.
+ */
+export function errorFromStreamItem(item: {
+  message: string;
+  code?: string;
+  recoverable: boolean;
+  metadata?: StreamMetadata;
+}): PlexusError {
+  switch (item.code) {
+    case '-32003': return new ForbiddenError(item.message, item.recoverable, item.metadata);
+    case '-32001': return new UnauthenticatedError(item.message, item.recoverable, item.metadata);
+    default:       return new PlexusError(item.message, item.code, item.recoverable, item.metadata);
+  }
+}
 "#.to_string()
 }
 
