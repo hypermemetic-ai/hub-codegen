@@ -92,12 +92,18 @@ fn surfaced_method(
     }
 }
 
-/// Golden fixture: two namespaces, one method each.
+/// Golden fixture: three namespaces, one method each.
 /// - `cone.send_message`: scope-derived requirement (kind + 2 scopes +
 ///   site hint) and posture `required` — the "scope + posture" method.
 /// - `echo.ping`: explicitly `public`, posture `required` — the "public"
 ///   method (upstream macro construction makes `public` mutually
 ///   exclusive with a populated `requires_credential`).
+/// - `spinner.spin`: the CA-1 gauntlet shape (trak facet
+///   `ccc924ad-0e78-4d4b-b71f-0018d249d0bf`) — what a real backend now
+///   emits: `kind: None` (scope-derived via `from_method_scope`), one
+///   scope, and a `site_hint` derived at schema-assembly time from the
+///   hub's advertised bearer capability (`header:authorization`). Mirrors
+///   fidget-spinner's live `spinner.spin` wire schema.
 fn golden_fixture() -> IR {
     let mut ir_methods = HashMap::new();
     ir_methods.insert(
@@ -128,10 +134,28 @@ fn golden_fixture() -> IR {
             true,
         ),
     );
+    ir_methods.insert(
+        "spinner.spin".to_string(),
+        surfaced_method(
+            "spinner",
+            "spin",
+            "Spin the fidget (requires scope spinner.spin)",
+            Some(RequiredCredential {
+                kind: None,
+                scopes: vec!["spinner.spin".to_string()],
+                site_hint: Some(AttachmentSite::Header {
+                    name: "authorization".to_string(),
+                }),
+            }),
+            None,
+            false,
+        ),
+    );
 
     let mut ir_plugins = HashMap::new();
     ir_plugins.insert("cone".to_string(), vec!["send_message".to_string()]);
     ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
+    ir_plugins.insert("spinner".to_string(), vec!["spin".to_string()]);
 
     IR {
         ir_version: "2.0".to_string(),
@@ -451,6 +475,10 @@ fn test_ts_golden_snapshot() {
         "ts_echo_client.ts",
         result.files.get("echo/client.ts").expect("echo/client.ts generated"),
     );
+    assert_golden(
+        "ts_spinner_client.ts",
+        result.files.get("spinner/client.ts").expect("spinner/client.ts generated"),
+    );
 }
 
 /// Golden Rust: the generated namespace modules (scope+posture method,
@@ -470,6 +498,10 @@ fn test_rust_golden_snapshot() {
     assert_golden(
         "rust_echo_mod.rs",
         result.files.get("src/echo/mod.rs").expect("src/echo/mod.rs generated"),
+    );
+    assert_golden(
+        "rust_spinner_mod.rs",
+        result.files.get("src/spinner/mod.rs").expect("src/spinner/mod.rs generated"),
     );
     assert_golden(
         "rust_client.rs",
