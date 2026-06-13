@@ -565,9 +565,25 @@ pub fn generate_namespace_types(
     let mut files = HashMap::new();
 
     // Get unique namespaces from types
-    let namespaces: HashSet<_> = ir.ir_types.values()
+    let mut namespaces: HashSet<_> = ir.ir_types.values()
         .map(|td| td.td_namespace.as_str())
         .collect();
+
+    // Also include namespaces that declare no types but whose methods reference
+    // a same-namespace named type with no TypeDef (a schema gap). Without this,
+    // client.ts emits `import ... from './types'` for those referenced names
+    // while no types.ts is ever written → tsc TS2307 (DEFECT). Emitting the file
+    // here lets the existing stub path fill in `export type X = unknown;`, so both
+    // the import resolves and the symbol exists.
+    for method in ir.ir_methods.values() {
+        let ns = method.md_namespace.as_str();
+        if ns.is_empty() || namespaces.contains(ns) {
+            continue;
+        }
+        if !collect_missing_types_for_namespace(ir, ns).is_empty() {
+            namespaces.insert(ns);
+        }
+    }
 
     // Sort for deterministic warning order.
     let mut sorted_ns: Vec<_> = namespaces.into_iter().collect();
