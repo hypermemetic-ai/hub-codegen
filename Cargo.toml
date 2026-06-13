@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 description = "Multi-language code generator for Hub plugins from Synapse IR"
 
 [features]
-default = ["typescript"]
+default = ["typescript", "rust"]
 typescript = []
 rust = []
 all = ["typescript", "rust"]
