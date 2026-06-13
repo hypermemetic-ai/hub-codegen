@@ -9,6 +9,7 @@ mod tests;
 use crate::ir::IR;
 use crate::generator::{GenerationResult, Warning};
 use crate::deprecation::{self, DeprecationOptions, DeprecationWarning};
+use crate::hash::compute_file_hashes;
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -85,9 +86,9 @@ pub fn generate_with_options(ir: &IR, deprecation_opts: DeprecationOptions) -> R
     files.insert("Cargo.toml".to_string(), cargo_toml);
 
     Ok(GenerationResult {
+        file_hashes: compute_file_hashes(&files),
         files,
         warnings,
-        file_hashes: HashMap::new(),
         dependencies: HashMap::new(),
         dev_dependencies: HashMap::new(),
         deprecation_warnings,
