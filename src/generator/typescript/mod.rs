@@ -227,10 +227,10 @@ fn generate_code_files(
     let index_filter = partition.as_ref().map(|p| &p.requested);
     files.insert("index.ts".to_string(), generate_index_filtered(ir, options.transport, index_filter));
     files.insert("tsconfig.json".to_string(), package::generate_tsconfig(options.transport));
-    files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, &options.backend_url));
+    files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, options.backend_url.as_deref()));
 
     if tests::has_bidir_methods(ir) {
-        files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport, &options.backend_url));
+        files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport, options.backend_url.as_deref()));
     }
 
     files
@@ -302,7 +302,7 @@ fn generate_plugins_only(
 /// GenSmoke: schema walk smoke test (no test framework)
 fn generate_smoke_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
     let mut files = HashMap::new();
-    let content = tests::generate_schema_walk_smoke(ir, options.transport, &options.smoke_transport_path);
+    let content = tests::generate_schema_walk_smoke(ir, options.transport, &options.smoke_transport_path, options.backend_url.as_deref());
     files.insert("smoke.ts".to_string(), content);
     files
 }

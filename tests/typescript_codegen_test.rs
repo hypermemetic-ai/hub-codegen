@@ -491,6 +491,34 @@ fn test_selector_smoke_schema_walk() {
     assert!(!smoke.contains("echo.ping"), "Schema walk smoke must not use domain-specific methods");
 }
 
+/// No backend URL is baked in by default: the smoke tests read `PLEXUS_URL`
+/// and fail fast without it; `backend_url` (`--backend-url`) is only their
+/// fallback when given.
+#[test]
+fn test_smoke_tests_bake_in_no_default_url() {
+    let ir = minimal_ir();
+    for (generate, path) in [(GenerateSelector::All, "test/smoke.test.ts"), (GenerateSelector::Smoke, "smoke.ts")] {
+        let opts = GenerationOptions { generate, ..GenerationOptions::default() };
+        let result = generate_typescript(&ir, &opts).unwrap();
+        let smoke = result.files.get(path).expect("smoke test emitted");
+        assert!(smoke.contains(r#"process.env.PLEXUS_URL ?? "";"#), "{path}: no URL may be baked in by default:\n{smoke}");
+        assert!(smoke.contains("PLEXUS_URL is not set"), "{path}: without a URL the smoke test must require PLEXUS_URL");
+
+        let opts = GenerationOptions {
+            generate,
+            backend_url: Some("ws://127.0.0.1:9".to_string()),
+            ..GenerationOptions::default()
+        };
+        let result = generate_typescript(&ir, &opts).unwrap();
+        let smoke = result.files.get(path).expect("smoke test emitted");
+        assert!(
+            smoke.contains(r#"process.env.PLEXUS_URL ?? "ws://127.0.0.1:9";"#),
+            "{path}: the given URL must be the PLEXUS_URL fallback:\n{smoke}"
+        );
+        assert!(!smoke.contains("PLEXUS_URL is not set"), "{path}: a given URL makes PLEXUS_URL optional");
+    }
+}
+
 /// `--generate package`: only package.json.
 #[test]
 fn test_selector_package_only() {

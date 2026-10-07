@@ -1,382 +1,146 @@
 # hub-codegen
 
-Multi-language code generator for Plexus clients from Synapse IR.
+Generates typed Plexus RPC clients — TypeScript and Rust — from synapse's IR.
 
-## Features
+```
+Plexus RPC backend ──schema──▶ synapse (IR builder) ──IR JSON──▶ hub-codegen ──▶ TypeScript / Rust client
+```
 
-The codegen supports multiple target languages via Cargo feature flags:
+hub-codegen reads one IR document and writes a client. It never talks to a
+backend: synapse builds the IR from a running backend's schema, and
+synapse-cc orchestrates a whole run — IR, codegen, merging with files edited
+on disk, installing, compiling and smoke-testing the client.
 
-- `typescript` (default) - Generate TypeScript client
-- `rust` - Generate Rust client
-- `all` - Enable all generators
+## Running it
 
-## Usage
+**Through synapse-cc** (the normal way). A project made from plexus-starter
+runs `scripts/codegen.sh` (behind `npm run build`), which runs
+`synapse-cc build` inside the `plexus-codegen` Docker image — synapse,
+synapse-cc and hub-codegen in one image, built by
+`dockerfiles/plexus-codegen/build.sh` in the hypermemetic workspace. With the tools installed, `synapse-cc build` in a
+directory holding a `synapse.config.json` does the same on the host.
+synapse-cc calls hub-codegen with `--output-format json` and writes the files
+itself.
 
-### TypeScript (default)
+**Directly**, for development:
 
 ```bash
-# Generate TypeScript client
-synapse plexus -i | cargo run --manifest-path hub-codegen/Cargo.toml -- -o /tmp/client
+synapse -P <port> -i <backend> > ir.json            # the IR, from a running backend
 
-# Or explicitly
-cargo run --features typescript -- -o /tmp/client < ir.json
+cargo run -- ir.json -o ./generated                 # TypeScript client (the default target)
+cargo run -- ir.json -o ./rust-client -t rust       # Rust client
+cargo run -- ir.json --output-format json           # the JSON envelope synapse-cc consumes, on stdout
+synapse -P <port> -i <backend> | cargo run -- -o ./generated   # IR on stdin
 ```
 
-### Rust
+| option | |
+| -- | -- |
+| `-t, --target` | `typescript` (default) or `rust` |
+| `-o, --output` | output directory in `files` mode (default `./generated`) |
+| `--output-format` | `files` (write, with three-way merge and a cache manifest) or `json` (stdout, no writes) |
+| `--generate` | TS artifact subset: `all`, `transport`, `rpc`, `plugins`, `smoke`, `package` |
+| `--plugins` | comma-separated namespaces to generate |
+| `--transport` | `ws` (Node), `browser` (native WebSocket) or `none` (external `@plexus/rpc-client`) |
+| `--merge-strategy` | what `files` mode does with a file edited since it was generated: `skip` (default) or `force` |
+| `--backend-url` | the URL the generated smoke tests fall back to when `PLEXUS_URL` is unset; no default — without it they require `PLEXUS_URL` |
+| `--fail-on-deprecated`, `--no-deprecation-annotations` | deprecated IR surface: fail on it, or don't annotate it |
 
-```bash
-# Generate Rust client
-cargo run --features rust --no-default-features -- -t rust -o /tmp/rust-client < ir.json
-```
+`cargo run -- --help` lists every option.
 
-### All Targets
+## Output
 
-```bash
-# Build with all generators
-cargo build --features all
+TypeScript:
 
-# Use CLI flag to select target
-cargo run --features all -- -t typescript -o /tmp/ts-client < ir.json
-cargo run --features all -- -t rust -o /tmp/rust-client < ir.json
-```
-
-## CLI Options
-
-```
-Generate client code from Synapse IR
-
-Usage: hub-codegen [OPTIONS] [INPUT]
-
-Arguments:
-  [INPUT]  Path to IR JSON file (use - for stdin) [default: -]
-
-Options:
-  -o, --output <OUTPUT>  Output directory [default: ./generated]
-  -t, --target <TARGET>  Target language [default: typescript] [possible values: typescript, rust]
-      --dry-run          Dry run - print generated files without writing
-  -h, --help             Print help
-```
-
-## Architecture
-
-```
-Rust Types → JSON Schema → Synapse IR → hub-codegen → Target Language
-                           (Haskell)      (Rust)        (TS/Rust/...)
-```
-
-- **IR** (`src/ir.rs`) - Language-agnostic intermediate representation
-- **TypeScript Generator** (`src/generator/typescript/`) - TypeScript client generation
-- **Rust Generator** (`src/generator/rust/`) - Rust client generation
-
-## Output Structure
-
-### TypeScript
 ```
 generated/
-├── types.ts          # Core transport types
-├── rpc.ts           # RPC client interface
-├── transport.ts     # WebSocket transport
-├── index.ts         # Public API
-├── package.json
-├── tsconfig.json
-└── <namespace>/
-    ├── types.ts     # Namespace types
-    ├── client.ts    # Namespace methods
-    └── index.ts     # Namespace exports
+├── types.ts            # protocol types: PlexusStreamItem, StandardRequest/Response, errors
+├── rpc.ts              # RpcClient interface and stream helpers
+├── transport.ts        # PlexusRpcClient — WebSocket transport, credentials, bidirectional requests
+├── index.ts            # re-exports, one `export * as <Namespace>` per namespace
+├── package.json, tsconfig.json, .codegen-metadata.json
+├── <namespace>/        # nested namespaces nest as directories
+│   ├── types.ts
+│   ├── client.ts       # create<Namespace>Client(rpc)
+│   └── index.ts
+└── test/smoke.test.ts  # bun test; plus bidir-smoke.test.ts when the backend has `interactive`
 ```
 
-### Rust
-```
-generated/
-├── lib.rs           # Module re-exports
-├── types.rs         # All type definitions
-├── client.rs        # PlexusClient with methods
-└── Cargo.toml       # Package manifest
-```
-
-## Docker
-
-Run the full pipeline (Substrate → Synapse → hub-codegen) in Docker:
-
-```bash
-# Build image
-docker build -t hub-codegen:dev .
-
-# Run full pipeline (mounts substrate and synapse source)
-docker-compose run dev
-
-# Or specify language
-docker-compose run dev typescript
-```
-
-See [README.docker.md](README.docker.md) for details.
-
-## Bidirectional Communication (Client-Side)
-
-Plexus supports **bidirectional communication**, where servers can request input from clients during stream execution. This section documents how TypeScript clients handle these requests.
-
-### Overview
-
-During a streaming RPC call, the server may send `PlexusStreamItem_Request` items that require a client response:
+Rust:
 
 ```
-Client                              Server
-  |                                    |
-  |---- call("wizard", {}) ----------->|
-  |                                    |
-  |<--- PlexusStreamItem_Data ---------|  (WizardEvent::Started)
-  |                                    |
-  |<--- PlexusStreamItem_Request ------|  (prompt: "Enter name")
-  |---- respond(requestId, text) ----->|
-  |                                    |
-  |<--- PlexusStreamItem_Data ---------|  (WizardEvent::NameCollected)
-  |<--- PlexusStreamItem_Done ---------|
+rust-client/
+├── Cargo.toml
+└── src/
+    ├── lib.rs
+    ├── types.rs
+    ├── client.rs
+    └── <namespace>/mod.rs
 ```
 
-### PlexusStreamItem_Request Format
+Cargo features pick the generators: `typescript` and `rust` (both on by
+default), or `all`.
 
-When the server needs client input, it sends a request item:
+## Using a generated TypeScript client
 
 ```typescript
-interface PlexusStreamItem_Request {
-  type: 'request';
-  requestId: string;           // UUID to correlate response
-  requestData: StandardRequest; // The actual request
-  timeoutMs: number;           // How long server will wait
-}
+import { createClient, Greeter, type StandardRequest, type StandardResponse } from './generated';
+
+const rpc = createClient({ backend: 'starter', url: process.env.PLEXUS_URL! });
+await rpc.connect();
+const greeter = Greeter.createGreeterClient(rpc);
 ```
 
-### StandardRequest Types
+### Bidirectional requests
 
-Three standard request types cover common UI patterns:
-
-```typescript
-// Confirmation (yes/no)
-interface StandardRequest_Confirm {
-  type: 'confirm';
-  message: string;      // "Delete 3 files?"
-  default?: boolean;    // Suggested default
-}
-
-// Text input
-interface StandardRequest_Prompt {
-  type: 'prompt';
-  message: string;      // "Enter project name:"
-  default?: string;     // Pre-filled value
-  placeholder?: string; // Input hint
-}
-
-// Selection menu
-interface StandardRequest_Select {
-  type: 'select';
-  message: string;      // "Choose template:"
-  options: SelectOption[];
-  multiSelect?: boolean;
-}
-
-interface SelectOption {
-  value: string;        // Returned when selected
-  label: string;        // Display text
-  description?: string; // Additional context
-}
-```
-
-### StandardResponse Types
-
-Respond with the matching type:
+During a streaming call the server may send a `request` stream item
+(`PlexusStreamItemRequest`: `requestId`, `requestData: StandardRequest`,
+`timeoutMs`) and wait for the client's answer. The transport passes
+`requestData` to the `onBidirectionalRequest` handler from its config (or
+`setBidirectionalHandler`) and sends what it returns to `<backend>.respond`.
+No handler, a handler that throws or returns `undefined`, or no answer within
+`timeoutMs` sends `{ type: 'cancelled' }`.
 
 ```typescript
-// Response to confirm
-interface StandardResponse_Confirmed {
-  type: 'confirmed';
-  value: boolean;
-}
-
-// Response to prompt
-interface StandardResponse_Text {
-  type: 'text';
-  value: string;
-}
-
-// Response to select
-interface StandardResponse_Selected {
-  type: 'selected';
-  values: string[];  // Selected option values
-}
-
-// Cancel any request
-interface StandardResponse_Cancelled {
-  type: 'cancelled';
-}
-```
-
-### Handling Requests (WebSocket Transport)
-
-The `PlexusRpcClient` accepts a bidirectional handler in its config:
-
-```typescript
-import { createClient, StandardRequest, StandardResponse } from './generated';
-
-const client = createClient({
-  backend: 'substrate',
-  url: 'ws://localhost:4444',
-  onBidirectionalRequest: async (request: StandardRequest): Promise<StandardResponse | undefined> => {
-    switch (request.type) {
-      case 'confirm':
-        // Show confirmation dialog
-        const confirmed = await showConfirmDialog(request.message);
-        return { type: 'confirmed', value: confirmed };
-
-      case 'prompt':
-        // Show text input
-        const text = await showPromptDialog(request.message, request.default);
-        if (text === null) return { type: 'cancelled' };
-        return { type: 'text', value: text };
-
-      case 'select':
-        // Show selection menu
-        const selected = await showSelectDialog(
-          request.message,
-          request.options,
-          request.multiSelect
-        );
-        if (selected === null) return { type: 'cancelled' };
-        return { type: 'selected', values: selected };
-
-      default:
-        return { type: 'cancelled' };
+const rpc = createClient({
+  backend: 'starter',
+  url: process.env.PLEXUS_URL!,
+  onBidirectionalRequest: async (req: StandardRequest): Promise<StandardResponse | undefined> => {
+    switch (req.type) {
+      case 'confirm': return { type: 'confirmed', value: await askYesNo(req.message, req.default) };
+      case 'prompt':  return { type: 'text', value: await ask(req.message, req.default) };
+      case 'select':  return { type: 'selected', values: await choose(req.message, req.options, req.multiSelect) };
     }
-  }
+  },
 });
-
-// Now calls to bidirectional methods will trigger the handler
-const stream = client.interactive.wizard();
-for await (const item of stream) {
-  // Process stream items as usual
-  // Requests are handled automatically by onBidirectionalRequest
-}
 ```
 
-### Handling Requests (MCP Transport)
-
-For MCP transport, requests arrive as logging notifications and responses
-are sent via the `_plexus_respond` tool:
-
-```typescript
-// Request arrives as logging notification
-{
-  "method": "notifications/message",
-  "params": {
-    "level": "warning",
-    "logger": "plexus",
-    "data": {
-      "type": "request",
-      "requestId": "550e8400-e29b-41d4-a716-446655440000",
-      "requestData": {
-        "type": "confirm",
-        "message": "Delete files?"
-      },
-      "timeoutMs": 30000
-    }
-  }
-}
-
-// Respond by calling _plexus_respond tool
-{
-  "method": "tools/call",
-  "params": {
-    "name": "_plexus_respond",
-    "arguments": {
-      "request_id": "550e8400-e29b-41d4-a716-446655440000",
-      "response": {
-        "type": "confirmed",
-        "value": true
-      }
-    }
-  }
-}
-```
-
-### Timeout Behavior
-
-- Requests include `timeoutMs` indicating how long the server will wait
-- If the client doesn't respond in time, the server receives a timeout error
-- Clients should cancel requests they can't handle immediately
-
-### Example: CLI Implementation
-
-```typescript
-import * as readline from 'readline';
-
-async function handleBidirectionalRequest(
-  request: StandardRequest
-): Promise<StandardResponse> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  try {
-    switch (request.type) {
-      case 'confirm': {
-        const answer = await question(rl, `${request.message} (y/n): `);
-        const value = answer.toLowerCase().startsWith('y');
-        return { type: 'confirmed', value };
-      }
-
-      case 'prompt': {
-        const defaultHint = request.default ? ` [${request.default}]` : '';
-        const answer = await question(rl, `${request.message}${defaultHint}: `);
-        return { type: 'text', value: answer || request.default || '' };
-      }
-
-      case 'select': {
-        console.log(request.message);
-        request.options.forEach((opt, i) => {
-          const desc = opt.description ? ` - ${opt.description}` : '';
-          console.log(`  ${i + 1}. ${opt.label}${desc}`);
-        });
-        const answer = await question(rl, 'Selection: ');
-        const index = parseInt(answer) - 1;
-        if (index >= 0 && index < request.options.length) {
-          return { type: 'selected', values: [request.options[index].value] };
-        }
-        return { type: 'cancelled' };
-      }
-    }
-  } finally {
-    rl.close();
-  }
-}
-
-function question(rl: readline.Interface, prompt: string): Promise<string> {
-  return new Promise(resolve => rl.question(prompt, resolve));
-}
-```
-
-### Generated Types Location
-
-The bidirectional types are generated in `types.ts`:
-
-```
-generated/
-├── types.ts           # Contains PlexusStreamItem_Request, StandardRequest, etc.
-├── transport.ts       # PlexusRpcClient with bidirectional support
-└── ...
-```
+| request | fields | response |
+| -- | -- | -- |
+| `confirm` | `message`, `default?` | `{ type: 'confirmed', value: boolean }` |
+| `prompt` | `message`, `default?`, `placeholder?` | `{ type: 'text', value: string }` |
+| `select` | `message`, `options: { value, label, description? }[]`, `multiSelect?` | `{ type: 'selected', values: string[] }` |
+| any | | `{ type: 'cancelled' }` |
 
 ## Development
 
 ```bash
-# Check TypeScript codegen
-cargo check
-
-# Check Rust codegen
-cargo check --features rust --no-default-features
-
-# Check all features
-cargo check --features all
-
-# Run tests
-cargo test
+cargo build
+cargo test        # no backend needed; see tests/README.md
 ```
+
+## Documentation
+
+[`docs/architecture/`](docs/architecture/):
+
+- [overview](docs/architecture/overview.md) — where hub-codegen sits and its main concepts
+- [CLI and pipeline](docs/architecture/cli-and-pipeline.md) — options and code flow
+- [IR data model](docs/architecture/ir-data-model.md)
+- [TypeScript generator](docs/architecture/typescript-generator.md)
+- [Rust generator and testing](docs/architecture/rust-generator-and-testing.md)
+- [caching and merge](docs/architecture/caching-and-merge.md),
+  [cache contracts](docs/architecture/CACHE_CONTRACTS.md),
+  [incremental codegen design](docs/architecture/INCREMENTAL_CODEGEN.md)
+
+The files named `<number>_<topic>.md` there are dated design records from
+early 2026, kept as history: the backend, ports and paths they describe are
+retired, and the code is the authority where they disagree.

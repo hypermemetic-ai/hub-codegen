@@ -35,7 +35,7 @@ pub struct GenerationOptions {
     pub generate: GenerateSelector,      // All | Transport | Rpc | Plugins | Smoke | Package
     pub plugins_filter: Option<Vec<String>>,
     pub smoke_transport_path: String,
-    pub backend_url: String,
+    pub backend_url: Option<String>,
 }
 
 pub struct GenerationResult {

@@ -2,10 +2,10 @@
 
 ## Overview
 
-The **Intermediate Representation (IR)** is a language-agnostic JSON schema that bridges Rust type definitions in substrate plugins with typed client code generation. The IR is produced by Synapse's IR Builder (Haskell) via schema introspection, deserialized by hub-codegen into Rust structs, and then consumed by language-specific generators to emit TypeScript (and Rust) clients.
+The **Intermediate Representation (IR)** is a language-agnostic JSON schema that bridges the Rust type definitions of a Plexus backend's activations with typed client code generation. The IR is produced by Synapse's IR Builder (Haskell) via schema introspection, deserialized by hub-codegen into Rust structs, and then consumed by language-specific generators to emit TypeScript (and Rust) clients.
 
 ```
-Substrate Plugins (Rust types)
+Plexus backend activations (Rust types)
   ↓ schemars JSON Schema
 Synapse IR Builder (Haskell)
   ↓ IR v2.0 JSON
@@ -25,7 +25,7 @@ The top-level IR JSON object:
 | Field | Type | Required | Semantics |
 |-------|------|----------|-----------|
 | `irVersion` | string | Yes | Must be `"2.0"`. Mismatches abort generation. |
-| `irBackend` | string | Yes | Backend name (e.g. `"substrate"`). Used in file headers. |
+| `irBackend` | string | Yes | Backend name (e.g. `"menger"`). Used in file headers. |
 | `irHash` | string | No | 16-char hex content hash (stable across timestamps). Used by synapse-cc for cache invalidation. |
 | `irMetadata` | object | No | Toolchain metadata (generators, timestamps). Intentionally **excluded from file hashes** to prevent spurious cache churn. |
 | `irTypes` | object | Yes | `"namespace.LocalName"` → `TypeDef`. Empty namespace uses `".LocalName"` (dot prefix). |

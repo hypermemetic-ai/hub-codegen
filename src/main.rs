@@ -111,9 +111,10 @@ struct Args {
     #[arg(long, default_value = "../transport")]
     smoke_transport_path: String,
 
-    /// Backend WebSocket URL embedded as fallback in generated smoke tests
-    #[arg(long, default_value = "ws://localhost:4444")]
-    backend_url: String,
+    /// Backend WebSocket URL generated smoke tests fall back to when PLEXUS_URL
+    /// is unset. No default: without it the smoke tests require PLEXUS_URL.
+    #[arg(long)]
+    backend_url: Option<String>,
 
     /// IR-7: Exit with a non-zero status after writing files when generated
     /// code consumes any deprecated IR surface. stderr still carries one
