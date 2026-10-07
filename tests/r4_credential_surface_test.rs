@@ -38,10 +38,9 @@ fn golden_dir() -> PathBuf {
 /// Compare `actual` against the committed golden file `name`, or rewrite
 /// the golden when `UPDATE_GOLDEN=1` is set in the environment.
 ///
-/// Golden inputs are chosen to be byte-deterministic: the TypeScript
-/// generator sorts methods by name; for Rust (which preserves HashMap
-/// iteration order per namespace) the golden fixtures put exactly one
-/// method in each namespace.
+/// Generated output is byte-deterministic: both generators sort a
+/// namespace's methods and types by name (the Rust generator since
+/// RETURNS-23).
 fn assert_golden(name: &str, actual: &str) {
     let path = golden_dir().join(name);
     if std::env::var("UPDATE_GOLDEN").is_ok() {
@@ -65,8 +64,7 @@ fn assert_golden(name: &str, actual: &str) {
     );
 }
 
-/// Build a `MethodDef` with the given credential surface. One method per
-/// namespace keeps Rust codegen byte-deterministic for golden comparison.
+/// Build a `MethodDef` with the given credential surface.
 fn surfaced_method(
     namespace: &str,
     name: &str,

@@ -114,7 +114,12 @@ pub fn merge_generated_code(
     let mut unchanged = Vec::new();
     let mut new = Vec::new();
 
-    for (rel_path, new_content) in staging_files {
+    // Walk the files in path order so the updated / skipped / unchanged /
+    // new lists (and the summary printed from them) are identical run to run.
+    let mut rel_paths: Vec<&String> = staging_files.keys().collect();
+    rel_paths.sort();
+    for rel_path in rel_paths {
+        let new_content = &staging_files[rel_path];
         let output_path = output_dir.join(rel_path);
         let new_hash = compute_file_hash(new_content);
 
