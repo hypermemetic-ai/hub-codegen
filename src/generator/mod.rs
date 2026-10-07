@@ -8,8 +8,11 @@ pub mod rust;
 
 use std::collections::HashMap;
 
-/// A warning emitted during code generation
-#[derive(Debug, Clone)]
+/// A warning emitted during code generation.
+///
+/// Ordered by `location`, then `message`: generators return their warnings
+/// sorted, so the list is identical run to run (RETURNS-23).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Warning {
     pub location: String,
     pub message: String,
