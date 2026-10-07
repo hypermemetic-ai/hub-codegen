@@ -18,14 +18,17 @@ pub struct ExecRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type")]
 pub enum Output {
+    #[serde(rename = "stdout")]
     Stdout {
 line: String,
     },
+    #[serde(rename = "stderr")]
     Stderr {
 line: String,
     },
+    #[serde(rename = "exit")]
     Exit {
 code: i64,
     },

@@ -42,14 +42,17 @@ pub enum NodeKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type")]
 pub enum TreeEvent {
+    #[serde(rename = "created")]
     Created {
 node: Node,
     },
+    #[serde(rename = "removed")]
     Removed {
 id: String,
     },
+    #[serde(rename = "annotated")]
     Annotated {
 note: serde_json::Value,
     },
