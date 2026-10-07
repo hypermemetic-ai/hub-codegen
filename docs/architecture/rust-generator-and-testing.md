@@ -83,7 +83,8 @@ Each namespace becomes a module with:
 1. Cross-namespace `use crate::...` imports (absolute crate paths)
 2. Domain type definitions:
    - Structs → `#[derive(Debug, Clone, Serialize, Deserialize)] pub struct ...`
-   - Enums → `#[derive(Debug, Clone, Serialize, Deserialize)] #[serde(tag = "type", rename_all = "snake_case")] pub enum ...`
+   - Enums → `#[derive(Debug, Clone, Serialize, Deserialize)] #[serde(tag = "<discriminator>")] pub enum ...`, each variant
+     PascalCased from its wire tag and renamed back to it exactly (`#[serde(rename = "status_changed")] StatusChanged`)
    - Variant fields have **no `pub`** (accessed via pattern match)
 3. Standalone async functions per method:
    ```rust
