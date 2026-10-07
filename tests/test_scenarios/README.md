@@ -103,7 +103,7 @@ cargo run --example compare_configs \
 
 ## Performance Targets
 
-From `CACHE_CONTRACTS.md`:
+From [`CACHE_CONTRACTS.md`](../../docs/architecture/CACHE_CONTRACTS.md):
 
 - Cache manifest read: < 10ms
 - Single plugin read: < 50ms

@@ -61,7 +61,7 @@ The main CLI is defined in `src/main.rs` using clap derive macros for parsing co
 #### Smoke Test Configuration
 
 - **`--smoke-transport-path <PATH>`** (default: `"../transport"`) — Import path for PlexusRpcClient in generated smoke tests.
-- **`--backend-url <URL>`** (default: `"ws://localhost:4444"`) — WebSocket URL embedded as fallback in generated smoke tests.
+- **`--backend-url <URL>`** (no default) — WebSocket URL the generated smoke tests fall back to when `PLEXUS_URL` is unset. Without it no URL is baked in, and the smoke tests require `PLEXUS_URL`. synapse-cc passes its configured backend's URL.
 
 #### Runtime Flags
 
@@ -155,7 +155,7 @@ pub struct GenerationOptions {
     pub generate: GenerateSelector,
     pub plugins_filter: Option<Vec<String>>,
     pub smoke_transport_path: String,
-    pub backend_url: String,
+    pub backend_url: Option<String>,
 }
 
 pub struct GenerationResult {
