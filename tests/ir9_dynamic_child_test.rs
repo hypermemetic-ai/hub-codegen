@@ -48,7 +48,7 @@ fn dynamic_child_ir(
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
 
     // A marker type the dynamic-child return refers to.
@@ -97,7 +97,7 @@ fn dynamic_child_ir(
             md_role: MethodRole::DynamicChild {
                 list_method: list_method.map(String::from),
                 search_method: search_method.map(String::from),
-            }, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            }, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
 
     if let Some(name) = list_method {
@@ -112,7 +112,7 @@ fn dynamic_child_ir(
                 md_params: vec![],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                 md_bidir_type: None,
-                md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+                md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
         );
         solar_methods.push(name.to_string());
     }
@@ -135,7 +135,7 @@ fn dynamic_child_ir(
                 }],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                 md_bidir_type: None,
-                md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+                md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
         );
         solar_methods.push(name.to_string());
     }
@@ -149,7 +149,7 @@ fn dynamic_child_ir(
         ir_metadata: None,
         ir_types,
         ir_methods,
-        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
+        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(), ir_plugin_roles: Default::default(),
     }
 }
 
@@ -318,7 +318,7 @@ fn test_pre_ir_regression_no_dynamic_child() {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods: HashMap::new(),
-        ir_plugins: HashMap::new(), ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),};
+        ir_plugins: HashMap::new(), ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(), ir_plugin_roles: Default::default(),};
     ir.ir_methods.insert(
         "echo.ping".to_string(),
         MethodDef {
@@ -330,7 +330,7 @@ fn test_pre_ir_regression_no_dynamic_child() {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
     ir.ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
 

@@ -47,7 +47,7 @@ fn post_ir_fixture() -> IR {
             }),
             md_requires_credential: None,
             md_auth_posture: None,
-            md_public: false,
+            md_public: false, md_grant: None, md_target: None, md_long_description: None,
         },
     );
 
@@ -66,7 +66,7 @@ fn post_ir_fixture() -> IR {
             md_deprecation: None,
             md_requires_credential: None,
             md_auth_posture: None,
-            md_public: false,
+            md_public: false, md_grant: None, md_target: None, md_long_description: None,
         },
     );
 
@@ -85,7 +85,7 @@ fn post_ir_fixture() -> IR {
         ir_methods,
         ir_plugins,
         ir_plugin_deprecations: HashMap::new(),
-        ir_plugin_requests: HashMap::new(),
+        ir_plugin_requests: HashMap::new(), ir_plugin_roles: Default::default(),
     }
 }
 

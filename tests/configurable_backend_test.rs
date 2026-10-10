@@ -122,7 +122,7 @@ impl ConfigurableBackend {
                         }],
                         md_returns: TypeRef::RefPrimitive("string".to_string(), None),
                         md_bidir_type: None,
-                        md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+                        md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
                 );
             }
 
@@ -150,7 +150,7 @@ impl ConfigurableBackend {
             ir_metadata: None,
             ir_types,
             ir_methods,
-            ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
+            ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(), ir_plugin_roles: Default::default(),
         }
     }
 

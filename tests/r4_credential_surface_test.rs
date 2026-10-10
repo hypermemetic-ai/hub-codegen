@@ -88,7 +88,7 @@ fn surfaced_method(
         md_deprecation: None,
         md_requires_credential: requires,
         md_auth_posture: posture,
-        md_public: public,
+        md_public: public, md_grant: None, md_target: None, md_long_description: None,
     }
 }
 
@@ -166,7 +166,7 @@ fn golden_fixture() -> IR {
         ir_methods,
         ir_plugins,
         ir_plugin_deprecations: HashMap::new(),
-        ir_plugin_requests: HashMap::new(),
+        ir_plugin_requests: HashMap::new(), ir_plugin_roles: Default::default(),
     }
 }
 
@@ -199,7 +199,7 @@ fn credential_fixture() -> IR {
                 }),
             }),
             md_auth_posture: Some(AuthPosture::Required),
-            md_public: false,
+            md_public: false, md_grant: None, md_target: None, md_long_description: None,
         },
     );
 
@@ -218,7 +218,7 @@ fn credential_fixture() -> IR {
             md_deprecation: None,
             md_requires_credential: None,
             md_auth_posture: Some(AuthPosture::Required),
-            md_public: true,
+            md_public: true, md_grant: None, md_target: None, md_long_description: None,
         },
     );
 
@@ -237,7 +237,7 @@ fn credential_fixture() -> IR {
             md_deprecation: None,
             md_requires_credential: None,
             md_auth_posture: None,
-            md_public: false,
+            md_public: false, md_grant: None, md_target: None, md_long_description: None,
         },
     );
 
@@ -256,7 +256,7 @@ fn credential_fixture() -> IR {
         ir_methods,
         ir_plugins,
         ir_plugin_deprecations: HashMap::new(),
-        ir_plugin_requests: HashMap::new(),
+        ir_plugin_requests: HashMap::new(), ir_plugin_roles: Default::default(),
     }
 }
 

@@ -148,7 +148,7 @@ fn create_comprehensive_test_ir() -> IR {
                 qn_local_name: "EchoResponse".to_string(),
             }),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
 
     // Streaming method with multiple params
@@ -181,7 +181,7 @@ fn create_comprehensive_test_ir() -> IR {
                 qn_local_name: "EchoEvent".to_string(),
             }),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
 
     ir_plugins.insert("echo".to_string(), vec!["once".to_string(), "echo".to_string()]);
@@ -193,7 +193,7 @@ fn create_comprehensive_test_ir() -> IR {
         ir_metadata: None,
         ir_types,
         ir_methods,
-        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
+        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(), ir_plugin_roles: Default::default(),
     }
 }
 

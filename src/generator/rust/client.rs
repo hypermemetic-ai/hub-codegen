@@ -2,6 +2,7 @@
 
 use crate::ir::{IR, MethodDef, MethodRole, TypeDef, TypeRef};
 use crate::credential_surface;
+use crate::grant_surface;
 use crate::deprecation::{self, DeprecationWarning};
 use std::collections::{BTreeSet, HashMap};
 
@@ -43,6 +44,13 @@ pub fn generate_base_client_with_ir(ir: &IR) -> String {
     if credential_surface::ir_has_surface(ir) {
         content.push('\n');
         content.push_str(credential_surface::rust_metadata_decls());
+        content.push('\n');
+    }
+    // AUTH-9: the `Requirement` type the namespace modules' REQUIRES tables
+    // use, only when the IR carries grants.
+    if grant_surface::ir_has_grants(ir) {
+        content.push('\n');
+        content.push_str(grant_surface::rust_requirement_decls());
         content.push('\n');
     }
     content
@@ -447,6 +455,18 @@ fn generate_namespace_node(
             }
         }
 
+        // AUTH-9: what each method needs, and the activation's default
+        // roles — only when the IR carries them (byte-identical otherwise).
+        let node_methods: Vec<&MethodDef> = node.methods.iter().collect();
+        if let Some(table) = grant_surface::rust_requires_table(&node.full_path, &node_methods) {
+            content.push(table);
+            content.push("".to_string());
+        }
+        if let Some(roles) = grant_surface::rust_default_roles(&node.full_path, ir) {
+            content.push(roles);
+            content.push("".to_string());
+        }
+
         // Write module file
         let path = super::parse_namespace_path(&node.full_path);
         let file_path = super::namespace_to_file_path(&path);
@@ -564,6 +584,15 @@ fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
         }
     } else {
         doc_lines.push(format!("/// Call {}", method.md_full_path));
+    }
+
+    // AUTH-9: the long description and what the method requires.
+    for line in grant_surface::rust_doc(method) {
+        if line.is_empty() {
+            doc_lines.push("///".to_string());
+        } else {
+            doc_lines.push(format!("/// {}", line));
+        }
     }
 
     // R-4: credential-requirement doc lines (surfacing only).

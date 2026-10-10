@@ -264,7 +264,7 @@ mod tests {
             md_deprecation: None,
             md_requires_credential: requires,
             md_auth_posture: posture,
-            md_public: public,
+            md_public: public, md_grant: None, md_target: None, md_long_description: None,
         }
     }
 

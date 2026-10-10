@@ -84,7 +84,7 @@ fn method(
         md_deprecation: None,
         md_requires_credential: requires,
         md_auth_posture: None,
-        md_public: public,
+        md_public: public, md_grant: None, md_target: None, md_long_description: None,
     }
 }
 
@@ -107,7 +107,7 @@ fn ir_with(backend: &str, methods: Vec<MethodDef>) -> IR {
         ir_methods,
         ir_plugins,
         ir_plugin_deprecations: HashMap::new(),
-        ir_plugin_requests: HashMap::new(),
+        ir_plugin_requests: HashMap::new(), ir_plugin_roles: Default::default(),
     }
 }
 
