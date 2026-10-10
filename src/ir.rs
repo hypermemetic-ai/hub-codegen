@@ -3,7 +3,7 @@
 //! These types match Synapse's IR output format exactly for deserialization.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Generator tool version information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +69,23 @@ pub struct IR {
     /// and absent into an empty map.
     #[serde(default, deserialize_with = "deserialize_null_as_empty_map")]
     pub ir_plugin_requests: HashMap<String, serde_json::Value>,
+    /// Per-plugin default roles (AUTH-9), from `PluginSchema.roles`
+    /// (AUTH-3): plugin namespace → role name → the grants it lists.
+    /// `admin` is built in and never listed. Defaults only — a server's
+    /// roles are data an admin may change.
+    ///
+    /// Wire key `irPluginRoles`; `null` or absent deserializes to an empty
+    /// map (pre-AUTH IRs), which generates byte-identical output.
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_roles", skip_serializing_if = "HashMap::is_empty")]
+    pub ir_plugin_roles: HashMap<String, BTreeMap<String, Vec<String>>>,
+}
+
+fn deserialize_null_as_empty_roles<'de, D>(de: D) -> Result<HashMap<String, BTreeMap<String, Vec<String>>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    Option::<HashMap<String, BTreeMap<String, Vec<String>>>>::deserialize(de).map(|o| o.unwrap_or_default())
 }
 
 fn deserialize_null_as_empty_map<'de, D>(de: D) -> Result<HashMap<String, serde_json::Value>, D::Error>
@@ -552,6 +569,27 @@ pub struct MethodDef {
     /// `requires_credential` by upstream macro construction.
     #[serde(default, rename = "public", skip_serializing_if = "is_false")]
     pub md_public: bool,
+
+    /// The method's grant (AUTH-9): `<activation>.<method>`, e.g.
+    /// `tickets.set_status` — the right to call it (AUTH-1, AUTH-3).
+    ///
+    /// Mirrors `plexus_core::MethodSchema.grant`; synapse lifts it onto the
+    /// IR as `mdGrant`. Absent in IRs from schemas that predate AUTH-3,
+    /// which then generate byte-identical output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub md_grant: Option<String>,
+
+    /// The param that locates what a call acts on (AUTH-9), e.g. `id` for
+    /// `tickets.set_status`. The grant must be held on that thing's scope;
+    /// `None` (a method like `list` or `watch`) means it is allowed wherever
+    /// the grant is held. Wire key `mdTarget`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub md_target: Option<String>,
+
+    /// The method's doc comment beside its short description (AUTH-3,
+    /// AUTH-9). Wire key `mdLongDescription`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub md_long_description: Option<String>,
 }
 
 /// Method role classification.

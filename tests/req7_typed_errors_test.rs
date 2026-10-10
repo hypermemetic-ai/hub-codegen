@@ -32,7 +32,7 @@ fn tiny_ir() -> IR {
         md_deprecation: None,
             md_requires_credential: None,
             md_auth_posture: None,
-            md_public: false,
+            md_public: false, md_grant: None, md_target: None, md_long_description: None,
     });
     let mut plugins = HashMap::new();
     plugins.insert("svc".to_string(), vec!["ping".to_string()]);
@@ -45,7 +45,7 @@ fn tiny_ir() -> IR {
         ir_methods: methods,
         ir_plugins: plugins,
         ir_plugin_deprecations: HashMap::new(),
-        ir_plugin_requests: HashMap::new(),
+        ir_plugin_requests: HashMap::new(), ir_plugin_roles: Default::default(),
     }
 }
 

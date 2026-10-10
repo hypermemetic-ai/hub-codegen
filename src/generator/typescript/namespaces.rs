@@ -5,6 +5,7 @@
 
 use crate::ir::{IR, MethodDef, MethodRole, ParamDef, TypeRef};
 use crate::credential_surface;
+use crate::grant_surface;
 use crate::deprecation::{self, DeprecationWarning};
 use std::collections::{BTreeSet, HashMap};
 
@@ -320,28 +321,11 @@ fn generate_namespace(
         // R-4: credential-requirement breadcrumbs (surfacing only —
         // enforcement is server-side at the gate).
         req_lines.extend(credential_surface::format_ts_jsdoc(method));
+        // AUTH-9: the long description, and what the method requires.
+        req_lines.extend(grant_surface::ts_jsdoc(method));
         let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
-        match (desc_opt, req_lines.is_empty()) {
-            (Some(desc), false) => {
-                lines.push("  /**".to_string());
-                lines.push(format!("   * {}", desc));
-                for rl in &req_lines {
-                    lines.push(format!("   * {}", rl));
-                }
-                lines.push("   */".to_string());
-            }
-            (Some(desc), true) => {
-                lines.push(format!("  /** {} */", desc));
-            }
-            (None, false) => {
-                lines.push("  /**".to_string());
-                for rl in &req_lines {
-                    lines.push(format!("   * {}", rl));
-                }
-                lines.push("   */".to_string());
-            }
-            (None, true) => {}
-        }
+        let long_lines = grant_surface::ts_long_description_lines(method);
+        grant_surface::push_ts_jsdoc(&mut lines, desc_opt, &long_lines, &req_lines);
         lines.push(format!("  readonly {}: {};", method_name, handle_type));
     }
 
@@ -388,28 +372,11 @@ fn generate_namespace(
         // R-4: credential-requirement breadcrumbs (surfacing only —
         // enforcement is server-side at the gate).
         req_lines.extend(credential_surface::format_ts_jsdoc(method));
+        // AUTH-9: the long description, and what the method requires.
+        req_lines.extend(grant_surface::ts_jsdoc(method));
         let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
-        match (desc_opt, req_lines.is_empty()) {
-            (Some(desc), false) => {
-                lines.push("  /**".to_string());
-                lines.push(format!("   * {}", desc));
-                for rl in &req_lines {
-                    lines.push(format!("   * {}", rl));
-                }
-                lines.push("   */".to_string());
-            }
-            (Some(desc), true) => {
-                lines.push(format!("  /** {} */", desc));
-            }
-            (None, false) => {
-                lines.push("  /**".to_string());
-                for rl in &req_lines {
-                    lines.push(format!("   * {}", rl));
-                }
-                lines.push("   */".to_string());
-            }
-            (None, true) => {}
-        }
+        let long_lines = grant_surface::ts_long_description_lines(method);
+        grant_surface::push_ts_jsdoc(&mut lines, desc_opt, &long_lines, &req_lines);
         lines.push(format!("  {}({}): {};", method_name, params, full_return));
     }
 
@@ -550,6 +517,20 @@ fn generate_namespace(
             lines.push(format!("  {}: {},", key, value));
         }
         lines.push("};".to_string());
+    }
+
+    // AUTH-9: what each method needs, keyed by grant, and the activation's
+    // default roles. Emitted only when the IR carries them — IRs without
+    // grants produce byte-identical pre-AUTH-9 output.
+    // Every method of the activation, the gates' hidden list/search siblings
+    // included: each is still a call the gate decides.
+    if let Some(map) = grant_surface::ts_requires_map(namespace, methods) {
+        lines.push("".to_string());
+        lines.push(map);
+    }
+    if let Some(roles) = grant_surface::ts_default_roles(namespace, ir) {
+        lines.push("".to_string());
+        lines.push(roles);
     }
 
     lines.join("\n")

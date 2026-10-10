@@ -32,7 +32,7 @@ fn minimal_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
     let mut ir_plugins = HashMap::new();
     ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
@@ -43,7 +43,7 @@ fn minimal_ir() -> IR {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods,
-        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
+        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(), ir_plugin_roles: Default::default(),
     }
 }
 
@@ -317,7 +317,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
     ir_methods.insert(
         "health.status".to_string(),
@@ -330,7 +330,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("boolean".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
     ir_methods.insert(
         "solar.earth.info".to_string(),
@@ -343,7 +343,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
     );
     let mut ir_plugins = HashMap::new();
     ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
@@ -356,7 +356,7 @@ fn multi_ns_ir() -> IR {
         ir_metadata: None,
         ir_types: HashMap::new(),
         ir_methods,
-        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(),
+        ir_plugins, ir_plugin_deprecations: Default::default(), ir_plugin_requests: Default::default(), ir_plugin_roles: Default::default(),
     }
 }
 

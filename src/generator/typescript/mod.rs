@@ -262,7 +262,7 @@ fn generate_transport_only(ir: &IR, options: &GenerationOptions) -> HashMap<Stri
         return HashMap::new();
     }
     let mut files = HashMap::new();
-    files.insert("types.ts".to_string(), types::generate_protocol_types());
+    files.insert("types.ts".to_string(), types::generate_protocol_types_for(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
     files.insert("transport.ts".to_string(), transport::generate_transport(options.transport, ir));
     files
