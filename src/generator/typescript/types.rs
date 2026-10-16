@@ -315,7 +315,7 @@ fn collect_all_referenced_types(ir: &IR) -> HashSet<String> {
     // Collect from all method params and returns
     for method in ir.ir_methods.values() {
         collect_from_type_ref(&method.md_returns, &mut refs);
-        for param in &method.md_params {
+        for param in &method.sent_params() {
             collect_from_type_ref(&param.pd_type, &mut refs);
         }
     }
@@ -560,7 +560,7 @@ fn collect_missing_types_for_namespace(ir: &IR, namespace: &str) -> Vec<String> 
     for method in ir.ir_methods.values() {
         if method.md_namespace == namespace {
             collect_from_type_ref(&method.md_returns, namespace, &mut referenced);
-            for param in &method.md_params {
+            for param in &method.sent_params() {
                 collect_from_type_ref(&param.pd_type, namespace, &mut referenced);
             }
         }

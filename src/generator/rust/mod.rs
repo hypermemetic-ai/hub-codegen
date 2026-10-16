@@ -108,7 +108,7 @@ fn collect_warnings(ir: &IR, warnings: &mut Vec<Warning>) {
             });
         }
 
-        for param in &method.md_params {
+        for param in &method.sent_params() {
             if param.pd_type.is_unknown() {
                 warnings.push(Warning {
                     location: format!("{}({})", path, param.pd_name),

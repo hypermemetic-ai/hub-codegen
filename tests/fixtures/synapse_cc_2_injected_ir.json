@@ -1,0 +1,1032 @@
+{
+  "irBackend": "spike",
+  "irHash": "6ece62be40d21351",
+  "irMetadata": {
+    "gmGenerators": [
+      {
+        "giTool": "synapse",
+        "giVersion": "0.2.0.0"
+      }
+    ],
+    "gmIrVersion": "2.0",
+    "gmTimestamp": "2026-10-16T00:00:00Z"
+  },
+  "irMethods": {
+    ".call": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Route a call to a registered activation",
+      "mdFullPath": ".call",
+      "mdGrant": "spike.call",
+      "mdName": "call",
+      "mdNamespace": "",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The method to call (format: namespace.method)",
+          "pdName": "method",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": [
+              "string",
+              null
+            ],
+            "tag": "RefPrimitive"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "Parameters to pass to the method (optional, defaults to {})",
+          "pdName": "params",
+          "pdRequired": false,
+          "pdSource": null,
+          "pdType": {
+            "tag": "RefAny"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "PlexusStreamItem",
+          "qnNamespace": ""
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    },
+    ".hash": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Get plexus configuration hash (from the recursive schema)\n\n This hash changes whenever any method or child plugin changes.\n It's computed from the method hashes rolled up through the schema tree.",
+      "mdFullPath": ".hash",
+      "mdGrant": "spike.hash",
+      "mdLongDescription": "Get Plexus RPC server configuration hash (from the recursive schema)\n\nThis hash changes whenever any method or child activation changes.\nIt's computed from the method hashes rolled up through the schema tree.",
+      "mdName": "hash",
+      "mdNamespace": "",
+      "mdParams": [],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "HashEvent",
+          "qnNamespace": ""
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": false
+    },
+    ".hashes": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Get plugin hashes for cache validation",
+      "mdFullPath": ".hashes",
+      "mdGrant": "spike.hashes",
+      "mdLongDescription": "(lightweight alternative to full schema)",
+      "mdName": "hashes",
+      "mdNamespace": "",
+      "mdParams": [],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "PluginHashes",
+          "qnNamespace": ""
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": false
+    },
+    ".schema": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Get plugin or method schema. Pass {\"method\": \"name\"} for a specific method.",
+      "mdFullPath": ".schema",
+      "mdGrant": "spike.schema",
+      "mdName": "schema",
+      "mdNamespace": "",
+      "mdParams": [],
+      "mdReturns": {
+        "tag": "RefUnknown"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": false
+    },
+    "tickets.get": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Read one ticket.",
+      "mdFullPath": "tickets.get",
+      "mdGrant": "tickets.get",
+      "mdName": "get",
+      "mdNamespace": "tickets",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "auth",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "derived"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The ticket to read, `SHORT-N`.",
+          "pdName": "id",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "TicketId",
+              "qnNamespace": "tickets"
+            },
+            "tag": "RefNamed"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "origin",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "header",
+            "key": "origin"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "user",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "auth",
+            "resolver": "self.access.verify"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "SpikeEvent",
+          "qnNamespace": "tickets"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    },
+    "tickets.inputs": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "The inputs namespace — `tickets.inputs.<method>`.",
+      "mdFullPath": "tickets.inputs",
+      "mdName": "inputs",
+      "mdNamespace": "tickets",
+      "mdParams": [],
+      "mdReturns": {
+        "tag": "RefUnknown"
+      },
+      "mdRole": {
+        "kind": "static_child"
+      },
+      "mdStreaming": false
+    },
+    "tickets.inputs.answer": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Answer an input.",
+      "mdFullPath": "tickets.inputs.answer",
+      "mdGrant": "inputs.answer",
+      "mdName": "answer",
+      "mdNamespace": "tickets.inputs",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "auth",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "derived"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "origin",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "header",
+            "key": "origin"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The ticket holding the input.",
+          "pdName": "ticket",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "TicketId",
+              "qnNamespace": "tickets"
+            },
+            "tag": "RefNamed"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "user",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "auth",
+            "resolver": "self.access.verify"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The answer, a status (the spike's stand-in for a value).",
+          "pdName": "value",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "Status",
+              "qnNamespace": "tickets"
+            },
+            "tag": "RefNamed"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "SpikeEvent",
+          "qnNamespace": "tickets"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    },
+    "tickets.inputs.list": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "A ticket's inputs.",
+      "mdFullPath": "tickets.inputs.list",
+      "mdGrant": "inputs.list",
+      "mdName": "list",
+      "mdNamespace": "tickets.inputs",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "auth",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "derived"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "origin",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "header",
+            "key": "origin"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The ticket whose inputs to list.",
+          "pdName": "ticket",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "TicketId",
+              "qnNamespace": "tickets"
+            },
+            "tag": "RefNamed"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "user",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "auth",
+            "resolver": "self.access.verify"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "SpikeEvent",
+          "qnNamespace": "tickets"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    },
+    "tickets.inputs.schema": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Get plugin or method schema. Pass {\"method\": \"name\"} for a specific method.",
+      "mdFullPath": "tickets.inputs.schema",
+      "mdGrant": "inputs.schema",
+      "mdName": "schema",
+      "mdNamespace": "tickets.inputs",
+      "mdParams": [],
+      "mdReturns": {
+        "tag": "RefUnknown"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": false
+    },
+    "tickets.schema": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Get plugin or method schema. Pass {\"method\": \"name\"} for a specific method.",
+      "mdFullPath": "tickets.schema",
+      "mdGrant": "tickets.schema",
+      "mdName": "schema",
+      "mdNamespace": "tickets",
+      "mdParams": [],
+      "mdReturns": {
+        "tag": "RefUnknown"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": false
+    },
+    "tickets.set_status": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Move a ticket to a status.",
+      "mdFullPath": "tickets.set_status",
+      "mdGrant": "tickets.set_status",
+      "mdName": "set_status",
+      "mdNamespace": "tickets",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "auth",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "derived"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The ticket to move.",
+          "pdName": "id",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "TicketId",
+              "qnNamespace": "tickets"
+            },
+            "tag": "RefNamed"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "origin",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "header",
+            "key": "origin"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The status to move it to; `active` is Coding.",
+          "pdName": "status",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "Status",
+              "qnNamespace": "tickets"
+            },
+            "tag": "RefNamed"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "user",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "auth",
+            "resolver": "self.access.verify"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "SpikeEvent",
+          "qnNamespace": "tickets"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    }
+  },
+  "irPluginHashes": {
+    "": {
+      "phiChildrenHash": "6ece62be40d21351",
+      "phiHash": "6ece62be40d21351",
+      "phiSelfHash": "6ece62be40d21351"
+    },
+    "tickets": {
+      "phiChildrenHash": "717f9c71600693b1",
+      "phiHash": "717f9c71600693b1",
+      "phiSelfHash": "717f9c71600693b1"
+    },
+    "tickets.inputs": {
+      "phiChildrenHash": "fd257d72420eb4d2",
+      "phiHash": "fd257d72420eb4d2",
+      "phiSelfHash": "fd257d72420eb4d2"
+    }
+  },
+  "irPluginRequests": null,
+  "irPlugins": {
+    "": [
+      "call",
+      "hash",
+      "hashes",
+      "schema"
+    ],
+    "tickets": [
+      "get",
+      "inputs",
+      "schema",
+      "set_status"
+    ],
+    "tickets.inputs": [
+      "answer",
+      "list",
+      "schema"
+    ]
+  },
+  "irTypes": {
+    ".ChildHashes": {
+      "tdDescription": "Hash information for a child plugin",
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "hash",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "namespace",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "ChildHashes",
+      "tdNamespace": ""
+    },
+    ".HashEvent": {
+      "tdDescription": null,
+      "tdKind": {
+        "keDiscriminator": "type",
+        "keVariants": [],
+        "tag": "KindEnum"
+      },
+      "tdName": "HashEvent",
+      "tdNamespace": ""
+    },
+    ".PlexusStreamItem": {
+      "tdDescription": "Universal stream item - all activations emit this type\n\nThe caller (DynamicHub routing layer) wraps activation responses with\nmetadata. This is the only type that crosses the wire.",
+      "tdKind": {
+        "keDiscriminator": "type",
+        "keVariants": [
+          {
+            "vdDescription": "Data payload with caller-applied metadata",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": "The actual payload (serialized activation event)",
+                "fdName": "content",
+                "fdRequired": true,
+                "fdType": {
+                  "tag": "RefAny"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Type identifier for deserialization (e.g., \"health.status\")",
+                "fdName": "content_type",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Metadata from calling layer",
+                "fdName": "metadata",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "StreamMetadata",
+                    "qnNamespace": ""
+                  },
+                  "tag": "RefNamed"
+                }
+              }
+            ],
+            "vdName": "data"
+          },
+          {
+            "vdDescription": "Progress update during long-running operations",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": "Human-readable progress message",
+                "fdName": "message",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Metadata from calling layer",
+                "fdName": "metadata",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "StreamMetadata",
+                    "qnNamespace": ""
+                  },
+                  "tag": "RefNamed"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Optional completion percentage (0.0 - 100.0)",
+                "fdName": "percentage",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "contents": [
+                      "number",
+                      "float"
+                    ],
+                    "tag": "RefPrimitive"
+                  },
+                  "tag": "RefOptional"
+                }
+              }
+            ],
+            "vdName": "progress"
+          },
+          {
+            "vdDescription": "Error occurred during processing",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": "Optional error code for programmatic handling",
+                "fdName": "code",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "contents": [
+                      "string",
+                      null
+                    ],
+                    "tag": "RefPrimitive"
+                  },
+                  "tag": "RefOptional"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Human-readable error message",
+                "fdName": "message",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Metadata from calling layer",
+                "fdName": "metadata",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "StreamMetadata",
+                    "qnNamespace": ""
+                  },
+                  "tag": "RefNamed"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Whether the operation can be retried",
+                "fdName": "recoverable",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "boolean",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "error"
+          },
+          {
+            "vdDescription": "Bidirectional request from server to client\n\nServer can ask client for input during stream execution.\nClient must respond via transport-specific mechanism\n(MCP: _plexus_respond tool, WebSocket: plexus.respond RPC).",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": "Serialized request data (generic Req type)",
+                "fdName": "requestData",
+                "fdRequired": true,
+                "fdType": {
+                  "tag": "RefAny"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Unique identifier for correlating response",
+                "fdName": "requestId",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": "Maximum time to wait for response (milliseconds)",
+                "fdName": "timeoutMs",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "integer",
+                    "uint64"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "request"
+          },
+          {
+            "vdDescription": "Stream completed successfully",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": "Metadata from calling layer",
+                "fdName": "metadata",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "StreamMetadata",
+                    "qnNamespace": ""
+                  },
+                  "tag": "RefNamed"
+                }
+              }
+            ],
+            "vdName": "done"
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "PlexusStreamItem",
+      "tdNamespace": ""
+    },
+    ".StreamMetadata": {
+      "tdDescription": "Metadata applied by the caller when wrapping activation responses\n\nThis metadata is added at each layer of the call stack, enabling\nprovenance tracking and cache invalidation.",
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": "Hash of Plexus RPC server configuration for cache invalidation\nChanges when activations are added/removed/updated",
+            "fdName": "plexus_hash",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": "Call path through the system (e.g., [\"substrate\", \"health\"])",
+            "fdName": "provenance",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "contents": [
+                  "string",
+                  null
+                ],
+                "tag": "RefPrimitive"
+              },
+              "tag": "RefArray"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": "Unix timestamp (seconds) when the event was wrapped",
+            "fdName": "timestamp",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "integer",
+                "int64"
+              ],
+              "tag": "RefPrimitive"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "StreamMetadata",
+      "tdNamespace": ""
+    },
+    "tickets.SpikeEvent": {
+      "tdDescription": "What the spike's methods answer.",
+      "tdKind": {
+        "keDiscriminator": "type",
+        "keVariants": [
+          {
+            "vdDescription": "A ticket, as the caller sees it.",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "by",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "id",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "TicketId",
+                    "qnNamespace": "tickets"
+                  },
+                  "tag": "RefNamed"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "status",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "Status",
+                    "qnNamespace": "tickets"
+                  },
+                  "tag": "RefNamed"
+                }
+              }
+            ],
+            "vdName": "ticket"
+          },
+          {
+            "vdDescription": "An input answered.",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "by",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "ticket",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "TicketId",
+                    "qnNamespace": "tickets"
+                  },
+                  "tag": "RefNamed"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "value",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "Status",
+                    "qnNamespace": "tickets"
+                  },
+                  "tag": "RefNamed"
+                }
+              }
+            ],
+            "vdName": "answered"
+          },
+          {
+            "vdDescription": "In-band refusal.",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "message",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "error"
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "SpikeEvent",
+      "tdNamespace": "tickets"
+    },
+    "tickets.Status": {
+      "tdDescription": "A ticket's status — canonical spellings; `active` and `in review` are\nread too.\n\nThe schema: by default the derived closed `enum` of the canonical\nspellings; `--features schema-anyof` / `schema-examples` swap in the two\nopen shapes question 5 compares (`run.sh` runs all three).",
+      "tdKind": {
+        "kseValues": [
+          "Pending",
+          "Ready",
+          "Coding",
+          "In Review",
+          "Complete"
+        ],
+        "tag": "KindStringEnum"
+      },
+      "tdName": "Status",
+      "tdNamespace": "tickets"
+    },
+    "tickets.TicketId": {
+      "tdDescription": "A ticket's id, `SHORT-N` (upper-cased on parse).",
+      "tdKind": {
+        "kpFormat": null,
+        "kpType": "string",
+        "tag": "KindPrimitive"
+      },
+      "tdName": "TicketId",
+      "tdNamespace": "tickets"
+    }
+  },
+  "irVersion": "2.0"
+}

@@ -1,0 +1,58 @@
+// Auto-generated typed client (Layer 2)
+// Wraps RPC layer and unwraps PlexusStreamItem to domain types
+
+import type { RpcClient } from '../../rpc';
+import { extractData, collectOne } from '../../rpc';
+import type { SpikeEvent, Status, TicketId } from '../../tickets/types';
+
+/** Typed client interface for tickets.inputs plugin */
+export interface TicketsInputsClient {
+  /**
+   * Answer an input.
+   * @requires `inputs.answer` anywhere it is held
+   */
+  answer(ticket: TicketId, value: Status): AsyncGenerator<SpikeEvent>;
+  /**
+   * A ticket's inputs.
+   * @requires `inputs.list` anywhere it is held
+   */
+  list(ticket: TicketId): AsyncGenerator<SpikeEvent>;
+  /**
+   * Get plugin or method schema. Pass {"method": "name"} for a specific method.
+   * @requires `inputs.schema` anywhere it is held
+   */
+  schema(): Promise<unknown>;
+}
+
+/** Typed client implementation for tickets.inputs plugin */
+class TicketsInputsClientImpl implements TicketsInputsClient {
+  private rpc: RpcClient;
+  constructor(rpc: RpcClient) { this.rpc = rpc; }
+
+  async *answer(ticket: TicketId, value: Status): AsyncGenerator<SpikeEvent> {
+    const stream = this.rpc.call('tickets.inputs.answer', { ticket, value });
+    yield* extractData<SpikeEvent>(stream);
+  }
+
+  async *list(ticket: TicketId): AsyncGenerator<SpikeEvent> {
+    const stream = this.rpc.call('tickets.inputs.list', { ticket });
+    yield* extractData<SpikeEvent>(stream);
+  }
+
+  async schema(): Promise<unknown> {
+    const stream = this.rpc.call('tickets.inputs.schema', {});
+    return collectOne<unknown>(stream);
+  }
+}
+
+/** Create a typed tickets.inputs client from an RPC client */
+export function createTicketsInputsClient(rpc: RpcClient): TicketsInputsClient {
+  return new TicketsInputsClientImpl(rpc);
+}
+
+/** What each tickets.inputs method needs (AUTH-9): its grant, and the param that locates what it acts on (`null`: allowed wherever the grant is held). The gate decides, server-side. */
+export const requires = {
+  "inputs.answer": { grant: "inputs.answer", target: null },
+  "inputs.list": { grant: "inputs.list", target: null },
+  "inputs.schema": { grant: "inputs.schema", target: null },
+} as const;

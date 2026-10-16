@@ -167,10 +167,14 @@ fn generate_namespace(
     // IR-9: Classify methods — DynamicChild gates emit typed handles, others
     // are flat methods (unless hidden as a sibling of a DynamicChild).
     let mut dynamic_children: Vec<&MethodDef> = Vec::new();
+    let mut static_children: Vec<&MethodDef> = Vec::new();
     let mut flat_methods: Vec<&MethodDef> = Vec::new();
     for m in methods {
         match &m.md_role {
             MethodRole::DynamicChild { .. } => dynamic_children.push(m),
+            // SYNAPSE-CC-2: a static child whose namespace the IR holds is a
+            // typed sub-client (`tickets.inputs.answer(…)`), not a method.
+            MethodRole::StaticChild if static_child_namespace(m, ir).is_some() => static_children.push(m),
             _ => {
                 if hidden_sibling_names.contains(&m.md_name) {
                     continue;
@@ -180,6 +184,7 @@ fn generate_namespace(
         }
     }
     dynamic_children.sort_by(|a, b| a.md_name.cmp(&b.md_name));
+    static_children.sort_by(|a, b| a.md_name.cmp(&b.md_name));
     flat_methods.sort_by(|a, b| a.md_name.cmp(&b.md_name));
 
     // Collect all type imports needed (local types only - same namespace).
@@ -273,6 +278,16 @@ fn generate_namespace(
         ));
     }
 
+    // SYNAPSE-CC-2: each static child's client interface (a type) and its
+    // factory (a value, called in the constructor).
+    for method in &static_children {
+        let child_ns = static_child_namespace(method, ir).expect("classified as a static child");
+        let child_path = child_ns.replace('.', "/");
+        let child = to_pascal(&child_ns);
+        lines.push(format!("import type {{ {}Client }} from '{}{}/client';", child, to_root, child_path));
+        lines.push(format!("import {{ create{}Client }} from '{}{}/client';", child, to_root, child_path));
+    }
+
     lines.push("".to_string());
 
     // Generate interface
@@ -329,10 +344,23 @@ fn generate_namespace(
         lines.push(format!("  readonly {}: {};", method_name, handle_type));
     }
 
+    // SYNAPSE-CC-2: static children appear as readonly typed sub-clients.
+    for method in &static_children {
+        let child_ns = static_child_namespace(method, ir).expect("classified as a static child");
+        let mut req_lines = render_method_jsdoc(method, namespace, ir);
+        req_lines.extend(grant_surface::ts_jsdoc(method));
+        let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
+        let long_lines = grant_surface::ts_long_description_lines(method);
+        grant_surface::push_ts_jsdoc(&mut lines, desc_opt, &long_lines, &req_lines);
+        lines.push(format!("  readonly {}: {}Client;", to_camel(&method.md_name), to_pascal(&child_ns)));
+    }
+
     for method in &flat_methods {
         let method_name = to_camel(&method.md_name);
+        // SYNAPSE-CC-2: only what the caller sends — an injected parameter
+        // is said by its breadcrumb alone.
         let params = generate_params_annotated(
-            &method.md_params,
+            &method.sent_params(),
             namespace,
             emit_deprecation,
             &method.md_full_path,
@@ -406,11 +434,15 @@ fn generate_namespace(
         let handle_type = dynamic_child_handle_type(method, ir);
         lines.push(format!("  readonly {}: {};", method_name, handle_type));
     }
+    for method in &static_children {
+        let child_ns = static_child_namespace(method, ir).expect("classified as a static child");
+        lines.push(format!("  readonly {}: {}Client;", to_camel(&method.md_name), to_pascal(&child_ns)));
+    }
 
     // IR-9: Use the compact one-line constructor form when there are no
     // DynamicChild gates — this preserves byte-identical pre-IR output.
-    // Gates require a multi-line body to initialize their handles.
-    if dynamic_children.is_empty() {
+    // Gates (and static children) need a multi-line body to initialize them.
+    if dynamic_children.is_empty() && static_children.is_empty() {
         lines.push("  constructor(rpc: RpcClient) { this.rpc = rpc; }".to_string());
     } else {
         lines.push("  constructor(rpc: RpcClient) {".to_string());
@@ -440,6 +472,10 @@ fn generate_namespace(
             lines.push(format!("      childClient: {},", child_impl));
             lines.push(format!("    }}) as {};", handle_type));
         }
+        for method in &static_children {
+            let child_ns = static_child_namespace(method, ir).expect("classified as a static child");
+            lines.push(format!("    this.{} = create{}Client(rpc);", to_camel(&method.md_name), to_pascal(&child_ns)));
+        }
         lines.push("  }".to_string());
     }
     lines.push("".to_string());
@@ -450,11 +486,12 @@ fn generate_namespace(
         // IR-7: impl methods use the non-warning-emitting param formatter
         // (warnings were already recorded at interface emission to avoid
         // double-counting).
-        let params_signature = generate_params(&method.md_params, namespace);
+        let sent = method.sent_params();
+        let params_signature = generate_params(&sent, namespace);
         let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
-        // Build params object for RPC call
-        let params_object = generate_params_object(&method.md_params);
+        // Build params object for RPC call (SYNAPSE-CC-2: the sent ones only)
+        let params_object = generate_params_object(&sent);
 
         // IR-7: annotate the impl method too — the consumer may navigate
         // to the class method directly.
@@ -546,28 +583,9 @@ fn generate_namespace(
 /// simply get no breadcrumbs. This is the intended REQ-9 contract
 /// per the ticket ("Delete the activation-level emission").
 fn render_method_jsdoc(method: &crate::ir::MethodDef, _namespace: &str, _ir: &IR) -> Vec<String> {
-    method
-        .md_params
-        .iter()
-        .filter_map(|p| {
-            let src = p.pd_source.as_ref()?.as_object()?;
-            let from = src.get("from").and_then(|v| v.as_str()).unwrap_or("unknown");
-            let key = src.get("key").and_then(|v| v.as_str());
-            let resolver = src.get("resolver").and_then(|v| v.as_str());
-            Some(match from {
-                "auth" => match resolver {
-                    Some(r) => format!("@requiresAuth — resolver: {}", r),
-                    None    => "@requiresAuth".to_string(),
-                },
-                "cookie" => format!("@reads-cookie {}", key.unwrap_or(p.pd_name.as_str())),
-                "header" => format!("@reads-header {}", key.unwrap_or(p.pd_name.as_str())),
-                "query"  => format!("@reads-query {}", key.unwrap_or(p.pd_name.as_str())),
-                "derived" => format!("@server-derived {}", p.pd_name),
-                "rpc"    => return None,
-                other    => format!("@request-field {} (source: {})", p.pd_name, other),
-            })
-        })
-        .collect()
+    // SYNAPSE-CC-2: the parameters these describe are not in the signature —
+    // the breadcrumb is all the client says of them.
+    method.injected_breadcrumbs()
 }
 
 /// Activation-level JSDoc emission. DEPRECATED — kept as dead code for
@@ -611,6 +629,17 @@ fn render_request_jsdoc_fallback(namespace: &str, ir: &IR) -> Vec<String> {
         lines.push(line);
     }
     lines
+}
+
+/// SYNAPSE-CC-2: the namespace a static child accessor opens — its full
+/// path (`tickets.inputs`) — when the IR holds that namespace's methods.
+fn static_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
+    if !matches!(method.md_role, MethodRole::StaticChild) {
+        return None;
+    }
+    let ns = method.md_full_path.trim_start_matches('.');
+    let held = ir.ir_plugins.contains_key(ns) || ir.ir_methods.values().any(|m| m.md_namespace == ns);
+    (held && ns != method.md_namespace).then(|| ns.to_string())
 }
 
 /// IR-9: Compute the declared type for a DynamicChild gate
@@ -740,7 +769,7 @@ fn collect_type_imports(methods: &[&MethodDef], namespace: &str) -> Vec<String> 
 
     for method in methods {
         collect_from_type_ref(&method.md_returns, &mut imports, namespace);
-        for param in &method.md_params {
+        for param in &method.sent_params() {
             collect_from_type_ref(&param.pd_type, &mut imports, namespace);
         }
     }
@@ -782,7 +811,7 @@ fn collect_cross_namespace_imports(methods: &[&MethodDef], current_namespace: &s
 
     for method in methods {
         collect_from_type_ref(&method.md_returns, &mut imports, current_namespace);
-        for param in &method.md_params {
+        for param in &method.sent_params() {
             collect_from_type_ref(&param.pd_type, &mut imports, current_namespace);
         }
     }

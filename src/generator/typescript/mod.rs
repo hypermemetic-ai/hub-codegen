@@ -74,7 +74,7 @@ fn resolve_type_dependencies(ir: &IR, requested: &[String]) -> PluginPartition {
                     continue;
                 }
                 collect_ns_refs_from_typeref(&method.md_returns, &mut new_deps);
-                for param in &method.md_params {
+                for param in &method.sent_params() {
                     collect_ns_refs_from_typeref(&param.pd_type, &mut new_deps);
                 }
                 if let Some(bidir) = &method.md_bidir_type {
@@ -379,7 +379,7 @@ fn collect_warnings(ir: &IR, warnings: &mut Vec<Warning>) {
             });
         }
 
-        for param in &method.md_params {
+        for param in &method.sent_params() {
             if param.pd_type.is_unknown() {
                 warnings.push(Warning {
                     location: format!("{}({})", path, param.pd_name),

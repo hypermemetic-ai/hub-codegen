@@ -377,6 +377,11 @@ fn generate_namespace_node(
         for m in &node.methods {
             match &m.md_role {
                 MethodRole::DynamicChild { .. } => dynamic_children.push(m),
+                // SYNAPSE-CC-2: a static child is its module (`pub mod
+                // inputs;`, `tickets::inputs::answer(…)`), not a function
+                // calling `tickets.inputs` as if it were a method.
+                MethodRole::StaticChild
+                    if node.children.values().any(|c| c.full_path == m.md_full_path.trim_start_matches('.')) => {}
                 _ => {
                     if hidden_siblings.contains(&m.md_name) {
                         continue;
@@ -426,7 +431,7 @@ fn generate_namespace_node(
                     }
                     // Param-level deprecation — record warnings; Rust has no
                     // per-param attribute so we emit a comment above the fn.
-                    for p in &method.md_params {
+                    for p in &method.sent_params() {
                         if let Some(info) = &p.pd_deprecation {
                             warnings.push(DeprecationWarning {
                                 kind: "param".into(),
@@ -604,12 +609,23 @@ fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
         }
     }
 
+    // SYNAPSE-CC-2: a parameter the server injects is said in the doc
+    // comment and nowhere else — not in the signature, not in the params.
+    let injected = method.injected_breadcrumbs();
+    if !injected.is_empty() {
+        doc_lines.push("///".to_string());
+        doc_lines.push("/// Injected by the server, never sent:".to_string());
+        for crumb in injected {
+            doc_lines.push(format!("/// - `{}`", crumb));
+        }
+    }
+    let sent = method.sent_params();
+
     // Generate parameter serialization
-    let params_json = if method.md_params.is_empty() {
+    let params_json = if sent.is_empty() {
         "serde_json::Value::Null".to_string()
     } else {
-        let param_fields: Vec<String> = method
-            .md_params
+        let param_fields: Vec<String> = sent
             .iter()
             .map(|p| {
                 let param_name = escape_keyword(&to_snake(&p.pd_name));
@@ -621,8 +637,7 @@ fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
     };
 
     // Generate parameter list
-    let param_list: Vec<String> = method
-        .md_params
+    let param_list: Vec<String> = sent
         .iter()
         .map(|p| {
             let param_name = escape_keyword(&to_snake(&p.pd_name));
@@ -778,7 +793,7 @@ fn collect_cross_namespace_imports_hierarchical(
     // Scan methods
     for method in &node.methods {
         scan_type_ref_hierarchical(&method.md_returns, &node.full_path, ir, &mut imports);
-        for param in &method.md_params {
+        for param in &method.sent_params() {
             scan_type_ref_hierarchical(&param.pd_type, &node.full_path, ir, &mut imports);
         }
     }
@@ -893,7 +908,7 @@ fn collect_cross_namespace_type_imports(ir: &IR, current_namespace: &str) -> Has
             collect_from_type_ref(&method.md_returns, ir, current_namespace, &mut imports);
 
             // Check parameters
-            for param in &method.md_params {
+            for param in &method.sent_params() {
                 collect_from_type_ref(&param.pd_type, ir, current_namespace, &mut imports);
             }
         }

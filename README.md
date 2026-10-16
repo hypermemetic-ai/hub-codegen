@@ -85,6 +85,14 @@ generated/
     └── index.ts     # Namespace exports
 ```
 
+A method's parameters are the ones the caller sends. A parameter the server
+injects — `pdSource` with any `from` but `rpc` (`auth`, `derived`, `header`,
+`cookie`, `query`) — is in neither the signature nor the params object; its
+JSDoc breadcrumb (`@requiresAuth — resolver: …`, `@reads-header origin`,
+`@server-derived auth`) says where it comes from (SYNAPSE-CC-2; before 0.5.0
+it was an optional `unknown` argument). A static child (`mdRole:
+static_child`) is a typed sub-client: `tickets.inputs.answer(…)`.
+
 ### Rust
 ```
 generated/
@@ -93,6 +101,10 @@ generated/
 ├── client.rs        # PlexusClient with methods
 └── Cargo.toml       # Package manifest
 ```
+
+Injected parameters are left out the same way and listed in the function's
+doc comment ("Injected by the server, never sent"); a static child is its
+module (`tickets::inputs::answer(&client, …)`), not a function.
 
 ## Docker
 

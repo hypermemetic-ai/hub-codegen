@@ -651,6 +651,56 @@ pub struct ParamDef {
     pub pd_source: Option<serde_json::Value>,
 }
 
+impl ParamDef {
+    /// SYNAPSE-CC-2: the server fills this parameter from the connection
+    /// (`pdSource.from` is `auth`, `derived`, `header`, `cookie`, `query` —
+    /// anything but `rpc`), so no client sends it: it is left out of every
+    /// generated signature, call body and params object.
+    pub fn is_injected(&self) -> bool {
+        match &self.pd_source {
+            None => false,
+            Some(src) => src.get("from").and_then(|v| v.as_str()) != Some("rpc"),
+        }
+    }
+
+    /// REQ-9: the breadcrumb that says where an injected parameter comes
+    /// from (`@requiresAuth — resolver: …`, `@reads-header origin`,
+    /// `@server-derived auth`); `None` for one the caller sends.
+    pub fn source_breadcrumb(&self) -> Option<String> {
+        let src = self.pd_source.as_ref()?.as_object()?;
+        let from = src.get("from").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let key = src.get("key").and_then(|v| v.as_str());
+        let resolver = src.get("resolver").and_then(|v| v.as_str());
+        Some(match from {
+            "auth" => match resolver {
+                Some(r) => format!("@requiresAuth — resolver: {}", r),
+                None => "@requiresAuth".to_string(),
+            },
+            "cookie" => format!("@reads-cookie {}", key.unwrap_or(self.pd_name.as_str())),
+            "header" => format!("@reads-header {}", key.unwrap_or(self.pd_name.as_str())),
+            "query" => format!("@reads-query {}", key.unwrap_or(self.pd_name.as_str())),
+            "derived" => format!("@server-derived {}", self.pd_name),
+            "rpc" => return None,
+            other => format!("@request-field {} (source: {})", self.pd_name, other),
+        })
+    }
+}
+
+impl MethodDef {
+    /// SYNAPSE-CC-2: the parameters a client sends — `md_params` without
+    /// the injected ones ([`ParamDef::is_injected`]), in IR order. For an IR
+    /// without `pdSource` this is `md_params` itself.
+    pub fn sent_params(&self) -> Vec<ParamDef> {
+        self.md_params.iter().filter(|p| !p.is_injected()).cloned().collect()
+    }
+
+    /// REQ-9 / SYNAPSE-CC-2: one breadcrumb per injected parameter, in IR
+    /// order (empty when the method has none).
+    pub fn injected_breadcrumbs(&self) -> Vec<String> {
+        self.md_params.iter().filter_map(ParamDef::source_breadcrumb).collect()
+    }
+}
+
 // === Helper methods for code generation ===
 
 impl TypeRef {
