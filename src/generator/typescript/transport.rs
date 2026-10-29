@@ -115,6 +115,7 @@ import type {
   StandardResponse,
 } from './types';
 import type { RpcClient } from './rpc';
+import { currentCallScope } from './watch';
 
 // ─── CA-2: credential provider ─────────────────────────────────────────────
 
@@ -553,7 +554,39 @@ export class PlexusRpcClient implements RpcClient {
     this.ws.send(JSON.stringify({ jsonrpc: '2.0', id, method: `${this.config.backend}.respond`, params: { request_id: requestId, response_data: response } }));
   }
 
+  /**
+   * RETURNS-38: `<hub>.call_unsub` for a subscription its caller let go of
+   * before it ended — a `break`, or a merge closed (watch.ts). Its reply is
+   * taken here, awaited by no one.
+   */
+  private sendUnsubscribe(subscriptionId: number): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const id = this.nextId++;
+    this.pendingRequests.set(id, { resolve: () => {}, reject: () => {} });
+    this.log('Unsubscribing:', subscriptionId);
+    this.ws.send(JSON.stringify({ jsonrpc: '2.0', id, method: `${this.config.backend}.call_unsub`, params: [subscriptionId] }));
+  }
+
   async *call(method: string, params?: unknown): AsyncGenerator<PlexusStreamItem> {
+    // RETURNS-38: read first and synchronously — a merge (watch.ts) starts
+    // this call inside a scope, and closing the merge cancels through it,
+    // even while this generator is parked on an await.
+    const scope = currentCallScope();
+    let cancelled = false;
+    let acknowledged: number | undefined;
+    let unsubscribed = false;
+    let live: ActiveSubscription | undefined;
+    const unsubscribe = (): void => {
+      if (unsubscribed || acknowledged === undefined || !live || live.done) return;
+      unsubscribed = true;
+      this.sendUnsubscribe(acknowledged);
+    };
+    scope?.onCancel(() => {
+      cancelled = true;
+      unsubscribe();
+      if (live?.waiting) { const w = live.waiting; live.waiting = null; w(null); }
+    });
+
     // CA-2 preflight: a gated, non-public method with no credentials
     // configured fails fast CLIENT-SIDE, naming the requirement — no server
     // round-trip. Escape hatch: `preflight: false`.
@@ -585,8 +618,10 @@ export class PlexusRpcClient implements RpcClient {
 
     await this.connect();
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) throw new Error('Not connected');
+    if (cancelled) return;
 
     const sub: ActiveSubscription = { queue: [], waiting: null, done: false };
+    live = sub;
     const id = this.nextId++;
     const request: JsonRpcRequest = {
       jsonrpc: '2.0', id,
@@ -601,6 +636,7 @@ export class PlexusRpcClient implements RpcClient {
     this.ws.send(JSON.stringify(request));
 
     const subscriptionId = await subscriptionIdPromise;
+    acknowledged = subscriptionId;
     this.log('Got subscription ID:', subscriptionId);
     this.subscriptions.set(subscriptionId, sub);
 
@@ -615,6 +651,7 @@ export class PlexusRpcClient implements RpcClient {
 
     try {
       while (true) {
+        if (cancelled) return;
         if (sub.queue.length > 0) {
           const item = sub.queue.shift()!;
           yield item;
@@ -628,6 +665,8 @@ export class PlexusRpcClient implements RpcClient {
         if (item.type === 'done' || item.type === 'error') return;
       }
     } finally {
+      // Ended before its done / error: the server is still streaming.
+      unsubscribe();
       this.subscriptions.delete(subscriptionId);
     }
   }

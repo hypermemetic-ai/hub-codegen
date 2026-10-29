@@ -211,14 +211,16 @@ fn test_bun_types_in_dev_deps() {
 // Regressions here would cause tendrils to silently produce wrong artifacts
 // when synapse-cc invokes hub-codegen with targeted selectors.
 
-/// `--generate transport`: types.ts + rpc.ts + transport.ts (modular, no IR needed).
+/// `--generate transport`: types.ts + rpc.ts + transport.ts (modular, no IR needed),
+/// and watch.ts, which transport.ts imports its call scope from (RETURNS-38).
 #[test]
 fn test_selector_transport_only() {
     let ir = minimal_ir();
     let opts = GenerationOptions { generate: GenerateSelector::Transport, ..GenerationOptions::default() };
     let result = generate_typescript(&ir, &opts).unwrap();
 
-    assert_eq!(result.files.len(), 3, "GenTransport must emit exactly three files");
+    assert_eq!(result.files.len(), 4, "GenTransport must emit exactly four files");
+    assert!(result.files.contains_key("watch.ts"),     "GenTransport must emit watch.ts (transport.ts imports it)");
     assert!(result.files.contains_key("types.ts"),     "GenTransport must emit types.ts");
     assert!(result.files.contains_key("rpc.ts"),       "GenTransport must emit rpc.ts");
     assert!(result.files.contains_key("transport.ts"), "GenTransport must emit transport.ts");

@@ -9,6 +9,9 @@ export * from './rpc';
 // WebSocket transport (Layer 1 implementation)
 export * from './transport';
 
+// Many streams as one: watch(a, b, c)
+export * from './watch';
+
 // Namespace modules (types + clients)
 export * as Tickets from './tickets';
 export * as TicketsInputs from './tickets/inputs';

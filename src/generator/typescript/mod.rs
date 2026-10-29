@@ -6,6 +6,7 @@ pub mod rpc;
 pub mod transport;
 pub mod package;
 pub mod tests;
+pub mod watch;
 
 use crate::ir::{IR, TypeRef, TypeKind};
 use crate::generator::{GenerationResult, Warning, GenerationOptions, GenerateSelector, TransportEnv};
@@ -198,6 +199,7 @@ fn generate_code_files(
 
     files.insert("types.ts".to_string(), types::generate_types(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
+    files.insert("watch.ts".to_string(), watch::generate_watch());
 
     // When --plugins is specified, partition namespaces into requested (full gen)
     // and type-dependency-only (types.ts stubs). Otherwise generate everything.
@@ -264,6 +266,7 @@ fn generate_transport_only(ir: &IR, options: &GenerationOptions) -> HashMap<Stri
     let mut files = HashMap::new();
     files.insert("types.ts".to_string(), types::generate_protocol_types_for(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
+    files.insert("watch.ts".to_string(), watch::generate_watch());
     files.insert("transport.ts".to_string(), transport::generate_transport(options.transport, ir));
     files
 }
@@ -278,6 +281,7 @@ fn generate_rpc_only(
     let mut files = HashMap::new();
     files.insert("types.ts".to_string(), types::generate_types(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
+    files.insert("watch.ts".to_string(), watch::generate_watch());
     files.insert("index.ts".to_string(), generate_index(ir, options.transport));
     files
 }
@@ -443,6 +447,11 @@ fn generate_index_filtered(ir: &IR, transport: TransportEnv, only_namespaces: Op
         lines.push("export * from './transport';".to_string());
         lines.push("".to_string());
     }
+
+    // RETURNS-38: watch(a, b, c) — several method streams as one
+    lines.push("// Many streams as one: watch(a, b, c)".to_string());
+    lines.push("export * from './watch';".to_string());
+    lines.push("".to_string());
 
     lines.push("// Namespace modules (types + clients)".to_string());
 
