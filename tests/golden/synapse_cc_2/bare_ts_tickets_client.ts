@@ -2,7 +2,7 @@
 // Wraps RPC layer and unwraps PlexusStreamItem to domain types
 
 import type { RpcClient } from '../rpc';
-import { extractData, collectOne } from '../rpc';
+import { MethodStream, collectOne } from '../rpc';
 import type { SpikeEvent, Status, TicketId } from './types';
 
 /** Typed client interface for tickets plugin */
@@ -11,7 +11,7 @@ export interface TicketsClient {
    * Read one ticket.
    * @requires `tickets.get` anywhere it is held
    */
-  get(id: TicketId): AsyncGenerator<SpikeEvent>;
+  get(id: TicketId): MethodStream<'tickets.get', SpikeEvent>;
   /**
    * Get plugin or method schema. Pass {"method": "name"} for a specific method.
    * @requires `tickets.schema` anywhere it is held
@@ -21,7 +21,7 @@ export interface TicketsClient {
    * Move a ticket to a status.
    * @requires `tickets.set_status` anywhere it is held
    */
-  setStatus(id: TicketId, status: Status): AsyncGenerator<SpikeEvent>;
+  setStatus(id: TicketId, status: Status): MethodStream<'tickets.set_status', SpikeEvent>;
 }
 
 /** Typed client implementation for tickets plugin */
@@ -29,9 +29,9 @@ class TicketsClientImpl implements TicketsClient {
   private rpc: RpcClient;
   constructor(rpc: RpcClient) { this.rpc = rpc; }
 
-  async *get(id: TicketId): AsyncGenerator<SpikeEvent> {
+  get(id: TicketId): MethodStream<'tickets.get', SpikeEvent> {
     const stream = this.rpc.call('tickets.get', { id });
-    yield* extractData<SpikeEvent>(stream);
+    return new MethodStream<'tickets.get', SpikeEvent>('tickets.get', stream);
   }
 
   async schema(): Promise<unknown> {
@@ -39,9 +39,9 @@ class TicketsClientImpl implements TicketsClient {
     return collectOne<unknown>(stream);
   }
 
-  async *setStatus(id: TicketId, status: Status): AsyncGenerator<SpikeEvent> {
+  setStatus(id: TicketId, status: Status): MethodStream<'tickets.set_status', SpikeEvent> {
     const stream = this.rpc.call('tickets.set_status', { id, status });
-    yield* extractData<SpikeEvent>(stream);
+    return new MethodStream<'tickets.set_status', SpikeEvent>('tickets.set_status', stream);
   }
 }
 

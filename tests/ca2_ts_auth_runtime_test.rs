@@ -226,7 +226,10 @@ fn rpc_helpers_throw_typed_stream_errors() {
     let out = generate_typescript(&spinner_fixture(), &opts()).unwrap();
     let rpc = out.files.get("rpc.ts").unwrap();
 
-    assert!(rpc.contains("throw errorFromStreamItem(item);"));
+    // RETURNS-17: the helpers throw a RemoteCallError, which is what
+    // errorFromStreamItem returns for the item, stamped
+    assert!(rpc.contains("throw remoteCallError(undefined, item);"));
+    assert!(rpc.contains("  const thrown = errorFromStreamItem(item);"));
     assert!(!rpc.contains("throw new PlexusError("));
     assert!(rpc.contains(
         "export { PlexusError, ForbiddenError, UnauthenticatedError } from './types';"

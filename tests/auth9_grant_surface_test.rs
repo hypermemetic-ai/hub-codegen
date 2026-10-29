@@ -244,8 +244,10 @@ fn ts_throws_a_typed_forbidden() {
     assert!(types.contains("  /** Whether the operation can be retried */\n  recoverable: boolean;\n  /** AUTH-2: `forbidden` or `unauthenticated` for an auth refusal */\n  error_kind?: string;"));
     // Forbidden comes after ForbiddenError (a class must be declared before it is extended)
     assert!(types.find("export class ForbiddenError").unwrap() < types.find("export class Forbidden extends").unwrap());
-    // the RPC helpers throw what errorFromStreamItem returns
-    assert!(result.files["rpc.ts"].contains("throw errorFromStreamItem(item);"));
+    // the RPC helpers throw what errorFromStreamItem returns (RETURNS-17:
+    // stamped a RemoteCallError)
+    assert!(result.files["rpc.ts"].contains("throw remoteCallError(undefined, item);"));
+    assert!(result.files["rpc.ts"].contains("  const thrown = errorFromStreamItem(item);"));
     // the transport-only selector carries it too
     let transport_only = generate_typescript(
         &fixture(),
@@ -306,6 +308,10 @@ fn without_the_fields_nothing_is_said() {
     let ts = generate_typescript(&bare_fixture(), &opts()).expect("generate");
     for (path, content) in &ts.files {
         for marker in ["@requires `", "export const requires", "defaultRoles", "class Forbidden ", "error_kind", "AUTH-9"] {
+            // RETURNS-17: rpc.ts types every error item (RemoteError), grants or none
+            if path == "rpc.ts" && ["error_kind", "AUTH-9"].contains(&marker) {
+                continue;
+            }
             assert!(!content.contains(marker), "{} carries {:?} without grants", path, marker);
         }
     }

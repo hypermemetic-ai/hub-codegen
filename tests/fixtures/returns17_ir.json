@@ -1,0 +1,184 @@
+{
+ "irBackend": "hub",
+ "irHash": "returns17",
+ "irMetadata": null,
+ "irMethods": {
+  "alpha.a": {
+   "mdBidirType": null,
+   "mdDescription": "The alpha stream",
+   "mdFullPath": "alpha.a",
+   "mdGrant": "alpha.a",
+   "mdName": "a",
+   "mdNamespace": "alpha",
+   "mdParams": [],
+   "mdReturns": {
+    "contents": {
+     "qnLocalName": "AlphaEvent",
+     "qnNamespace": "alpha"
+    },
+    "tag": "RefNamed"
+   },
+   "mdRole": {
+    "kind": "rpc"
+   },
+   "mdStreaming": true
+  },
+  "alpha.get": {
+   "mdBidirType": null,
+   "mdDescription": "One alpha, by id",
+   "mdFullPath": "alpha.get",
+   "mdGrant": "alpha.get",
+   "mdName": "get",
+   "mdNamespace": "alpha",
+   "mdParams": [
+    {
+     "pdDefault": null,
+     "pdDescription": "Which one",
+     "pdName": "id",
+     "pdRequired": true,
+     "pdType": {
+      "contents": [
+       "string",
+       null
+      ],
+      "tag": "RefPrimitive"
+     }
+    }
+   ],
+   "mdReturns": {
+    "contents": {
+     "qnLocalName": "AlphaEvent",
+     "qnNamespace": "alpha"
+    },
+    "tag": "RefNamed"
+   },
+   "mdRole": {
+    "kind": "rpc"
+   },
+   "mdStreaming": false
+  },
+  "beta.b": {
+   "mdBidirType": null,
+   "mdDescription": "The beta stream",
+   "mdFullPath": "beta.b",
+   "mdName": "b",
+   "mdNamespace": "beta",
+   "mdParams": [],
+   "mdReturns": {
+    "contents": {
+     "qnLocalName": "BetaEvent",
+     "qnNamespace": "beta"
+    },
+    "tag": "RefNamed"
+   },
+   "mdRole": {
+    "kind": "rpc"
+   },
+   "mdStreaming": true
+  },
+  "gamma.c": {
+   "mdBidirType": null,
+   "mdDescription": "The gamma stream",
+   "mdFullPath": "gamma.c",
+   "mdName": "c",
+   "mdNamespace": "gamma",
+   "mdParams": [],
+   "mdReturns": {
+    "contents": {
+     "qnLocalName": "GammaEvent",
+     "qnNamespace": "gamma"
+    },
+    "tag": "RefNamed"
+   },
+   "mdRole": {
+    "kind": "rpc"
+   },
+   "mdStreaming": true
+  }
+ },
+ "irPluginRequests": null,
+ "irPlugins": {
+  "alpha": [
+   "a",
+   "get"
+  ],
+  "beta": [
+   "b"
+  ],
+  "gamma": [
+   "c"
+  ]
+ },
+ "irTypes": {
+  "alpha.AlphaEvent": {
+   "tdDescription": "What alpha.a streams",
+   "tdKind": {
+    "ksFields": [
+     {
+      "fdDefault": null,
+      "fdDescription": null,
+      "fdName": "n",
+      "fdRequired": true,
+      "fdType": {
+       "contents": [
+        "integer",
+        null
+       ],
+       "tag": "RefPrimitive"
+      }
+     }
+    ],
+    "tag": "KindStruct"
+   },
+   "tdName": "AlphaEvent",
+   "tdNamespace": "alpha"
+  },
+  "beta.BetaEvent": {
+   "tdDescription": "What beta.b streams",
+   "tdKind": {
+    "ksFields": [
+     {
+      "fdDefault": null,
+      "fdDescription": null,
+      "fdName": "text",
+      "fdRequired": true,
+      "fdType": {
+       "contents": [
+        "string",
+        null
+       ],
+       "tag": "RefPrimitive"
+      }
+     }
+    ],
+    "tag": "KindStruct"
+   },
+   "tdName": "BetaEvent",
+   "tdNamespace": "beta"
+  },
+  "gamma.GammaEvent": {
+   "tdDescription": "What gamma.c streams",
+   "tdKind": {
+    "ksFields": [
+     {
+      "fdDefault": null,
+      "fdDescription": null,
+      "fdName": "flag",
+      "fdRequired": true,
+      "fdType": {
+       "contents": [
+        "boolean",
+        null
+       ],
+       "tag": "RefPrimitive"
+      }
+     }
+    ],
+    "tag": "KindStruct"
+   },
+   "tdName": "GammaEvent",
+   "tdNamespace": "gamma"
+  }
+ },
+ "irVersion": "2.0"
+}
