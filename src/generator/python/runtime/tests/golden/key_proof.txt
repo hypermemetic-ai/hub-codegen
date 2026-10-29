@@ -1,0 +1,5 @@
+# PYTHON-8: the key proof menger's own reference signs for fixed inputs —
+# seed bytes 0..31, aud ws://127.0.0.1:4486, agent python-8-test, nonce 32 × 0x07,
+# ts 1793250000. Regenerate from the hypermemetic root (lines with # are comments):
+#   node --input-type=module -e "import {keyProof} from './menger/deploy/menger-call.mjs'; process.stdout.write(keyProof(Buffer.from([...Array(32).keys()]), 'ws://127.0.0.1:4486', 'python-8-test', Buffer.alloc(32, 7), 1793250000) + '\n')"
+plexus-key.eyJ2IjoxLCJrZXkiOiIwM2ExMDdiZmYzY2UxMGJlMWQ3MGRkMThlNzRiYzA5OTY3ZTRkNjMwOWJhNTBkNWYxZGRjODY2NDEyNTUzMWI4IiwiYXVkIjoid3M6Ly8xMjcuMC4wLjE6NDQ4NiIsImFnZW50IjoicHl0aG9uLTgtdGVzdCIsIm5vbmNlIjoiQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3YyIsInRzIjoxNzkzMjUwMDAwLCJzaWciOiJqWmU4QWR3SmpjcS1JQWQzOWY5emlqUHBkT0ZzeDVIYTJkNkw4S04tRWs4aGVvRG9HVVM5eHJuenphaFp3MmJDYncxM0d0V2RMWGg3ZUpLSnpZQURCQSJ9

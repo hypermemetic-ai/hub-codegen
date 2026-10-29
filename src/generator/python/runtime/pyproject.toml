@@ -1,0 +1,41 @@
+# PYTHON-8: the runtime every generated Python client sits on, as its own
+# test project. Not a distribution: PYTHON-4 embeds transport.py, errors.py,
+# credentials.py, _decode.py and py.typed into each generated package, whose
+# pyproject declares these same pins (PYTHON-5 warms the image with them).
+#
+#   uv run --directory src/generator/python/runtime pytest -m "not live and not perf"
+#   uv run --directory src/generator/python/runtime mypy
+[project]
+name = "plexus-python-runtime"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = ["websockets>=13,<16"]
+
+[project.optional-dependencies]
+agent = ["cryptography>=42"]
+
+[dependency-groups]
+dev = ["mypy>=1.11,<2", "pytest>=8,<9", "pytest-asyncio>=0.24,<1"]
+
+[tool.uv]
+package = false
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+files = ["."]
+exclude = ["^build/", "^\\.venv/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = [".."]
+filterwarnings = [
+  # pytest-asyncio 0.2x on CPython ≥ 3.14 (the event loop policy API); not the runtime's
+  "ignore:.*event_loop_policy.*:DeprecationWarning",
+]
+markers = [
+  "live: needs a throwaway hub (PLEXUS_URL, PLEXUS_KEY_FILE)",
+  "perf: the perf budgets (10,000 items)",
+]
