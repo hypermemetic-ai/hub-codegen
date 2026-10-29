@@ -358,7 +358,8 @@ function rpcErrorFor(code: number, message: string, data?: unknown): PlexusRpcEr
 
 interface JsonRpcNotification {
   jsonrpc: '2.0';
-  method: 'subscription';
+  /** Not significant (plexus-wire spec/01): any string; never read (POLYGLOT-12). */
+  method: string;
   params: { subscription: number; result: PlexusStreamItem };
 }
 
@@ -570,7 +571,7 @@ export class PlexusRpcClient implements RpcClient {
   }
 
   /**
-   * RETURNS-38: `<hub>.call_unsub` for a subscription its caller let go of
+   * RETURNS-38: `<service>.call_unsub` for a subscription its caller let go of
    * before it ended — a `break`, or a merge closed (watch.ts). Its reply is
    * taken here, awaited by no one.
    */
@@ -659,6 +660,8 @@ export class PlexusRpcClient implements RpcClient {
     if (pendingMessages) {
       this.pendingSubscriptionMessages.delete(subscriptionId);
       for (const msg of pendingMessages) {
+        // POLYGLOT-12: a request that came before the id is answered, as one after it is
+        if (msg.type === 'request') { this.handleBidirectionalRequest(msg as PlexusStreamItemRequest); continue; }
         if (msg.type === 'done' || msg.type === 'error') sub.done = true;
         sub.queue.push(msg);
       }

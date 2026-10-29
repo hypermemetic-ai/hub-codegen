@@ -7,8 +7,9 @@
 //!    `transport.ts` (`TransportError`) match their goldens.
 //! 2. Everything else is what main@3485a47 generated
 //!    (`golden/returns17/before.sha256`), but for `client.ts`, whose only
-//!    change is each streaming method's type and body and the helper import:
-//!    mapped back to main's spelling, it hashes as before.
+//!    change is each streaming method's type and body and the helper import,
+//!    and the root `types.ts`, whose only change is POLYGLOT-12's two wire
+//!    names: mapped back to main's spelling, each hashes as before.
 //! 3. The TypeScript tests in `tests/ts_returns17/` — types under `tsc`
 //!    (`@ts-expect-error` as assertions) and behaviour on a mock socket under
 //!    `node --test` — run against a package generated from
@@ -191,7 +192,16 @@ fn existing_output_unchanged() {
             continue;
         }
         let content = now.get(path).unwrap_or_else(|| panic!("{path} is no longer generated"));
-        let content = if file == "client.ts" && !path.contains("-rust/") { to_main_spelling(content) } else { content.clone() };
+        let content = if file == "client.ts" && !path.contains("-rust/") {
+            to_main_spelling(content)
+        } else if name == "types.ts" {
+            // POLYGLOT-12: the item types name the wire's fields; nothing else moved
+            content.replacen("  plexus_hash: string;", "  plexusHash: string;", 1)
+                .replacen("  content_type: string;", "  contentType: string;", 1)
+                .replacen("// These types define the wire format for all plexus streaming responses.\n// Field names are the wire's (plexus-wire spec/03): snake_case, but for the\n// request item's, which plexus-core sends in camelCase (POLYGLOT-12).\n", "// These types define the wire format for all plexus streaming responses.\n", 1)
+        } else {
+            content.clone()
+        };
         assert_eq!(&sha256(&content), hash, "{path} changed beyond RETURNS-17's spelling");
         compared += 1;
     }
@@ -281,7 +291,7 @@ fn ts_method_stream_types_and_behaviour() {
     let (ok, text) = run(Command::new("node").args(["--test", "--test-reporter=spec"]).arg(in_pkg(&pkg, "r17-tests/runtime.test.js")).current_dir(&pkg));
     println!("{text}");
     assert!(ok, "node --test runtime.test.js failed:\n{text}");
-    assert!(text.contains("pass 11"), "11 runtime tests:\n{text}");
+    assert!(text.contains("pass 12"), "12 runtime tests (11 + POLYGLOT-12's):\n{text}");
 }
 
 /// Every `@ts-expect-error` is real: unmarked, `tsc` fails on exactly those lines.

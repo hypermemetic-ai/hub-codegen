@@ -9,6 +9,7 @@ import {
   watch, MethodStream, RemoteCallError, PlexusError, TransportError, isOk, isErr,
   type Merged, type Tagged, type MethodEvent, type WithProgress, type Progress,
   type RemoteError, type RemoteErrorKind, type Result, type RpcClient,
+  type PlexusStreamItemData, type StreamMetadata,
   Alpha, Beta, Gamma,
 } from '../index';
 
@@ -96,3 +97,15 @@ export function resultTests(r: Result<A, { type: 'not_found'; id: string }>): vo
   // @ts-expect-error — narrowed to neither half, it has no `ok`
   r.ok;
 }
+
+// ── the item types are the wire's (POLYGLOT-12) ───────────────────────────
+export const wireItem: PlexusStreamItemData = {
+  type: 'data',
+  metadata: { provenance: ['service'], plexus_hash: 'x', timestamp: 1 },
+  content_type: 'alpha.a',
+  content: { n: 1 },
+};
+// @ts-expect-error — no server sends contentType
+export const camelItem: PlexusStreamItemData = { type: 'data', metadata: wireItem.metadata, contentType: 'alpha.a', content: {} };
+// @ts-expect-error — nor plexusHash
+export const camelMeta: StreamMetadata = { provenance: [], plexusHash: 'x', timestamp: 1 };

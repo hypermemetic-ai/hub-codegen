@@ -6,7 +6,7 @@
 import { MethodStream, extractData, type PlexusStreamItem } from '../index';
 
 const N = 100_000;
-const META = { provenance: ['hub'], plexus_hash: 'x', timestamp: 1 };
+const META = { provenance: ['service'], plexus_hash: 'x', timestamp: 1 };
 
 async function* wire(): AsyncGenerator<PlexusStreamItem> {
   for (let i = 0; i < N; i++) yield { type: 'data', metadata: META, content_type: 'alpha.a', content: { n: i } } as unknown as PlexusStreamItem;

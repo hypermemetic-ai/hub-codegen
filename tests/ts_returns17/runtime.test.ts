@@ -1,5 +1,5 @@
 // RETURNS-17 · the generated client's calls on a mock WebSocket that plays
-// the hub and counts every frame (node --test): MethodStream's items,
+// the service and counts every frame (node --test): MethodStream's items,
 // events and progress; RemoteCallError from an error item; TransportError
 // from a lost socket; one reader; call_unsub on an early end; and watch over
 // generated streams with no paths written.
@@ -11,12 +11,12 @@ import {
   Alpha, Beta,
 } from '../index';
 
-const BACKEND = 'hub';
-const META = { provenance: ['hub'], plexus_hash: 'x', timestamp: 1 };
+const BACKEND = 'service';
+const META = { provenance: ['service'], plexus_hash: 'x', timestamp: 1 };
 
 interface Frame { jsonrpc: '2.0'; id?: number; method?: string; params?: any; result?: unknown }
 
-class MockHub {
+class MockService {
   socket: MockSocket | null = null;
   sent: Frame[] = [];
   private nextSub = 100;
@@ -35,6 +35,9 @@ class MockHub {
       const sub = this.nextSub++;
       const m: string = f.params.method;
       this.subs.set(m, [...(this.subs.get(m) ?? []), sub]);
+      for (const item of this.early.splice(0)) {
+        this.reply({ jsonrpc: '2.0', method: `${BACKEND}.call`, params: { subscription: sub, result: item } } as Frame);
+      }
       this.reply({ jsonrpc: '2.0', id: f.id, result: sub });
     } else if (f.method === `${BACKEND}.call_unsub`) {
       this.reply({ jsonrpc: '2.0', id: f.id, result: true });
@@ -43,6 +46,9 @@ class MockHub {
   reply(f: Frame): void {
     setTimeout(() => this.socket?.onmessage?.({ data: JSON.stringify(f) }), 0);
   }
+  /** Speak on the next subscription before its id is answered (spec/02 allows the race). */
+  early: object[] = [];
+  respond(): Frame[] { return this.sent.filter((f) => f.method === `${BACKEND}.respond`); }
   emit(method: string, item: object, n = 0): void {
     this.reply({ jsonrpc: '2.0', method: `${BACKEND}.call`, params: { subscription: this.subOf(method, n), result: item } } as Frame);
   }
@@ -68,21 +74,21 @@ class MockSocket {
   onerror: ((e: unknown) => void) | null = null;
   onclose: ((e: { code: number; reason: string }) => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
-  constructor(_url: string, private hub = currentHub) {
-    hub.socket = this;
+  constructor(_url: string, private svc = currentService) {
+    svc.socket = this;
     setTimeout(() => { this.readyState = MockSocket.OPEN; this.onopen?.({}); }, 0);
   }
-  send(data: string): void { this.hub.onFrame(JSON.parse(data)); }
+  send(data: string): void { this.svc.onFrame(JSON.parse(data)); }
   close(): void { this.readyState = MockSocket.CLOSED; }
 }
-let currentHub = new MockHub();
+let currentService = new MockService();
 (globalThis as any).WebSocket = MockSocket;
 
 function setup() {
-  const hub = new MockHub();
-  currentHub = hub;
+  const svc = new MockService();
+  currentService = svc;
   const rpc = new PlexusRpcClient({ backend: BACKEND, url: 'ws://mock', preflight: false });
-  return { hub, rpc, alpha: Alpha.createAlphaClient(rpc), beta: Beta.createBetaClient(rpc) };
+  return { svc, rpc, alpha: Alpha.createAlphaClient(rpc), beta: Beta.createBetaClient(rpc) };
 }
 
 const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
@@ -92,43 +98,43 @@ async function until(cond: () => boolean, what: string): Promise<void> {
 }
 
 test('a generated stream is a MethodStream that knows its path, and yields its items', async () => {
-  const { hub, alpha } = setup();
+  const { svc, alpha } = setup();
   const s = alpha.a();
   assert.ok(s instanceof MethodStream);
   assert.equal(s.method, 'alpha.a');
   const got: unknown[] = [];
   const reading = (async () => { for await (const ev of s) got.push(ev); })();
-  await until(() => hub.calls().length === 1, 'the call');
-  assert.equal(hub.calls()[0].params.method, 'alpha.a');
-  hub.data('alpha.a', { n: 1 });
-  hub.progress('alpha.a', 'half');
-  hub.data('alpha.a', { n: 2 });
-  hub.done('alpha.a');
+  await until(() => svc.calls().length === 1, 'the call');
+  assert.equal(svc.calls()[0].params.method, 'alpha.a');
+  svc.data('alpha.a', { n: 1 });
+  svc.progress('alpha.a', 'half');
+  svc.data('alpha.a', { n: 2 });
+  svc.done('alpha.a');
   await reading;
   assert.deepEqual(got, [{ n: 1 }, { n: 2 }], 'progress dropped');
-  assert.equal(hub.unsubs().length, 0, 'it ended at the server: nothing to unsubscribe');
+  assert.equal(svc.unsubs().length, 0, 'it ended at the server: nothing to unsubscribe');
 });
 
 test('.events() tags each event with the method', async () => {
-  const { hub, beta } = setup();
+  const { svc, beta } = setup();
   const got: unknown[] = [];
   const reading = (async () => { for await (const ev of beta.b().events()) got.push(ev); })();
-  await until(() => hub.calls().length === 1, 'the call');
-  hub.data('beta.b', { text: 'x' });
-  hub.done('beta.b');
+  await until(() => svc.calls().length === 1, 'the call');
+  svc.data('beta.b', { text: 'x' });
+  svc.done('beta.b');
   await reading;
   assert.deepEqual(got, [{ method: 'beta.b', event: { text: 'x' } }]);
 });
 
 test('.withProgress() yields items and progress in arrival order', async () => {
-  const { hub, alpha } = setup();
+  const { svc, alpha } = setup();
   const got: unknown[] = [];
   const reading = (async () => { for await (const f of alpha.a().withProgress()) got.push(f); })();
-  await until(() => hub.calls().length === 1, 'the call');
-  hub.progress('alpha.a', 'starting');
-  hub.data('alpha.a', { n: 1 });
-  hub.progress('alpha.a', 'half', 50);
-  hub.done('alpha.a');
+  await until(() => svc.calls().length === 1, 'the call');
+  svc.progress('alpha.a', 'starting');
+  svc.data('alpha.a', { n: 1 });
+  svc.progress('alpha.a', 'half', 50);
+  svc.done('alpha.a');
   await reading;
   assert.deepEqual(got, [
     { progress: { message: 'starting' } },
@@ -138,12 +144,12 @@ test('.withProgress() yields items and progress in arrival order', async () => {
 });
 
 test('an error item throws RemoteCallError, typed from the item — still the AUTH-9 class', async () => {
-  const { hub, alpha } = setup();
+  const { svc, alpha } = setup();
   const got: unknown[] = [];
   const reading = (async () => { for await (const ev of alpha.a()) got.push(ev); })();
-  await until(() => hub.calls().length === 1, 'the call');
-  hub.data('alpha.a', { n: 1 });
-  hub.error('alpha.a', { code: '-32003', error_kind: 'forbidden', grant: 'alpha.a', scope: '*', roles: ['editor', 'admin'], held_on: [], message: 'needs alpha.a' });
+  await until(() => svc.calls().length === 1, 'the call');
+  svc.data('alpha.a', { n: 1 });
+  svc.error('alpha.a', { code: '-32003', error_kind: 'forbidden', grant: 'alpha.a', scope: '*', roles: ['editor', 'admin'], held_on: [], message: 'needs alpha.a' });
   const e = await reading.then(() => assert.fail('it must throw'), (x: unknown) => x);
   assert.deepEqual(got, [{ n: 1 }], 'the item before the error arrived');
   assert.ok(e instanceof RemoteCallError, 'a RemoteCallError');
@@ -156,14 +162,14 @@ test('an error item throws RemoteCallError, typed from the item — still the AU
   assert.deepEqual(e.held_on, []);
   assert.equal(e.code, '-32003');
   assert.deepEqual(e.error, { code: '-32003', error_kind: 'forbidden', grant: 'alpha.a', scope: '*', roles: ['editor', 'admin'], held_on: [], message: 'needs alpha.a', recoverable: false });
-  assert.equal(hub.unsubs().length, 0, 'an error item ends the call at the server');
+  assert.equal(svc.unsubs().length, 0, 'an error item ends the call at the server');
 });
 
 test('a one-item call throws RemoteCallError too, its kind read from the item', async () => {
-  const { hub, alpha } = setup();
+  const { svc, alpha } = setup();
   const p = alpha.get('x');
-  await until(() => hub.calls().length === 1, 'the call');
-  hub.error('alpha.get', { code: 'too_many_calls', error_kind: 'too_many_calls', max: 8, message: 'too many', recoverable: true });
+  await until(() => svc.calls().length === 1, 'the call');
+  svc.error('alpha.get', { code: 'too_many_calls', error_kind: 'too_many_calls', max: 8, message: 'too many', recoverable: true });
   const e = await p.then(() => assert.fail('it must throw'), (x: unknown) => x);
   assert.ok(e instanceof RemoteCallError && e instanceof PlexusError);
   assert.equal(e.method, undefined);
@@ -173,13 +179,13 @@ test('a one-item call throws RemoteCallError too, its kind read from the item', 
 });
 
 test('a socket lost mid-stream throws TransportError, not a quiet end', async () => {
-  const { hub, alpha } = setup();
+  const { svc, alpha } = setup();
   const got: unknown[] = [];
   const reading = (async () => { for await (const ev of alpha.a()) got.push(ev); })();
-  await until(() => hub.calls().length === 1, 'the call');
-  hub.data('alpha.a', { n: 1 });
+  await until(() => svc.calls().length === 1, 'the call');
+  svc.data('alpha.a', { n: 1 });
   await until(() => got.length === 1, 'the item');
-  hub.drop();
+  svc.drop();
   const e = await reading.then(() => assert.fail('it must throw'), (x: unknown) => x);
   assert.ok(e instanceof TransportError, String(e));
   assert.ok(!(e instanceof RemoteCallError), 'never a remote error');
@@ -196,37 +202,37 @@ test('read once: after .events(), for await and .withProgress() are refused', as
 });
 
 test('breaking out of for await sends one call_unsub', async () => {
-  const { hub, alpha } = setup();
+  const { svc, alpha } = setup();
   const reading = (async () => { for await (const _ of alpha.a()) break; })();
-  await until(() => hub.calls().length === 1, 'the call');
-  hub.data('alpha.a', { n: 1 });
+  await until(() => svc.calls().length === 1, 'the call');
+  svc.data('alpha.a', { n: 1 });
   await reading;
-  await until(() => hub.unsubs().length === 1, 'the unsubscribe');
-  assert.deepEqual(hub.unsubs()[0].params, [hub.subOf('alpha.a')]);
+  await until(() => svc.unsubs().length === 1, 'the unsubscribe');
+  assert.deepEqual(svc.unsubs()[0].params, [svc.subOf('alpha.a')]);
 });
 
 test('return() before reading makes no call', async () => {
-  const { hub, alpha } = setup();
+  const { svc, alpha } = setup();
   const s = alpha.a();
   assert.deepEqual(await s.return(), { value: undefined, done: true });
   await tick(20);
-  assert.equal(hub.calls().length, 0);
+  assert.equal(svc.calls().length, 0);
 });
 
 test('watch over generated streams: no paths written; close unsubscribes each, parked or not', async () => {
-  const { hub, alpha, beta } = setup();
+  const { svc, alpha, beta } = setup();
   const s = watch(alpha.a(), beta.b());
   assert.deepEqual(s.sources, ['alpha.a', 'beta.b']);
   const first = s.next();
-  await until(() => hub.calls().length === 2, 'two subscriptions');
-  hub.data('beta.b', { text: 'b1' });
+  await until(() => svc.calls().length === 2, 'two subscriptions');
+  svc.data('beta.b', { text: 'b1' });
   assert.deepEqual((await first).value, { source: 'beta.b', event: { text: 'b1' } });
   const parked = s.next();
   await tick(20);
   await s.close();
   assert.deepEqual(await parked, { value: undefined, done: true });
-  await until(() => hub.unsubs().length === 2, 'two unsubscribes');
-  assert.deepEqual(hub.unsubs().map((f) => f.params[0]).sort(), [hub.subOf('alpha.a'), hub.subOf('beta.b')].sort());
+  await until(() => svc.unsubs().length === 2, 'two unsubscribes');
+  assert.deepEqual(svc.unsubs().map((f) => f.params[0]).sort(), [svc.subOf('alpha.a'), svc.subOf('beta.b')].sort());
 });
 
 test('a RemoteCallError built directly is one; a plain PlexusError is not', () => {
@@ -237,4 +243,23 @@ test('a RemoteCallError built directly is one; a plain PlexusError is not', () =
   assert.equal(e.grant, undefined);
   assert.ok(!(new PlexusError('x') instanceof RemoteCallError));
   assert.ok(!(new TransportError('x') instanceof RemoteCallError));
+});
+
+test('POLYGLOT-12: a request item that arrives before the subscription id is answered, never yielded', async () => {
+  const svc = new MockService();
+  currentService = svc;
+  const rpc = new PlexusRpcClient({
+    backend: BACKEND, url: 'ws://mock', preflight: false,
+    onBidirectionalRequest: async () => ({ type: 'confirmed', value: true }),
+  });
+  const alpha = Alpha.createAlphaClient(rpc);
+  svc.early.push({ type: 'request', requestId: 'r-1', requestData: { type: 'confirm', message: 'go?' }, timeoutMs: 3000 });
+  const got: unknown[] = [];
+  const reading = (async () => { for await (const ev of alpha.a()) got.push(ev); })();
+  await until(() => svc.respond().length === 1, 'the answer to the request');
+  assert.deepEqual(svc.respond()[0].params, { request_id: 'r-1', response_data: { type: 'confirmed', value: true } });
+  svc.data('alpha.a', { n: 1 });
+  svc.done('alpha.a');
+  await reading;
+  assert.deepEqual(got, [{ n: 1 }], 'the request is not an item');
 });

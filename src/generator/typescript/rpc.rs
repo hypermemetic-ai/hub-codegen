@@ -18,7 +18,7 @@ import type { PlexusStreamItem, StreamMetadata } from './types';
 import { PlexusError, errorFromStreamItem } from './types';
 
 /**
- * Raw RPC client interface for hub communication.
+ * Raw RPC client interface for service communication.
  *
  * This is the low-level transport layer. All methods return AsyncGenerator<PlexusStreamItem>.
  * Use the typed client wrappers for a better developer experience.

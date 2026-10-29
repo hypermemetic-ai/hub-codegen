@@ -130,8 +130,8 @@ fn existing_output_unchanged() {
                 }
                 // RETURNS-17 changed these since (a streaming method's
                 // MethodStream; the runtime): its own test holds them —
-                // tests/returns17_method_stream_test.rs
-                if path.ends_with("client.ts") || *path == "rpc.ts" {
+                // tests/returns17_method_stream_test.rs (types.ts: POLYGLOT-12)
+                if path.ends_with("client.ts") || *path == "rpc.ts" || *path == "types.ts" {
                     continue;
                 }
                 if dir.ends_with("-rust") && !files.contains_key(*path) {
@@ -161,7 +161,8 @@ fn existing_output_unchanged() {
             }
         }
     }
-    assert!(compared > 60, "compared {compared} files");
+    // 58 since POLYGLOT-12 took types.ts to tests/returns17_method_stream_test.rs
+    assert!(compared > 50, "compared {compared} files");
 }
 
 // ─────────────────────────────────────────────────────────────
