@@ -75,7 +75,7 @@ and the source node is `Complete`:
 This is the critical correctness invariant for dynamic edges: connecting a new
 downstream node to an already-complete upstream node must retroactively place tokens.
 
-### Hub method signatures
+### Service method signatures
 
 `lattice::add_node` and `lattice::add_edge` signatures stay the same. The live-graph
 behavior is transparent — callers don't need to know whether the graph is running or
@@ -337,7 +337,7 @@ from the parent event log.
 
 **Dynamic augmentation vs. Plan node:**
 The live-graph `add_node`/`add_edge` capability is exposed through the existing
-`lattice::add_node` / `lattice::add_edge` hub methods. Claude Code sessions with MCP
+`lattice::add_node` / `lattice::add_edge` service methods. Claude Code sessions with MCP
 access to the substrate can call these. This is intentional — it's the "option 2"
 escape hatch, but since all nodes are added to graphs tracked by the same lattice,
 they remain introspectable. The difference from a Plan node is structure and PM
@@ -366,6 +366,6 @@ as feedback, analogous to `dispatch_validate_with_retry`. Out of scope for this 
 | `activations/orcha/ticket_compiler.rs` | `[planner]` type |
 | `activations/orcha/activation.rs` | `cancel_graph` recursive propagation, `run_graph_definition` Plan arm |
 | `activations/orcha/pm/storage.rs` | `inspect_ticket` child embedding, `graph_status` `recursive` param, `list_graphs` `root_only` param |
-| `activations/orcha/pm/activation.rs` | expose new PM params as hub method params |
+| `activations/orcha/pm/activation.rs` | expose new PM params as service method params |
 
 No new files. No new tables beyond the one column. No changes to the WebSocket/RPC layer.

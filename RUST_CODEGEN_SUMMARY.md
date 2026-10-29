@@ -21,7 +21,7 @@ all = ["typescript", "rust"]
 ### Project Structure
 
 ```
-hub-codegen/
+service-codegen/
 ├── src/
 │   ├── generator/
 │   │   ├── mod.rs              # Feature-gated exports

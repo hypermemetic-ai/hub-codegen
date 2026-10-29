@@ -668,4 +668,4 @@ fn test_hierarchical_structure() {
 4. Easier navigation (directory tree matches namespace tree)
 5. Scalability (works better with 100+ namespaces)
 
-**Next steps:** Implement changes in `hub-codegen/src/generator/rust/`
+**Next steps:** Implement changes in `service-codegen/src/generator/rust/`

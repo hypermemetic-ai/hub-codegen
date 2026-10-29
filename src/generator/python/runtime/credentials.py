@@ -1,4 +1,4 @@
-"""What a Hub signs in with (PYTHON-8): a token, an async supplier, or an
+"""What a Service signs in with (PYTHON-8): a token, an async supplier, or an
 agent's Ed25519 key proof — always sent as ``Authorization: Bearer …`` at the
 WebSocket upgrade, and always read from a file, never argv or the environment.
 
@@ -75,7 +75,7 @@ class Token:
 
 
 class KeyProof:
-    """An agent's Ed25519 key, proving itself to a hub at each connect (IDENTITY-40).
+    """An agent's Ed25519 key, proving itself to a service at each connect (IDENTITY-40).
 
     ``KeyProof.from_file("~/.plexus/keys/builder.key", agent="builder")`` — the
     file holds the 32-byte seed in base64 (``synapse _key new NAME --store
@@ -129,7 +129,7 @@ class KeyProof:
 
 
 Credentials = Union[Token, KeyProof, Callable[[], Awaitable[str]]]
-"""What ``Hub(credentials=…)`` takes."""
+"""What ``Service(credentials=…)`` takes."""
 
 
 async def authorization(credentials: Credentials, url: str) -> str:

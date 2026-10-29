@@ -2,7 +2,7 @@
 //!
 //! 1. `watch.ts` is a static runtime module, emitted beside `rpc.ts` and
 //!    re-exported from `index.ts`; its golden is `golden/returns38/watch.ts`.
-//! 2. Everything else is what it was: every file hub-codegen@6876246 (main,
+//! 2. Everything else is what it was: every file service-codegen@6876246 (main,
 //!    before this) generated for the two fixtures — TypeScript under each
 //!    transport, and Rust — hashes the same today
 //!    (`golden/returns38/before.sha256`), but for `watch.ts` (new),
@@ -16,10 +16,13 @@
 //!    `node --test`) — run against a package generated from
 //!    `fixtures/returns38_watch_ir.json`. They need Node and the harness's
 //!    `npm install` (done here when `node_modules` is missing); without
-//!    Node they are skipped, unless `HUB_CODEGEN_REQUIRE_TS=1`.
+//!    Node they are skipped, unless `SERVICE_CODEGEN_REQUIRE_TS=1`.
 
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::{generate_rust, generate_typescript, IR};
+#[path = "support/naming.rs"]
+mod common_naming;
+
+use service_codegen::generator::{GenerationOptions, TransportEnv};
+use service_codegen::{generate_rust, generate_typescript, IR};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -145,7 +148,7 @@ fn existing_output_unchanged() {
                 } else {
                     now.clone()
                 };
-                assert_eq!(&sha256(&now), hash, "{dir}/{path} changed — every existing method's output must stay byte for byte");
+                assert_eq!(&sha256(&common_naming::as_recorded(&dir, &now)), hash, "{dir}/{path} changed — every existing method's output must stay byte for byte");
                 compared += 1;
             }
             for path in files.keys() {
@@ -185,7 +188,7 @@ fn run(cmd: &mut Command) -> (bool, String) {
 fn compiled() -> Option<(tempfile::TempDir, PathBuf)> {
     let node_ok = Command::new("node").arg("--version").output().map(|o| o.status.success()).unwrap_or(false);
     if !node_ok {
-        assert!(std::env::var("HUB_CODEGEN_REQUIRE_TS").is_err(), "HUB_CODEGEN_REQUIRE_TS=1 and there is no node");
+        assert!(std::env::var("SERVICE_CODEGEN_REQUIRE_TS").is_err(), "SERVICE_CODEGEN_REQUIRE_TS=1 and there is no node");
         eprintln!("node not available; skipping the TypeScript watch tests");
         return None;
     }

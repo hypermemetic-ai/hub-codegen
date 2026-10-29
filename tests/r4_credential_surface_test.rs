@@ -17,9 +17,9 @@
 //! Surfacing only: nothing in this file asserts client-side enforcement,
 //! because there is none — the gate enforces server-side.
 
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::ir::*;
-use hub_codegen::{generate_typescript, IR};
+use service_codegen::generator::{GenerationOptions, TransportEnv};
+use service_codegen::ir::*;
+use service_codegen::{generate_typescript, IR};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -102,7 +102,7 @@ fn surfaced_method(
 ///   `ccc924ad-0e78-4d4b-b71f-0018d249d0bf`) — what a real backend now
 ///   emits: `kind: None` (scope-derived via `from_method_scope`), one
 ///   scope, and a `site_hint` derived at schema-assembly time from the
-///   hub's advertised bearer capability (`header:authorization`). Mirrors
+///   service's advertised bearer capability (`header:authorization`). Mirrors
 ///   fidget-spinner's live `spinner.spin` wire schema.
 fn golden_fixture() -> IR {
     let mut ir_methods = HashMap::new();
@@ -419,7 +419,7 @@ fn test_ts_surface_is_deterministic() {
 #[cfg(feature = "rust")]
 #[test]
 fn test_rust_surfaces_requirement_doc_and_const() {
-    use hub_codegen::generate_rust;
+    use service_codegen::generate_rust;
 
     let ir = credential_fixture();
     let result = generate_rust(&ir).unwrap();
@@ -487,7 +487,7 @@ fn test_ts_golden_snapshot() {
 #[cfg(feature = "rust")]
 #[test]
 fn test_rust_golden_snapshot() {
-    use hub_codegen::generate_rust;
+    use service_codegen::generate_rust;
 
     let ir = golden_fixture();
     let result = generate_rust(&ir).unwrap();
@@ -529,7 +529,7 @@ fn test_ts_absence_emits_no_surface() {
 #[cfg(feature = "rust")]
 #[test]
 fn test_rust_absence_emits_no_surface() {
-    use hub_codegen::generate_rust;
+    use service_codegen::generate_rust;
 
     let ir = bare_fixture();
     let result = generate_rust(&ir).unwrap();

@@ -263,7 +263,7 @@ $CACHE_ROOT/
 │       ├── cone.json
 │       ├── arbor.json
 │       └── <plugin>.json
-└── hub-codegen/
+└── service-codegen/
     ├── rust/
     │   ├── manifest.json
     │   ├── cone/
@@ -621,7 +621,7 @@ A plugin depends on another if:
 
 ## 7. Code Cache Entry Format
 
-**File:** `$CACHE_ROOT/hub-codegen/<target>/<plugin>/hash.txt`
+**File:** `$CACHE_ROOT/service-codegen/<target>/<plugin>/hash.txt`
 
 ```
 <ir-hash>
@@ -631,7 +631,7 @@ Just the IR hash as plain text (no JSON overhead).
 
 **Generated files location:**
 ```
-$CACHE_ROOT/hub-codegen/<target>/<plugin>/
+$CACHE_ROOT/service-codegen/<target>/<plugin>/
 ├── hash.txt
 ├── types.rs (or types.ts)
 ├── methods.rs (or client.ts)
@@ -647,7 +647,7 @@ $CACHE_ROOT/hub-codegen/<target>/<plugin>/
 
 ## 8. Code Cache Manifest Format
 
-**File:** `$CACHE_ROOT/hub-codegen/<target>/manifest.json`
+**File:** `$CACHE_ROOT/service-codegen/<target>/manifest.json`
 
 ```typescript
 {
@@ -992,7 +992,7 @@ if fresh.children_hash != cached.children_hash {
 
 **V1 Behavior:**
 ```bash
-$ hub-codegen --debug
+$ service-codegen --debug
 Cache miss for 'cone' - hash mismatch
   Expected: a1b2c3d4e5f6g7h8
   Got:      x9y8z7w6v5u4t3s2
@@ -1001,7 +1001,7 @@ Cache miss for 'cone' - hash mismatch
 
 **V2 Behavior:**
 ```bash
-$ hub-codegen --debug
+$ service-codegen --debug
 Cache analysis for 'cone':
   Composite hash:  MISMATCH ❌
   Methods hash:    MATCH ✅ (abc111methods)
@@ -1368,12 +1368,12 @@ Before merging any cache implementation, verify:
 - Output: IR cache entries with dependencies
 - Contract: Schema hash must match manifest
 
-**Synapse IR Cache → hub-codegen:**
+**Synapse IR Cache → service-codegen:**
 - Input: Merged IR from cache + fresh generation
 - Output: Standard IR JSON (version 2.0)
 - Contract: IR format matches `src/ir.rs` types
 
-**hub-codegen → Code Cache:**
+**service-codegen → Code Cache:**
 - Input: IR JSON with plugin grouping
 - Output: Generated files + hash.txt
 - Contract: Files in `<target>/<plugin>/` directory
@@ -1389,7 +1389,7 @@ Before merging any cache implementation, verify:
 
 ## 19. Hash System V2 Migration Guide
 
-### For Cache Writers (Synapse, hub-codegen)
+### For Cache Writers (Synapse, service-codegen)
 
 **Step 1: Detect V2 Support**
 ```rust

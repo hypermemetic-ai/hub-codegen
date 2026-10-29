@@ -1,9 +1,9 @@
-//! Hub Codegen CLI
+//! Service Codegen CLI
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use hub_codegen::cache::{read_cache_manifest, write_cache_manifest, CodeCacheManifest, ToolchainVersions, CodePluginCache};
-use hub_codegen::merge::{merge_generated_code, print_merge_summary, MergeStrategy};
+use service_codegen::cache::{read_cache_manifest, write_cache_manifest, CodeCacheManifest, ToolchainVersions, CodePluginCache};
+use service_codegen::merge::{merge_generated_code, print_merge_summary, MergeStrategy};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{self, Read};
@@ -55,7 +55,7 @@ struct CodegenOutput<'a> {
     files: &'a HashMap<String, String>,
     file_hashes: &'a HashMap<String, String>,
     warnings: Vec<WarningOutput<'a>>,
-    hub_codegen_version: &'static str,
+    service_codegen_version: &'static str,
     dependencies: &'a HashMap<String, String>,
     dev_dependencies: &'a HashMap<String, String>,
 }
@@ -67,9 +67,9 @@ struct WarningOutput<'a> {
 }
 
 #[derive(Parser)]
-#[command(name = "hub-codegen")]
+#[command(name = "service-codegen")]
 #[command(about = "Generate client code from Synapse IR")]
-#[command(version = hub_codegen::HUB_CODEGEN_VERSION)]
+#[command(version = service_codegen::SERVICE_CODEGEN_VERSION)]
 struct Args {
     /// Path to IR JSON file (use - for stdin)
     #[arg(default_value = "-")]
@@ -131,7 +131,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // Read IR — transport-only generation doesn't need IR (transport.ts is a static template)
-    let ir: hub_codegen::IR = if matches!(args.generate, CliGenerate::Transport) {
+    let ir: service_codegen::IR = if matches!(args.generate, CliGenerate::Transport) {
         serde_json::from_str(r#"{"irVersion":"2.0","irBackend":"","irTypes":{},"irMethods":{},"irPlugins":{}}"#)?
     } else if args.input.as_os_str() == "-" {
         let mut buf = String::new();
@@ -141,24 +141,24 @@ fn main() -> Result<()> {
         serde_json::from_str(&std::fs::read_to_string(&args.input)?)?
     };
 
-    let deprecation_opts = hub_codegen::deprecation::DeprecationOptions {
+    let deprecation_opts = service_codegen::deprecation::DeprecationOptions {
         enabled: !args.no_deprecation_annotations,
     };
 
     // Create generation options
-    let options = hub_codegen::GenerationOptions {
+    let options = service_codegen::GenerationOptions {
         transport: match args.transport {
-            CliTransport::Ws      => hub_codegen::generator::TransportEnv::Ws,
-            CliTransport::Browser => hub_codegen::generator::TransportEnv::Browser,
-            CliTransport::None    => hub_codegen::generator::TransportEnv::None,
+            CliTransport::Ws      => service_codegen::generator::TransportEnv::Ws,
+            CliTransport::Browser => service_codegen::generator::TransportEnv::Browser,
+            CliTransport::None    => service_codegen::generator::TransportEnv::None,
         },
         generate: match args.generate {
-            CliGenerate::All       => hub_codegen::GenerateSelector::All,
-            CliGenerate::Transport => hub_codegen::GenerateSelector::Transport,
-            CliGenerate::Rpc       => hub_codegen::GenerateSelector::Rpc,
-            CliGenerate::Plugins   => hub_codegen::GenerateSelector::Plugins,
-            CliGenerate::Smoke     => hub_codegen::GenerateSelector::Smoke,
-            CliGenerate::Package   => hub_codegen::GenerateSelector::Package,
+            CliGenerate::All       => service_codegen::GenerateSelector::All,
+            CliGenerate::Transport => service_codegen::GenerateSelector::Transport,
+            CliGenerate::Rpc       => service_codegen::GenerateSelector::Rpc,
+            CliGenerate::Plugins   => service_codegen::GenerateSelector::Plugins,
+            CliGenerate::Smoke     => service_codegen::GenerateSelector::Smoke,
+            CliGenerate::Package   => service_codegen::GenerateSelector::Package,
         },
         plugins_filter: args.plugins.map(|p| {
             p.split(',').map(|s| s.trim().to_string()).collect()
@@ -171,14 +171,14 @@ fn main() -> Result<()> {
     // Generate based on target
     let result = match args.target {
         #[cfg(feature = "typescript")]
-        CodegenTarget::Typescript => hub_codegen::generate_typescript(&ir, &options)?,
+        CodegenTarget::Typescript => service_codegen::generate_typescript(&ir, &options)?,
         #[cfg(not(feature = "typescript"))]
         CodegenTarget::Typescript => {
             anyhow::bail!("TypeScript codegen not enabled. Rebuild with --features typescript");
         }
 
         #[cfg(feature = "rust")]
-        CodegenTarget::Rust => hub_codegen::generator::rust::generate_with_options(&ir, deprecation_opts)?,
+        CodegenTarget::Rust => service_codegen::generator::rust::generate_with_options(&ir, deprecation_opts)?,
         #[cfg(not(feature = "rust"))]
         CodegenTarget::Rust => {
             anyhow::bail!("Rust codegen not enabled. Rebuild with --features rust");
@@ -210,7 +210,7 @@ fn main() -> Result<()> {
                     location: &w.location,
                     message: &w.message,
                 }).collect(),
-                hub_codegen_version: hub_codegen::HUB_CODEGEN_VERSION,
+                service_codegen_version: service_codegen::SERVICE_CODEGEN_VERSION,
                 dependencies: &result.dependencies,
                 dev_dependencies: &result.dev_dependencies,
             };
@@ -233,14 +233,14 @@ fn main() -> Result<()> {
                 {
                     let pkg_path = args.output.join("package.json");
                     if !pkg_path.exists() {
-                        let has_bidir = hub_codegen::generator::typescript::tests::has_bidir_methods(&ir);
+                        let has_bidir = service_codegen::generator::typescript::tests::has_bidir_methods(&ir);
                         // Version hash from code files only (exclude package.json and metadata sidecar)
                         let code_files: std::collections::HashMap<_, _> = result.files.iter()
                             .filter(|(k, _)| k.as_str() != "package.json" && k.as_str() != ".codegen-metadata.json")
                             .map(|(k, v)| (k.clone(), v.clone()))
                             .collect();
-                        let version_hash = hub_codegen::hash::compute_plugin_hash(&code_files);
-                        let pkg_content = hub_codegen::generator::typescript::package::generate_package_json(
+                        let version_hash = service_codegen::hash::compute_plugin_hash(&code_files);
+                        let pkg_content = service_codegen::generator::typescript::package::generate_package_json(
                             options.transport,
                             has_bidir,
                             &version_hash,
@@ -276,7 +276,7 @@ fn main() -> Result<()> {
                 let toolchain = ToolchainVersions {
                     synapse_cc: "0.0.0".to_string(),
                     synapse: "0.0.0".to_string(),
-                    hub_codegen: hub_codegen::HUB_CODEGEN_VERSION.to_string(),
+                    service_codegen: service_codegen::SERVICE_CODEGEN_VERSION.to_string(),
                 };
 
                 let mut manifest = cache_manifest.unwrap_or_else(|| {

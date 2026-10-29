@@ -1,7 +1,7 @@
 //! Credential-requirement surfacing (R-4).
 //!
 //! When a method in the IR carries any of the R-2 wire fields —
-//! `requires_credential`, `auth_posture`, `public` — hub-codegen surfaces
+//! `requires_credential`, `auth_posture`, `public` — service-codegen surfaces
 //! the requirement as typed metadata plus doc comments on the generated
 //! client. This module holds the shared helpers used by both the
 //! TypeScript and Rust backends (same role `deprecation.rs` plays for IR-7).

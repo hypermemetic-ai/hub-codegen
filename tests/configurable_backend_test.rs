@@ -4,8 +4,8 @@
 //! expose different plugins, methods, and children. This allows testing
 //! cache invalidation scenarios dynamically.
 
-use hub_codegen::ir::*;
-use hub_codegen::hash::compute_hash;
+use service_codegen::ir::*;
+use service_codegen::hash::compute_hash;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -75,7 +75,7 @@ impl ConfigurableBackend {
     }
 
     /// Generate IR based on current configuration
-    pub fn generate_ir(&self) -> hub_codegen::IR {
+    pub fn generate_ir(&self) -> service_codegen::IR {
         let mut ir_types = HashMap::new();
         let mut ir_methods = HashMap::new();
         let mut ir_plugins = HashMap::new();
@@ -143,7 +143,7 @@ impl ConfigurableBackend {
         let ir_content = format!("{:?}{:?}{:?}", ir_types, ir_methods, ir_plugins);
         let ir_hash = compute_hash(&ir_content);
 
-        hub_codegen::IR {
+        service_codegen::IR {
             ir_version: "2.0".to_string(),
             ir_backend: "configurable_test".to_string(),
             ir_hash: Some(ir_hash),

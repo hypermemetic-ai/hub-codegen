@@ -1,4 +1,4 @@
-"""The Python runtime of hub-codegen's generated clients (PYTHON-8).
+"""The Python runtime of service-codegen's generated clients (PYTHON-8).
 
 This file exists so the runtime can be tested in place as the package
 ``runtime``; the generator does not embed it — each generated package has

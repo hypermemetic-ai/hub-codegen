@@ -5,13 +5,13 @@
 //!   2. Generate selector — each selector produces only the expected file set
 //!   3. Three-way merge — user edits are preserved (Skip) or overwritten (Force)
 
-use hub_codegen::cache::{CodeCacheManifest, CodePluginCache, ToolchainVersions};
-use hub_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
+use service_codegen::cache::{CodeCacheManifest, CodePluginCache, ToolchainVersions};
+use service_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
 
-use hub_codegen::hash::compute_file_hash;
-use hub_codegen::ir::*;
-use hub_codegen::merge::{merge_generated_code, MergeStrategy};
-use hub_codegen::generate_typescript;
+use service_codegen::hash::compute_file_hash;
+use service_codegen::ir::*;
+use service_codegen::merge::{merge_generated_code, MergeStrategy};
+use service_codegen::generate_typescript;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -67,7 +67,7 @@ fn cache_from_result(
         toolchain: ToolchainVersions {
             synapse_cc: "0.2.0".to_string(),
             synapse: "0.0.1".to_string(),
-            hub_codegen: "0.2.0".to_string(),
+            service_codegen: "0.2.0".to_string(),
         },
         updated_at: "2026-01-01T00:00:00Z".to_string(),
         plugins,
@@ -142,7 +142,7 @@ fn test_transport_ws_has_ws_import() {
 // silent breakage that only surfaces when a user runs the generated project.
 
 /// The generated `test` script must invoke bun, not tsx/npx/node.
-/// Regression: hub-codegen previously emitted `npx tsx test/smoke.test.ts`
+/// Regression: service-codegen previously emitted `npx tsx test/smoke.test.ts`
 /// while smoke tests already imported from `"bun:test"` — incompatible.
 #[test]
 fn test_package_json_test_script_uses_bun() {
@@ -195,7 +195,7 @@ fn test_smoke_test_imports_from_bun_test() {
 /// TS2307 even though the test runner (bun) works fine.
 #[test]
 fn test_bun_types_in_dev_deps() {
-    use hub_codegen::generator::typescript::package::get_dev_deps;
+    use service_codegen::generator::typescript::package::get_dev_deps;
     let dev_deps = get_dev_deps(TransportEnv::Ws);
     assert!(
         dev_deps.contains_key("bun-types"),
@@ -209,7 +209,7 @@ fn test_bun_types_in_dev_deps() {
 //
 // Each selector must produce exactly the expected file set and nothing else.
 // Regressions here would cause tendrils to silently produce wrong artifacts
-// when synapse-cc invokes hub-codegen with targeted selectors.
+// when synapse-cc invokes service-codegen with targeted selectors.
 
 /// `--generate transport`: types.ts + rpc.ts + transport.ts (modular, no IR needed),
 /// and watch.ts, which transport.ts imports its call scope from (RETURNS-38).

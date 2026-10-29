@@ -1,4 +1,4 @@
-# Development Dockerfile for Substrate + Synapse + hub-codegen
+# Development Dockerfile for Substrate + Synapse + service-codegen
 # Builds and runs all components from source
 
 FROM ubuntu:22.04
@@ -30,9 +30,9 @@ RUN cabal update
 
 WORKDIR /workspace
 
-# Build hub-codegen
-COPY . /workspace/hub-codegen
-WORKDIR /workspace/hub-codegen
+# Build service-codegen
+COPY . /workspace/service-codegen
+WORKDIR /workspace/service-codegen
 RUN cargo build --release --features all
 
 # Expect substrate and synapse to be mounted or cloned
@@ -45,7 +45,7 @@ COPY <<'EOF' /entrypoint.sh
 #!/bin/bash
 set -e
 
-echo "🚀 Substrate + Synapse + hub-codegen Development Environment"
+echo "🚀 Substrate + Synapse + service-codegen Development Environment"
 
 # Build substrate if source exists
 if [ -d "/workspace/substrate" ] && [ ! -f "/workspace/substrate/target/release/substrate" ]; then
@@ -78,7 +78,7 @@ case "${1:-help}" in
     generate)
         echo "🔨 Generating client..."
         shift
-        exec /workspace/hub-codegen/target/release/hub-codegen "$@"
+        exec /workspace/service-codegen/target/release/service-codegen "$@"
         ;;
 
     dev)
@@ -105,7 +105,7 @@ case "${1:-help}" in
         LANG="${1:-rust}"
         OUTPUT="${2:-/workspace/output}"
         echo "🔨 Generating ${LANG} client..."
-        /workspace/hub-codegen/target/release/hub-codegen /tmp/ir.json -o "$OUTPUT" -t "$LANG"
+        /workspace/service-codegen/target/release/service-codegen /tmp/ir.json -o "$OUTPUT" -t "$LANG"
 
         # Stop substrate
         kill $SUBSTRATE_PID
@@ -122,7 +122,7 @@ case "${1:-help}" in
         echo "Commands:"
         echo "  substrate    - Run substrate backend"
         echo "  synapse      - Run synapse CLI"
-        echo "  generate     - Run hub-codegen"
+        echo "  generate     - Run service-codegen"
         echo "  dev [lang]   - Run full pipeline (default: rust)"
         echo "  bash         - Interactive shell"
         ;;

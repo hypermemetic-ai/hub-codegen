@@ -2,13 +2,13 @@
 
 #![cfg(feature = "rust")]
 
-use hub_codegen::{generate_rust, IR};
+use service_codegen::{generate_rust, IR};
 use std::collections::HashMap;
 use std::fs;
 use std::process::Command;
 
 fn create_comprehensive_test_ir() -> IR {
-    use hub_codegen::ir::*;
+    use service_codegen::ir::*;
 
     let mut ir_types = HashMap::new();
     let mut ir_methods = HashMap::new();

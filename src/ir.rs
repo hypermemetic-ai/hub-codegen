@@ -104,7 +104,7 @@ where
 /// - `message`: migration guidance for consumers.
 ///
 /// When any `MethodDef`, `ParamDef`, `FieldDef`, `TypeDef`, or plugin entry
-/// in the IR carries a `Some(DeprecationInfo)`, hub-codegen treats the IR
+/// in the IR carries a `Some(DeprecationInfo)`, service-codegen treats the IR
 /// as post-IR and emits target-language deprecation annotations above the
 /// generated surface. When all deprecation fields are `None` / absent, the
 /// IR is treated as pre-IR and no annotations are emitted.

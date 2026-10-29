@@ -1,4 +1,4 @@
-# RETURNS-38: every file hub-codegen@6876246 (main, before watch) generates for the two fixtures, each target and transport —
+# RETURNS-38: every file service-codegen@6876246 (main, before watch) generates for the two fixtures, each target and transport —
 # sha256 of its blocks (split on blank lines) sorted, because main's Rust generator orders blocks by HashMap (RETURNS-23 fixes it on 0.7).
 # returns38_watch_test.rs holds today's output to it: equal, but for watch.ts (new), index.ts (+ its export), transport.ts (the unsubscribe),
 # package.json (its version is a content hash) and .codegen-metadata.json (the file hashes).

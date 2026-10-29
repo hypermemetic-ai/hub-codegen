@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hub-codegen's TypeScript generator transforms Synapse IR into a complete, type-safe TypeScript client library for plexus backends. Generation produces two distinct layers:
+Service-codegen's TypeScript generator transforms Synapse IR into a complete, type-safe TypeScript client library for plexus backends. Generation produces two distinct layers:
 
 - **Layer 1 (RPC)**: Raw async generator interface over a WebSocket transport
 - **Layer 2 (Typed)**: Domain-specific client wrappers with automatic `PlexusStreamItem` unwrapping

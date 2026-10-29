@@ -36,6 +36,6 @@ filterwarnings = [
   "ignore:.*event_loop_policy.*:DeprecationWarning",
 ]
 markers = [
-  "live: needs a throwaway hub (PLEXUS_URL, PLEXUS_KEY_FILE)",
+  "live: needs a throwaway service (PLEXUS_URL, PLEXUS_KEY_FILE)",
   "perf: the perf budgets (10,000 items)",
 ]

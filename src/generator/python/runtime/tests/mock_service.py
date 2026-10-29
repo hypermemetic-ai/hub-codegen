@@ -1,4 +1,4 @@
-"""MockHub: a scripted Plexus hub for the runtime's tests (PYTHON-8), and for
+"""MockService: a scripted Plexus service for the runtime's tests (PYTHON-8), and for
 PYTHON-4's generated-client tests and PYTHON-7's input tests.
 
 A ``websockets`` server on ``127.0.0.1:0`` that speaks today's wire:
@@ -8,9 +8,9 @@ notifications, ``<backend>.call_unsub [id]`` and ``<backend>.respond``
 acknowledged. Every frame a client sends is kept in ``recorded``; every
 upgrade's headers in ``upgrade_headers``.
 
-    async with MockHub() as mock:
+    async with MockService() as mock:
         exp = mock.expect_call("tickets.get").reply([data({"type": "ticket"}), DONE])
-        async with Hub(mock.url, backend="menger") as hub:
+        async with Service(mock.url, backend="menger") as service:
             ...
         await exp.push(data(...))          # more items for that call, later
         await mock.close_clients()         # drop every socket
@@ -66,13 +66,13 @@ def _frame(payload: bytes) -> bytes:
 
 
 class Expectation:
-    """One expected ``<backend>.call`` of ``method``, and what the hub answers."""
+    """One expected ``<backend>.call`` of ``method``, and what the service answers."""
 
-    def __init__(self, hub: MockHub, method: str, sub: int) -> None:
+    def __init__(self, service: MockService, method: str, sub: int) -> None:
         self.method = method
         self.sub = sub
         self.frame: Frame | None = None
-        self._hub = hub
+        self._service = service
         self._encoded: list[str] = []
         self._early = 0
         self._close_after = False
@@ -88,10 +88,10 @@ class Expectation:
         ``early``: send that many items *before* the response. ``close_after``:
         close the socket once every item is sent. Leave ``DONE`` out to keep
         the call open and ``push`` more later. ``blast``: the items go as one
-        pre-serialized write of WebSocket frames, so the hub's own cost is
+        pre-serialized write of WebSocket frames, so the service's own cost is
         out of a client's measurement (the perf tests).
         """
-        self._encoded = [_notification(self._hub.backend, self.sub, it) for it in items]
+        self._encoded = [_notification(self._service.backend, self.sub, it) for it in items]
         self._early = early
         self._close_after = close_after
         self._blast = b"".join(_frame(raw.encode()) for raw in self._encoded[early:]) if blast else None
@@ -116,7 +116,7 @@ class Expectation:
         await self.arrived()
         assert self._conn is not None
         for it in items:
-            await self._conn.send(_notification(self._hub.backend, self.sub, it))
+            await self._conn.send(_notification(self._service.backend, self.sub, it))
 
     async def _serve(self, conn: ServerConnection, frame: Frame) -> None:
         self.frame = frame
@@ -138,8 +138,8 @@ class Expectation:
             await conn.close()
 
 
-class MockHub:
-    """A scripted hub; ``async with`` starts it on a free loopback port."""
+class MockService:
+    """A scripted service; ``async with`` starts it on a free loopback port."""
 
     def __init__(self, backend: str = "menger") -> None:
         self.backend = backend
@@ -153,9 +153,9 @@ class MockHub:
         self._tasks: set[asyncio.Task[None]] = set()
         self.url = ""
 
-    async def __aenter__(self) -> MockHub:
+    async def __aenter__(self) -> MockService:
         self._server = await serve(self._handler, "127.0.0.1", 0, process_request=self._process_request,
-                                   max_size=None, compression=None)  # a Plexus hub (jsonrpsee) offers no deflate
+                                   max_size=None, compression=None)  # a Plexus service (jsonrpsee) offers no deflate
         port = next(iter(self._server.sockets)).getsockname()[1]
         self.url = f"ws://127.0.0.1:{port}"
         return self
@@ -211,7 +211,7 @@ class MockHub:
     def _process_request(self, conn: ServerConnection, request: Request) -> Response | None:
         self.upgrade_headers.append(request.headers)
         if self._reject is not None:
-            return conn.respond(HTTPStatus(self._reject), "refused by MockHub\n")
+            return conn.respond(HTTPStatus(self._reject), "refused by MockService\n")
         return None
 
     async def _handler(self, conn: ServerConnection) -> None:
@@ -231,7 +231,7 @@ class MockHub:
             exp = next((e for e in self._expect if e.method == want and e.frame is None), None)
             if exp is None:
                 await conn.send(json.dumps({"jsonrpc": "2.0", "id": frame.get("id"),
-                                            "error": {"code": -32601, "message": f"MockHub: no call of {want} expected"}}))
+                                            "error": {"code": -32601, "message": f"MockService: no call of {want} expected"}}))
                 return
             exp.frame = frame  # claimed now, so a second call of the method takes the next one
             task = asyncio.create_task(exp._serve(conn, frame))

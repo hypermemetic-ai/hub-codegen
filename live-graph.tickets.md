@@ -145,18 +145,18 @@ code in `advance_graph`. If a helper doesn't exist, extract one or inline the SQ
 
 ## 3. `lattice/activation.rs`
 
-No structural changes needed. The hub methods (`get_graph`, `list_graphs`) return
+No structural changes needed. The service methods (`get_graph`, `list_graphs`) return
 `LatticeGraph` structs which now include `parent_graph_id` automatically.
 
-Add two new hub methods at the end of the `Lattice::register` block:
+Add two new service methods at the end of the `Lattice::register` block:
 
 ```rust
-hub.method("lattice/create_child_graph", |params: CreateChildGraphParams| async move {
+service.method("lattice/create_child_graph", |params: CreateChildGraphParams| async move {
     // calls self.storage.create_child_graph(parent_id, metadata)
     // returns CreateResult
 });
 
-hub.method("lattice/get_child_graphs", |params: GetChildGraphsParams| async move {
+service.method("lattice/get_child_graphs", |params: GetChildGraphsParams| async move {
     // calls self.storage.get_child_graphs(parent_id)
     // returns ListGraphsResult
 });
@@ -268,7 +268,7 @@ Focus on: `cancel_graph`, `run_graph_definition`, and `build_graph_from_definiti
 
 ## `cancel_graph` — recursive propagation
 
-Find the `cancel_graph` hub method handler. After sending on the existing watch channel
+Find the `cancel_graph` service method handler. After sending on the existing watch channel
 for `graph_id`, add recursive child cancellation:
 
 ```rust
@@ -319,7 +319,7 @@ in full before making changes.
 
 ## `list_graphs` — `root_only` parameter
 
-In `pm/activation.rs`, find the `list_graphs` hub method. Add an optional
+In `pm/activation.rs`, find the `list_graphs` service method. Add an optional
 `root_only: Option<bool>` parameter (default `true`).
 
 In `pm/storage.rs`, add `list_graphs(root_only: bool)` (or update the existing method):
@@ -364,7 +364,7 @@ if let Some(child_graph_id) = output_value.get("child_graph_id").and_then(|v| v.
 }
 ```
 
-Include `child_graph_status` in the JSON response for the inspect_ticket hub method.
+Include `child_graph_status` in the JSON response for the inspect_ticket service method.
 
 ---
 

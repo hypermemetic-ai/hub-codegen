@@ -1,13 +1,13 @@
 # Incremental Codegen Architecture
 
-Design document for smart caching in the Substrate → Synapse → hub-codegen pipeline.
+Design document for smart caching in the Substrate → Synapse → service-codegen pipeline.
 
 ## Problem Statement
 
 Currently, any change to any plugin requires regenerating the entire client:
 1. **Synapse** fetches schemas for ALL plugins (slow)
 2. **IR generation** processes all plugins (slow)
-3. **hub-codegen** regenerates ALL code (slow)
+3. **service-codegen** regenerates ALL code (slow)
 
 For large systems with many plugins, this becomes prohibitively expensive.
 
@@ -46,7 +46,7 @@ Cache at THREE levels:
        │ (cache miss or IR changed)
        ▼
 ┌─────────────┐
-│ hub-codegen │ (generates code from IR)
+│ service-codegen │ (generates code from IR)
 └──────┬──────┘
        │
        ▼
@@ -246,17 +246,17 @@ If `arbor` changes:
 
 ### Current Behavior
 ```bash
-hub-codegen ir.json -o ./client -t rust  # Regenerates ALL code
+service-codegen ir.json -o ./client -t rust  # Regenerates ALL code
 ```
 
 ### With Code Cache
 ```bash
-hub-codegen ir.json -o ./client -t rust --use-cache --cache-dir ~/.cache/hub-codegen/
+service-codegen ir.json -o ./client -t rust --use-cache --cache-dir ~/.cache/service-codegen/
 ```
 
 **Cache Structure:**
 ```
-~/.cache/hub-codegen/rust/
+~/.cache/service-codegen/rust/
 ├── manifest.json          # { "target": "rust", "ir_hash": "...", "generated_at": "..." }
 ├── cone/
 │   ├── hash.txt          # Content hash of cone IR fragment
@@ -280,7 +280,7 @@ hub-codegen ir.json -o ./client -t rust --use-cache --cache-dir ~/.cache/hub-cod
 **Implementation:**
 
 ```rust
-// hub-codegen/src/cache.rs
+// service-codegen/src/cache.rs
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -385,7 +385,7 @@ pub fn generate_with_cache(
 
 # Full regeneration (SLOW)
 synapse substrate -i > ir.json                    # 5-10s
-hub-codegen ir.json -o ./client -t rust          # 10-20s
+service-codegen ir.json -o ./client -t rust          # 10-20s
 cd ./client && cargo check                        # 30-60s
 
 # Total: 45-90 seconds
@@ -401,9 +401,9 @@ synapse substrate -i \
   --use-cache \
   --cache-dir ~/.cache/synapse/           # Only fetches cone schema: 0.5s
 
-hub-codegen ir.json -o ./client -t rust \
+service-codegen ir.json -o ./client -t rust \
   --use-cache \
-  --cache-dir ~/.cache/hub-codegen/       # Only regenerates cone code: 1s
+  --cache-dir ~/.cache/service-codegen/       # Only regenerates cone code: 1s
 
 cd ./client && cargo check                # Incremental compile: 5-10s
 
@@ -427,7 +427,7 @@ cd ./client && cargo check                # Incremental compile: 5-10s
 │       ├── cone.ir.json
 │       ├── arbor.ir.json
 │       └── ...
-└── hub-codegen/
+└── service-codegen/
     ├── rust/
     │   ├── manifest.json         # Target, IR hash mapping
     │   ├── cone/
@@ -460,11 +460,11 @@ cd ./client && cargo check                # Incremental compile: 5-10s
 - [ ] Implement smart merge of cached + fresh IR
 - [ ] Add transitive dependency invalidation
 
-### Phase 3: Code Caching (hub-codegen)
-- [ ] Add `--use-cache` flag to hub-codegen
+### Phase 3: Code Caching (service-codegen)
+- [ ] Add `--use-cache` flag to service-codegen
 - [ ] Implement `cache.rs` module
 - [ ] Group IR by plugin/namespace
-- [ ] Store generated code in `~/.cache/hub-codegen/{target}/`
+- [ ] Store generated code in `~/.cache/service-codegen/{target}/`
 - [ ] Hash plugin IR fragments for cache keys
 - [ ] Copy cached code when IR unchanged
 
@@ -481,7 +481,7 @@ cd ./client && cargo check                # Incremental compile: 5-10s
 ### Manual Operations
 ```bash
 # Clear all caches
-rm -rf ~/.cache/synapse ~/.cache/hub-codegen
+rm -rf ~/.cache/synapse ~/.cache/service-codegen
 
 # Clear schema cache only
 rm -rf ~/.cache/synapse/schemas
@@ -490,18 +490,18 @@ rm -rf ~/.cache/synapse/schemas
 rm -rf ~/.cache/synapse/ir
 
 # Clear code cache for specific target
-rm -rf ~/.cache/hub-codegen/rust
+rm -rf ~/.cache/service-codegen/rust
 
 # Inspect cache
 synapse --cache-info
-hub-codegen --cache-info
+service-codegen --cache-info
 ```
 
 ### Automatic Cleanup
 ```bash
 # Clean caches older than 7 days
 synapse --cache-clean --max-age 7d
-hub-codegen --cache-clean --max-age 7d
+service-codegen --cache-clean --max-age 7d
 ```
 
 ---
@@ -543,8 +543,8 @@ This section breaks down the implementation into waves, where tasks within each 
 - [ ] Add IR fragment merging logic
 - [ ] Write unit tests for IR merging
 
-**Agent C: hub-codegen Cache Module**
-- [ ] Create `src/cache.rs` module in hub-codegen
+**Agent C: service-codegen Cache Module**
+- [ ] Create `src/cache.rs` module in service-codegen
 - [ ] Implement `CodeCache` struct
 - [ ] Add hash computation for IR fragments
 - [ ] Implement cache directory management
@@ -572,7 +572,7 @@ implement custom hashing - just read `schema.hash` and `plexus_hash` fields!
 - [ ] Add `--cache-info` command
 - [ ] Add `--cache-clean` command
 
-**Agent B: hub-codegen CLI Integration**
+**Agent B: service-codegen CLI Integration**
 - [ ] Add `--use-cache` flag to main.rs
 - [ ] Add `--cache-dir` flag to main.rs
 - [ ] Integrate CodeCache into generation pipeline
@@ -672,7 +672,7 @@ Wave 1 (Parallel)
        ▼
 Wave 2 (Depends on Wave 1)
 ├─ Agent A: Synapse CLI (depends on Schema + IR Cache)
-├─ Agent B: hub-codegen CLI (depends on Code Cache)
+├─ Agent B: service-codegen CLI (depends on Code Cache)
 ├─ Agent C: Dependency Graph (depends on IR Cache)
 └─ Agent D: Script Updates (depends on all CLIs)
        │
@@ -730,7 +730,7 @@ touch src/Synapse/Cache/IR.hs
 
 ### Agent C (Wave 1)
 ```bash
-cd /workspace/hypermemetic/hub-codegen
+cd /workspace/hypermemetic/service-codegen
 git checkout -b feature/code-cache
 mkdir -p src/cache
 touch src/cache/mod.rs
@@ -740,7 +740,7 @@ touch src/cache/code_cache.rs
 
 ### Agent D (Wave 1)
 ```bash
-cd /workspace/hypermemetic/hub-codegen
+cd /workspace/hypermemetic/service-codegen
 git checkout -b feature/cache-infrastructure
 mkdir -p docs/cache
 touch docs/cache/CACHE_FORMAT.md

@@ -15,10 +15,13 @@
 //!    `node --test` — run against a package generated from
 //!    `fixtures/returns17_ir.json`. They use `tests/ts_watch`'s pinned
 //!    toolchain; without Node they are skipped unless
-//!    `HUB_CODEGEN_REQUIRE_TS=1`.
+//!    `SERVICE_CODEGEN_REQUIRE_TS=1`.
 
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::{generate_rust, generate_typescript, IR};
+#[path = "support/naming.rs"]
+mod common_naming;
+
+use service_codegen::generator::{GenerationOptions, TransportEnv};
+use service_codegen::{generate_rust, generate_typescript, IR};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -202,7 +205,7 @@ fn existing_output_unchanged() {
         } else {
             content.clone()
         };
-        assert_eq!(&sha256(&content), hash, "{path} changed beyond RETURNS-17's spelling");
+        assert_eq!(&sha256(&common_naming::as_recorded(path, &content)), hash, "{path} changed beyond RETURNS-17's spelling");
         compared += 1;
     }
     for path in now.keys() {
@@ -238,7 +241,7 @@ fn run(cmd: &mut Command) -> (bool, String) {
 fn compiled() -> Option<(tempfile::TempDir, PathBuf)> {
     let node_ok = Command::new("node").arg("--version").output().map(|o| o.status.success()).unwrap_or(false);
     if !node_ok {
-        assert!(std::env::var("HUB_CODEGEN_REQUIRE_TS").is_err(), "HUB_CODEGEN_REQUIRE_TS=1 and there is no node");
+        assert!(std::env::var("SERVICE_CODEGEN_REQUIRE_TS").is_err(), "SERVICE_CODEGEN_REQUIRE_TS=1 and there is no node");
         eprintln!("node not available; skipping the TypeScript RETURNS-17 tests");
         return None;
     }

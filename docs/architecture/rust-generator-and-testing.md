@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hub-codegen includes a Rust client generator alongside the TypeScript generator. Both generators share the same input interface (`GenerationOptions`, `IR`) and output interface (`GenerationResult`). The Rust generator is conditionally compiled via the `rust` Cargo feature.
+Service-codegen includes a Rust client generator alongside the TypeScript generator. Both generators share the same input interface (`GenerationOptions`, `IR`) and output interface (`GenerationResult`). The Rust generator is conditionally compiled via the `rust` Cargo feature.
 
 ---
 
@@ -22,8 +22,8 @@ Both generators are dispatched from `main.rs` based on `--target`:
 
 ```rust
 match target {
-    CodegenTarget::Typescript => hub_codegen::generate_typescript(&ir, &options)?,
-    CodegenTarget::Rust       => hub_codegen::generate_rust(&ir)?,
+    CodegenTarget::Typescript => service_codegen::generate_typescript(&ir, &options)?,
+    CodegenTarget::Rust       => service_codegen::generate_rust(&ir)?,
 }
 ```
 

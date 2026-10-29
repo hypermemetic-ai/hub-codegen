@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hub-codegen's cache/merge system enables incremental code generation by tracking file hashes through a three-way merge algorithm. The system operates in two distinct output modes: **files mode** (full merge support) and **json mode** (stateless, no file writes). Both modes compute and emit file hashes for downstream caching.
+Service-codegen's cache/merge system enables incremental code generation by tracking file hashes through a three-way merge algorithm. The system operates in two distinct output modes: **files mode** (full merge support) and **json mode** (stateless, no file writes). Both modes compute and emit file hashes for downstream caching.
 
 ---
 
@@ -44,7 +44,7 @@ The **plugin hash** concatenates `filename:hash\n` for all sorted files, then ha
 ### Directory Location
 
 ```
-~/.cache/plexus-codegen/hub-codegen/{target}/{backend}/manifest.json
+~/.cache/plexus-codegen/service-codegen/{target}/{backend}/manifest.json
 ```
 
 - `target`: language target (`"typescript"` or `"rust"`)
@@ -71,7 +71,7 @@ pub struct CodePluginCache {
 pub struct ToolchainVersions {
     pub synapse_cc: String,
     pub synapse: String,
-    pub hub_codegen: String,
+    pub service_codegen: String,
 }
 ```
 
@@ -86,7 +86,7 @@ pub struct ToolchainVersions {
   "toolchain": {
     "synapse-cc": "0.1.0.0",
     "synapse": "0.2.0.0",
-    "hub-codegen": "0.1.0"
+    "service-codegen": "0.1.0"
   },
   "updatedAt": "2026-03-18T10:30:45Z",
   "plugins": {
@@ -136,7 +136,7 @@ The JSON payload:
   "files":             { "types.ts": "..." },
   "fileHashes":        { "types.ts": "abc1..." },
   "warnings":          [ { "location": "...", "message": "..." } ],
-  "hubCodegenVersion": "0.2.0",
+  "serviceCodegenVersion": "0.2.0",
   "dependencies":      { "ws": "^8.18.0" },
   "devDependencies":   { "typescript": "^5.0.0" }
 }
@@ -250,8 +250,8 @@ Read errors are silently swallowed (`.ok()`). The merge proceeds treating all fi
 
 ## Known Limitations
 
-1. **No per-plugin granularity in hub-codegen** — the manifest uses a single `"default"` plugin entry; synapse-cc splits by plugin separately.
-2. **No dependency tracking** — if plugin B changes and plugin A depends on it, hub-codegen regenerates everything anyway.
+1. **No per-plugin granularity in service-codegen** — the manifest uses a single `"default"` plugin entry; synapse-cc splits by plugin separately.
+2. **No dependency tracking** — if plugin B changes and plugin A depends on it, service-codegen regenerates everything anyway.
 3. **Interactive merge not implemented** — `MergeStrategy::Interactive` bails with a "not yet implemented" error.
 4. **Local cache only** — no remote/team cache sharing; CI always rebuilds from scratch.
 

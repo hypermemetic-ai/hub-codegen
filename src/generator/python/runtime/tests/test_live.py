@@ -2,7 +2,7 @@
 
 Needs ``PLEXUS_URL`` (``ws://127.0.0.1:4486``) and ``PLEXUS_KEY_FILE`` — a key
 file (0600) the server's ``--admin`` names; ``PLEXUS_AGENT`` (default
-``python-live``) is the agent it signs in as. Never a production hub: the test
+``python-live``) is the agent it signs in as. Never a production service: the test
 files a ticket and grants a second, throwaway key ``editor`` on ``*``.
 """
 
@@ -20,12 +20,12 @@ import pytest
 
 from runtime.credentials import KeyProof
 from runtime.errors import Forbidden
-from runtime.transport import Hub
+from runtime.transport import Service
 
 pytestmark = [
     pytest.mark.live,
     pytest.mark.skipif(not (os.environ.get("PLEXUS_URL") and os.environ.get("PLEXUS_KEY_FILE")),
-                       reason="needs PLEXUS_URL and PLEXUS_KEY_FILE of a throwaway hub"),
+                       reason="needs PLEXUS_URL and PLEXUS_KEY_FILE of a throwaway service"),
 ]
 
 
@@ -41,8 +41,8 @@ def _editor_key(tmp: Path) -> KeyProof:
     return KeyProof.from_file(path, agent="python-editor")
 
 
-async def _scope(hub: Hub, code: str) -> str:
-    created = await hub.call("tickets.create", {"epic": code, "title": "PYTHON-8 live", "kind": "scope"}, decode=dict).one()
+async def _scope(service: Service, code: str) -> str:
+    created = await service.call("tickets.create", {"epic": code, "title": "PYTHON-8 live", "kind": "scope"}, decode=dict).one()
     assert created.get("type") == "created", created
     ticket_id: str = created["ticket"]["id"]
     return ticket_id
@@ -52,22 +52,22 @@ async def test_live_list_and_forbidden(tmp_path: Path) -> None:
     url, admin = _admin()
     code = "PYL" + "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(3))
     t0 = time.perf_counter()
-    async with Hub(url, backend="menger", credentials=admin) as hub:
-        first = await hub.call("tickets.health", {}, decode=dict).one()
+    async with Service(url, backend="menger", credentials=admin) as service:
+        first = await service.call("tickets.health", {}, decode=dict).one()
         first_item_ms = (time.perf_counter() - t0) * 1000
         assert first
-        ticket_id = await _scope(hub, code)
-        listed = hub.call("tickets.list", {"filter": f"in {code}", "summary": True}, decode=dict)
+        ticket_id = await _scope(service, code)
+        listed = service.call("tickets.list", {"filter": f"in {code}", "summary": True}, decode=dict)
         events = await listed.collect()
         assert [e["summary"]["id"] for e in events if e.get("type") == "summary"] == [ticket_id]
         editor = _editor_key(tmp_path)
-        granted = await hub.call("members.grant", {"principal": editor.principal, "scope": "*", "role": "editor"},
+        granted = await service.call("members.grant", {"principal": editor.principal, "scope": "*", "role": "editor"},
                                  decode=dict).collect()
         assert all(g.get("type") != "error" for g in granted), granted
     print(f"\nlive: connect + key proof + first item {first_item_ms:.1f} ms; page {listed.page}")
-    async with Hub(url, backend="menger", credentials=editor) as hub:
+    async with Service(url, backend="menger", credentials=editor) as service:
         with pytest.raises(Forbidden) as ei:
-            await hub.call("tickets.delete", {"ids": [ticket_id]}, decode=dict).collect()
+            await service.call("tickets.delete", {"ids": [ticket_id]}, decode=dict).collect()
     print(f"live: {ei.value}")
     # AUTH-7: every method is its own grant; the roles that hold it are named beside it
     assert ei.value.grant == "tickets.delete"
@@ -80,22 +80,22 @@ async def test_live_list_and_forbidden(tmp_path: Path) -> None:
 async def test_live_cancel_watch() -> None:
     url, admin = _admin()
     code = "PYW" + "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(3))
-    async with Hub(url, backend="menger", credentials=admin) as hub:
+    async with Service(url, backend="menger", credentials=admin) as service:
         first: list[Any] = []
 
         async def watch_one() -> None:
-            async for ev in hub.call("tickets.watch", {}, decode=dict):
+            async for ev in service.call("tickets.watch", {}, decode=dict):
                 first.append(ev)
                 break
 
         task = asyncio.create_task(watch_one())
         await asyncio.sleep(0.3)
         if not task.done():  # a watch that says nothing until a change: make one
-            await _scope(hub, code)
+            await _scope(service, code)
         await asyncio.wait_for(task, 10)
         assert first
         # the socket is not wedged by the cancel: a write and a read still answer
-        ticket_id = await asyncio.wait_for(_scope(hub, code + "Z"), 10)
-        got = await asyncio.wait_for(hub.call("tickets.get", {"id": ticket_id}, decode=dict).one(), 10)
+        ticket_id = await asyncio.wait_for(_scope(service, code + "Z"), 10)
+        got = await asyncio.wait_for(service.call("tickets.get", {"id": ticket_id}, decode=dict).one(), 10)
         assert got["ticket"]["id"] == ticket_id
-        assert hub._subs == {}
+        assert service._subs == {}

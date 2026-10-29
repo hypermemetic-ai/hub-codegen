@@ -1,10 +1,10 @@
 // RETURNS-38 · watch(a, b, c) against a throwaway menger, through the
-// TypeScript client hub-codegen generates from its IR, every frame counted
+// TypeScript client service-codegen generates from its IR, every frame counted
 // by frame-proxy.mjs (spawned here). Not part of `cargo test`: it needs a
 // running menger and a key it admits. To run it:
 //
 //   synapse -P 4484 -i menger > ir.json
-//   hub-codegen ir.json -o pkg --transport browser
+//   service-codegen ir.json -o pkg --transport browser
 //   cp watch-live.ts frame-proxy.mjs pkg/watch-live/ && compile with tsc (CommonJS)
 //   MENGER_DEPLOY_KEY_FILE=~/.plexus/keys/builder.key FRAME_PROXY=pkg/watch-live/frame-proxy.mjs \
 //     MENGER_CALL=…/menger/deploy/menger-call.mjs node out/watch-live/watch-live.js

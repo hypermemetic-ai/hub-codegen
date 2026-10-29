@@ -2,7 +2,7 @@
 
 Every refusal and failure the runtime surfaces is a ``PlexusError``; a
 caller catches the one it can act on (``except Forbidden as e: e.grant``).
-Embedded verbatim in every generated package by hub-codegen (PYTHON-4).
+Embedded verbatim in every generated package by service-codegen (PYTHON-4).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ __all__ = [
 
 
 class PlexusError(Exception):
-    """Anything a Plexus hub refused, or the runtime could not do.
+    """Anything a Plexus service refused, or the runtime could not do.
 
     ``method`` is the method path the error belongs to (``tickets.delete``),
     when there is one; ``item`` the raw wire object it was read from.
@@ -73,7 +73,7 @@ class Forbidden(PlexusError):
 
 
 class Unauthenticated(PlexusError):
-    """The hub wants a sign-in: a refused upgrade (401), or ``error_kind: unauthenticated``."""
+    """The service wants a sign-in: a refused upgrade (401), or ``error_kind: unauthenticated``."""
 
     kind = "unauthenticated"
 
@@ -117,7 +117,7 @@ class InvalidParams(RpcError):
 
 
 class TooManyCalls(PlexusError):
-    """The connection holds as many open calls as the hub allows (``max``); close one."""
+    """The connection holds as many open calls as the service allows (``max``); close one."""
 
     kind = "too_many_calls"
 
@@ -140,13 +140,13 @@ class StreamError(PlexusError):
 
 
 class MissingCredential(PlexusError):
-    """Refused before anything was sent: ``method`` needs a credential and the hub has none."""
+    """Refused before anything was sent: ``method`` needs a credential and the service has none."""
 
     kind = "missing_credential"
 
     def __init__(self, method: str, grant: str | None) -> None:
         need = f"grant `{grant}`" if grant else "a credential"
-        super().__init__(method, f"needs {need}, and this Hub has no credentials — pass credentials= "
+        super().__init__(method, f"needs {need}, and this Service has no credentials — pass credentials= "
                                  f"(Token, KeyProof or an async supplier). Nothing was sent.")
         self.grant = grant
 
@@ -180,10 +180,10 @@ class ConnectFailed(PlexusError):
 
 
 class ConnectionLost(PlexusError):
-    """The socket dropped (or the Hub was closed) while the call was open; no reconnect.
+    """The socket dropped (or the Service was closed) while the call was open; no reconnect.
 
     ``subscription`` is the call's id (None if it had none yet); ``items_seen``
-    the data items the caller was given; ``closed_by_caller`` when ``Hub.close``
+    the data items the caller was given; ``closed_by_caller`` when ``Service.close``
     ended it.
     """
 
@@ -191,7 +191,7 @@ class ConnectionLost(PlexusError):
 
     def __init__(self, method: str | None, subscription: int | None = None, items_seen: int = 0, *,
                  closed_by_caller: bool = False, reason: str | None = None) -> None:
-        why = "the Hub was closed" if closed_by_caller else f"the socket dropped{f' ({reason})' if reason else ''}"
+        why = "the Service was closed" if closed_by_caller else f"the socket dropped{f' ({reason})' if reason else ''}"
         super().__init__(method, f"{why} with the call open (subscription {subscription}, "
                                  f"{items_seen} item{'s' if items_seen != 1 else ''} seen)")
         self.subscription = subscription

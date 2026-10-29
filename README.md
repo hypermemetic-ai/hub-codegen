@@ -1,6 +1,19 @@
-# hub-codegen
+# service-codegen
 
 Multi-language code generator for Plexus clients from Synapse IR.
+
+## Naming
+
+A Plexus backend is a *service* (owner, 2026-10-29; NAMING-1), so this tool
+is `service-codegen` from 0.5.1 on (NAMING-10): the repository, the crate
+(`service_codegen`), the binary and every generated header. For one release
+the old binary name is a symlink to this one, and the JSON it shares with
+synapse-cc reads the old keys and writes only the new: the output's
+`serviceCodegenVersion`, the cache manifest's `"service-codegen"` and its
+directory `~/.cache/plexus-codegen/service-codegen/` (an old cache is read
+when no new one exists). NAMING-18 removes the old names, each marked
+`naming-alias` in the source. `scripts/naming-gate.sh` (run by
+`tests/naming_gate.rs`, so `cargo test` and CI) fails on any new remnant.
 
 ## Features
 
@@ -16,7 +29,7 @@ The codegen supports multiple target languages via Cargo feature flags:
 
 ```bash
 # Generate TypeScript client
-synapse plexus -i | cargo run --manifest-path hub-codegen/Cargo.toml -- -o /tmp/client
+synapse plexus -i | cargo run --manifest-path service-codegen/Cargo.toml -- -o /tmp/client
 
 # Or explicitly
 cargo run --features typescript -- -o /tmp/client < ir.json
@@ -45,7 +58,7 @@ cargo run --features all -- -t rust -o /tmp/rust-client < ir.json
 ```
 Generate client code from Synapse IR
 
-Usage: hub-codegen [OPTIONS] [INPUT]
+Usage: service-codegen [OPTIONS] [INPUT]
 
 Arguments:
   [INPUT]  Path to IR JSON file (use - for stdin) [default: -]
@@ -60,7 +73,7 @@ Options:
 ## Architecture
 
 ```
-Rust Types → JSON Schema → Synapse IR → hub-codegen → Target Language
+Rust Types → JSON Schema → Synapse IR → service-codegen → Target Language
                            (Haskell)      (Rust)        (TS/Rust/...)
 ```
 
@@ -108,11 +121,11 @@ module (`tickets::inputs::answer(&client, …)`), not a function.
 
 ## Docker
 
-Run the full pipeline (Substrate → Synapse → hub-codegen) in Docker:
+Run the full pipeline (Substrate → Synapse → service-codegen) in Docker:
 
 ```bash
 # Build image
-docker build -t hub-codegen:dev .
+docker build -t service-codegen:dev .
 
 # Run full pipeline (mounts substrate and synapse source)
 docker-compose run dev

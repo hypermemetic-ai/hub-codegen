@@ -15,10 +15,10 @@
 //!    fixture with no deprecation fields.
 //! 7. Determinism — two consecutive regens produce byte-identical files.
 
-use hub_codegen::deprecation::DeprecationOptions;
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::ir::*;
-use hub_codegen::{generate_typescript, IR};
+use service_codegen::deprecation::DeprecationOptions;
+use service_codegen::generator::{GenerationOptions, TransportEnv};
+use service_codegen::ir::*;
+use service_codegen::{generate_typescript, IR};
 use std::collections::HashMap;
 
 /// Build an IR fixture with one post-IR deprecated method:
@@ -141,7 +141,7 @@ fn test_ts_emits_deprecated_jsdoc_and_comment() {
 #[cfg(feature = "rust")]
 #[test]
 fn test_rust_emits_deprecated_attribute() {
-    use hub_codegen::generator::rust::generate_with_options;
+    use service_codegen::generator::rust::generate_with_options;
 
     let ir = post_ir_fixture();
     let result = generate_with_options(&ir, DeprecationOptions { enabled: true }).unwrap();
@@ -430,7 +430,7 @@ fn test_cli_fail_on_deprecated_exits_nonzero_and_writes_files() {
     let ir_path = out_dir.path().join("fixture.json");
     let out_path = out_dir.path().join("out");
 
-    // Build the IR JSON directly in the Haskell-tag format that hub-codegen's
+    // Build the IR JSON directly in the Haskell-tag format that service-codegen's
     // custom TypeRef deserializer expects. Serializing the Rust struct with
     // serde's default encoding would emit the wrong shape.
     let ir_json = serde_json::json!({
@@ -471,7 +471,7 @@ fn test_cli_fail_on_deprecated_exits_nonzero_and_writes_files() {
 
     // Build the CLI binary first, then invoke it. Using cargo run ensures
     // the same workspace is used as the library tests.
-    let status = Command::new(env!("CARGO_BIN_EXE_hub-codegen"))
+    let status = Command::new(env!("CARGO_BIN_EXE_service-codegen"))
         .arg(&ir_path)
         .arg("--output")
         .arg(&out_path)
@@ -479,7 +479,7 @@ fn test_cli_fail_on_deprecated_exits_nonzero_and_writes_files() {
         .arg("typescript")
         .arg("--fail-on-deprecated")
         .output()
-        .expect("run hub-codegen");
+        .expect("run service-codegen");
 
     assert!(
         !status.status.success(),

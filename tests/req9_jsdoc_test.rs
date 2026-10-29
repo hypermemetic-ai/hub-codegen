@@ -1,9 +1,9 @@
-//! REQ-9 acceptance tests: hub-codegen TypeScript emits JSDoc breadcrumbs
+//! REQ-9 acceptance tests: service-codegen TypeScript emits JSDoc breadcrumbs
 //! per method from each ParamDef's `pd_source` annotation.
 
-use hub_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
-use hub_codegen::ir::*;
-use hub_codegen::generate_typescript;
+use service_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
+use service_codegen::ir::*;
+use service_codegen::generate_typescript;
 use std::collections::HashMap;
 
 fn default_options() -> GenerationOptions {

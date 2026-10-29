@@ -15,9 +15,9 @@
 //! 5. Absence — the same IR with the fields stripped generates exactly what
 //!    it generated before AUTH-9 (no surface at all).
 
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::ir::*;
-use hub_codegen::{generate_rust, generate_typescript, IR};
+use service_codegen::generator::{GenerationOptions, TransportEnv};
+use service_codegen::ir::*;
+use service_codegen::{generate_rust, generate_typescript, IR};
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
@@ -251,7 +251,7 @@ fn ts_throws_a_typed_forbidden() {
     // the transport-only selector carries it too
     let transport_only = generate_typescript(
         &fixture(),
-        &GenerationOptions { generate: hub_codegen::GenerateSelector::Transport, ..opts() },
+        &GenerationOptions { generate: service_codegen::GenerateSelector::Transport, ..opts() },
     )
     .expect("generate");
     assert!(transport_only.files["types.ts"].contains("export class Forbidden extends ForbiddenError"));

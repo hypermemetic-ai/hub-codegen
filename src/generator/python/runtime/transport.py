@@ -1,10 +1,10 @@
 """One socket, many calls: the transport of a generated Plexus RPC client (PYTHON-8).
 
-    async with Hub("ws://127.0.0.1:4460", backend="menger",
-                   credentials=KeyProof.from_file("~/.plexus/keys/builder.key", agent="builder")) as hub:
-        async for ev in hub.call("tickets.list", {"filter": "in PYTHON", "summary": True}, decode=dict):
+    async with Service("ws://127.0.0.1:4460", backend="menger",
+                   credentials=KeyProof.from_file("~/.plexus/keys/builder.key", agent="builder")) as service:
+        async for ev in service.call("tickets.list", {"filter": "in PYTHON", "summary": True}, decode=dict):
             print(ev["type"])
-        posted = await hub.call("chats.post", {"chat": 6, "body": "hi"}, decode=dict).one()
+        posted = await service.call("chats.post", {"chat": 6, "body": "hi"}, decode=dict).one()
 
 The wire is today's: ``<backend>.call {method, params}`` is answered with a
 subscription id; the call's items arrive as ``subscription`` notifications
@@ -13,8 +13,8 @@ the caller stopped reading (synapse's frame); ``<backend>.respond`` answers a
 ``request`` item. One reader task routes every notification to its call's
 bounded inbox; nothing new is sent that synapse does not send.
 
-Embedded verbatim in every generated package by hub-codegen (PYTHON-4); it
-knows no backend's methods. PYTHON-7 extends ``Hub._open``, ``Hub._send`` and
+Embedded verbatim in every generated package by service-codegen (PYTHON-4); it
+knows no backend's methods. PYTHON-7 extends ``Service._open``, ``Service._send`` and
 ``MethodStream._control`` for a call's input half.
 """
 
@@ -44,7 +44,7 @@ from .errors import (
     error_from_rpc,
 )
 
-__all__ = ["Hub", "MethodStream", "Page", "Progress", "Request", "Requirement", "RequestHook", "ProgressHook"]
+__all__ = ["Service", "MethodStream", "Page", "Progress", "Request", "Requirement", "RequestHook", "ProgressHook"]
 
 E = TypeVar("E")
 E_co = TypeVar("E_co", covariant=True)
@@ -71,7 +71,7 @@ class Progress:
 
 @dataclass(frozen=True, slots=True)
 class Request:
-    """A ``request`` item: the hub asks the client something mid-call (bidirectional)."""
+    """A ``request`` item: the service asks the client something mid-call (bidirectional)."""
 
     request_id: str
     data: Any
@@ -188,17 +188,17 @@ class MethodStream(Generic[E_co]):
     collected: use ``async with`` (or ``aclose()``) for a watch.
     """
 
-    __slots__ = ("_hub", "method", "_params", "_decode", "_yield_errors", "_inbox", "_sub", "_state",
+    __slots__ = ("_service", "method", "_params", "_decode", "_yield_errors", "_inbox", "_sub", "_state",
                  "items_seen", "page", "progress", "__weakref__")
 
-    def __init__(self, hub: Hub, method: str, params: Mapping[str, object], decode: Callable[[Any], E_co],
+    def __init__(self, service: Service, method: str, params: Mapping[str, object], decode: Callable[[Any], E_co],
                  yield_errors: bool) -> None:
-        self._hub = hub
+        self._service = service
         self.method = method
         self._params = params
         self._decode = decode
         self._yield_errors = yield_errors
-        self._inbox = _Inbox(hub._max_queue, method)
+        self._inbox = _Inbox(service._max_queue, method)
         self._sub: int | None = None
         self._state = 0  # 0 not sent · 1 open · 2 finished
         self.items_seen = 0
@@ -207,12 +207,12 @@ class MethodStream(Generic[E_co]):
 
     @property
     def subscription(self) -> int | None:
-        """The call's subscription id, once the hub has answered it."""
+        """The call's subscription id, once the service has answered it."""
         return self._sub
 
     @property
     def buffered(self) -> int:
-        """Items received and not yet read (at most the Hub's ``max_queue``)."""
+        """Items received and not yet read (at most the Service's ``max_queue``)."""
         return len(self._inbox.items)
 
     def __aiter__(self) -> MethodStream[E_co]:
@@ -256,7 +256,7 @@ class MethodStream(Generic[E_co]):
             if kind == "progress":
                 p = Progress(message=str(item.get("message", "")), percentage=item.get("percentage"))
                 self.progress = p
-                hook = self._hub._on_progress
+                hook = self._service._on_progress
                 if hook is not None:
                     r = hook(p)
                     if isinstance(r, Awaitable):
@@ -274,7 +274,7 @@ class MethodStream(Generic[E_co]):
     async def _start(self) -> None:
         self._state = 1
         try:
-            self._sub = await self._hub._open(self.method, self._params, self._inbox)
+            self._sub = await self._service._open(self.method, self._params, self._inbox)
         except BaseException:
             self._state = 2
             raise
@@ -282,7 +282,7 @@ class MethodStream(Generic[E_co]):
     def _finish(self, drop_late: bool = False) -> None:
         self._state = 2
         if self._sub is not None:
-            self._hub._forget(self._sub, drop_late=drop_late)
+            self._service._forget(self._sub, drop_late=drop_late)
 
     async def one(self) -> E_co:
         """The first data item; the rest of the call is cancelled. ``EmptyStream`` if there was none."""
@@ -301,7 +301,7 @@ class MethodStream(Generic[E_co]):
         """Stop reading: the call is unsubscribed (once); later items for it are dropped."""
         if self._state == 1 and self._sub is not None:
             self._state = 2
-            await self._hub._unsubscribe(self._sub)
+            await self._service._unsubscribe(self._sub)
         else:
             self._state = 2
 
@@ -314,11 +314,11 @@ class MethodStream(Generic[E_co]):
 
     def __del__(self) -> None:
         if self._state == 1 and self._sub is not None:
-            self._hub._abandon(self._sub)
+            self._service._abandon(self._sub)
 
 
-class Hub:
-    """One WebSocket to a Plexus hub, many calls on it. ``async with Hub(...)``, or ``await hub.connect()``.
+class Service:
+    """One WebSocket to a Plexus service, many calls on it. ``async with Service(...)``, or ``await service.connect()``.
 
     ``credentials`` are sent as ``Authorization: Bearer …`` at the upgrade.
     ``preflight`` (a generated client's table) refuses a method that needs a
@@ -372,7 +372,7 @@ class Hub:
             status = e.response.status_code
             if status in (401, 403):
                 raise Unauthenticated(None, f"{self.url} refused the sign-in ({status}): is the credential "
-                                            f"granted, and is this URL the hub's own?", url=self.url) from None
+                                            f"granted, and is this URL the service's own?", url=self.url) from None
             raise ConnectFailed(self.url, f"answered {status}, not a WebSocket upgrade", status=status) from None
         except (OSError, TimeoutError, InvalidHandshake, InvalidURI) as e:
             raise ConnectFailed(self.url, str(e) or type(e).__name__) from None
@@ -396,7 +396,7 @@ class Hub:
         for t in list(self._tasks):
             t.cancel()
 
-    async def __aenter__(self) -> Hub:
+    async def __aenter__(self) -> Service:
         await self.connect()
         return self
 

@@ -20,9 +20,9 @@
 //! attachment (schema-directed), preflight (fail fast, escape-hatched), and
 //! typed errors.
 
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::ir::*;
-use hub_codegen::{generate_typescript, IR};
+use service_codegen::generator::{GenerationOptions, TransportEnv};
+use service_codegen::ir::*;
+use service_codegen::{generate_typescript, IR};
 use std::collections::HashMap;
 use std::path::PathBuf;
 

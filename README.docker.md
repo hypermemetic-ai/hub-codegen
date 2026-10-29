@@ -1,6 +1,6 @@
 # Docker Development Setup
 
-Simple Docker setup for developing with Substrate, Synapse, and hub-codegen.
+Simple Docker setup for developing with Substrate, Synapse, and service-codegen.
 
 ## Quick Start
 
@@ -10,13 +10,13 @@ Assuming you have this directory structure:
 hypermemetic/
 ├── substrate/       # Substrate source
 ├── synapse/         # Synapse source
-└── hub-codegen/     # This repo
+└── service-codegen/     # This repo
 ```
 
 ### Build the image
 
 ```bash
-docker build -t hub-codegen:dev .
+docker build -t service-codegen:dev .
 ```
 
 ### Run the full pipeline
@@ -29,7 +29,7 @@ docker-compose run dev
 docker run -v $(pwd)/../substrate:/workspace/substrate \
            -v $(pwd)/../synapse:/workspace/synapse \
            -v $(pwd)/output:/workspace/output \
-           hub-codegen:dev dev rust
+           service-codegen:dev dev rust
 ```
 
 This will:
@@ -55,7 +55,7 @@ docker-compose run dev typescript  # Generate TypeScript client
 ```bash
 docker run -p 44410:44410 \
            -v $(pwd)/../substrate:/workspace/substrate \
-           hub-codegen:dev substrate
+           service-codegen:dev substrate
 ```
 
 ### `synapse` - Run synapse CLI
@@ -63,15 +63,15 @@ docker run -p 44410:44410 \
 ```bash
 docker run -v $(pwd)/../synapse:/workspace/synapse \
            --network host \
-           hub-codegen:dev synapse -P 44410 substrate -i > ir.json
+           service-codegen:dev synapse -P 44410 substrate -i > ir.json
 ```
 
-### `generate` - Run hub-codegen
+### `generate` - Run service-codegen
 
 ```bash
 docker run -v $(pwd)/ir.json:/tmp/ir.json \
            -v $(pwd)/output:/workspace/output \
-           hub-codegen:dev generate /tmp/ir.json -o /workspace/output -t rust
+           service-codegen:dev generate /tmp/ir.json -o /workspace/output -t rust
 ```
 
 ### `bash` - Interactive shell
@@ -83,7 +83,7 @@ docker-compose run shell
 docker run -it \
            -v $(pwd)/../substrate:/workspace/substrate \
            -v $(pwd)/../synapse:/workspace/synapse \
-           hub-codegen:dev bash
+           service-codegen:dev bash
 ```
 
 ## Directory Structure
@@ -92,19 +92,19 @@ docker run -it \
 /workspace/
 ├── substrate/          # Your substrate source (mounted)
 ├── synapse/            # Your synapse source (mounted)
-├── hub-codegen/        # Built into image
+├── service-codegen/        # Built into image
 └── output/             # Generated code (mounted)
 ```
 
 ## Building from Source
 
-The Dockerfile builds hub-codegen at image build time. Substrate and synapse are built on first run if needed.
+The Dockerfile builds service-codegen at image build time. Substrate and synapse are built on first run if needed.
 
 To rebuild everything:
 
 ```bash
 # Rebuild image
-docker build --no-cache -t hub-codegen:dev .
+docker build --no-cache -t service-codegen:dev .
 
 # Remove built binaries to force rebuild
 rm -rf ../substrate/target/release/substrate

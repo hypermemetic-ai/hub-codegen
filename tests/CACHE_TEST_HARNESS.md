@@ -254,7 +254,7 @@ let children_hash = backend.compute_children_hash("test_plugin");
 All hashes use SHA-256 truncated to 16 hex characters (matching Plexus format):
 
 ```rust
-use hub_codegen::hash::compute_hash;
+use service_codegen::hash::compute_hash;
 
 let content = format!("{:?}", data);
 let hash = compute_hash(&content);  // Returns 16-char hex string
@@ -417,7 +417,7 @@ fn get_self_hash_v2(entry: &CacheEntry) -> &str {
 
 1. **Check cache directory**:
    ```bash
-   ls -la ~/.cache/plexus-codegen/hub-codegen/
+   ls -la ~/.cache/plexus-codegen/service-codegen/
    ```
 
 2. **Clear cache and retry**:
@@ -462,4 +462,4 @@ When adding new tests:
 
 ## License
 
-Same as the hub-codegen project.
+Same as the service-codegen project.

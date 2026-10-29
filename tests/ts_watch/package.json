@@ -1,5 +1,5 @@
 {
-  "name": "hub-codegen-ts-watch-tests",
+  "name": "service-codegen-ts-watch-tests",
   "private": true,
   "description": "RETURNS-38: the type-level and runtime tests of the generated watch(a, b, c), run by tests/returns38_watch_test.rs",
   "devDependencies": {

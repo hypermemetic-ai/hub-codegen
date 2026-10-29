@@ -5,7 +5,7 @@ services:
   # Mount substrate and synapse source directories
   dev:
     build: .
-    image: hub-codegen:dev
+    image: service-codegen:dev
     ports:
       - "44410:44410"
     volumes:
@@ -21,7 +21,7 @@ services:
 
   # Interactive development shell
   shell:
-    image: hub-codegen:dev
+    image: service-codegen:dev
     volumes:
       - ../substrate:/workspace/substrate
       - ../synapse:/workspace/synapse

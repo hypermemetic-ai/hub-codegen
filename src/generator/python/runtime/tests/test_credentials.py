@@ -15,9 +15,9 @@ import pytest
 
 from runtime.credentials import KeyProof, Token
 from runtime.errors import CredentialError, MissingExtra
-from runtime.transport import Hub
+from runtime.transport import Service
 
-from .mock_hub import MockHub
+from .mock_service import MockService
 
 GOLDEN = Path(__file__).parent / "golden" / "key_proof.txt"
 SEED = bytes(range(32))
@@ -25,7 +25,7 @@ AUD = "ws://127.0.0.1:4486"
 AGENT = "python-8-test"
 NONCE = bytes([7]) * 32
 TS = 1793250000
-# menger's checkout beside hub-codegen's (or beside its worktree's directory), when there is one
+# menger's checkout beside service-codegen's (or beside its worktree's directory), when there is one
 MENGER_CALL = next((p / "menger" / "deploy" / "menger-call.mjs" for p in Path(__file__).resolve().parents
                     if (p / "menger" / "deploy" / "menger-call.mjs").exists()), Path("/nonexistent"))
 
@@ -107,37 +107,37 @@ def test_importing_transport_does_not_import_cryptography() -> None:
     assert out.stdout.strip() == "False"
 
 
-async def test_token_file_reread_each_connect(mock: MockHub, tmp_path: Path) -> None:
+async def test_token_file_reread_each_connect(mock: MockService, tmp_path: Path) -> None:
     path = tmp_path / "token"
     path.write_text("first\n")
     path.chmod(0o600)
-    hub = Hub(mock.url, backend="menger", credentials=Token.from_file(path))
-    async with hub:
+    service = Service(mock.url, backend="menger", credentials=Token.from_file(path))
+    async with service:
         pass
     path.write_text("second\n")
-    async with hub:
+    async with service:
         pass
     assert [h["Authorization"] for h in mock.upgrade_headers] == ["Bearer first", "Bearer second"]
 
 
-async def test_token_and_supplier_sent_as_bearer(mock: MockHub) -> None:
+async def test_token_and_supplier_sent_as_bearer(mock: MockService) -> None:
     async def supply() -> str:
         return "from-supplier"
 
-    async with Hub(mock.url, backend="menger", credentials=Token("plain")):
+    async with Service(mock.url, backend="menger", credentials=Token("plain")):
         pass
-    async with Hub(mock.url, backend="menger", credentials=supply):
+    async with Service(mock.url, backend="menger", credentials=supply):
         pass
-    async with Hub(mock.url, backend="menger"):
+    async with Service(mock.url, backend="menger"):
         pass
     got = [h.get("Authorization") for h in mock.upgrade_headers]
     assert got == ["Bearer plain", "Bearer from-supplier", None]
     assert "plain" not in repr(Token("plain"))
 
 
-async def test_key_proof_sent_at_upgrade(mock: MockHub, tmp_path: Path) -> None:
+async def test_key_proof_sent_at_upgrade(mock: MockService, tmp_path: Path) -> None:
     proof = KeyProof.from_file(_key_file(tmp_path), agent=AGENT)
-    async with Hub(mock.url + "/", backend="menger", credentials=proof):
+    async with Service(mock.url + "/", backend="menger", credentials=proof):
         pass
     value = mock.upgrade_headers[0]["Authorization"]
     assert value.startswith("Bearer plexus-key.")

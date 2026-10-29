@@ -10,8 +10,8 @@ pub struct ToolchainVersions {
     #[serde(rename = "synapse-cc")]
     pub synapse_cc: String,
     pub synapse: String,
-    #[serde(rename = "hub-codegen")]
-    pub hub_codegen: String,
+    #[serde(rename = "service-codegen", alias = "hub-codegen")] // naming-alias: an old cache reads; removed by NAMING-18
+    pub service_codegen: String,
 }
 
 /// Cache entry for a single plugin's generated code
@@ -31,7 +31,7 @@ pub struct CodePluginCache {
     pub cached_at: String,
 }
 
-/// Code cache manifest (written to hub-codegen/{target}/{backend}/manifest.json)
+/// Code cache manifest (written to service-codegen/{target}/{backend}/manifest.json)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeCacheManifest {
     /// Manifest format version
@@ -124,7 +124,10 @@ fn time_to_iso8601(secs: u64) -> String {
     )
 }
 
-/// Get cache directory path: ~/.cache/plexus-codegen/hub-codegen/{target}/{backend}
+/// The cache directory under the tool's old name, read when no new one exists.
+const LEGACY_CACHE_DIR: &str = "hub-codegen"; // naming-alias: removed by NAMING-18
+
+/// Get cache directory path: ~/.cache/plexus-codegen/service-codegen/{target}/{backend}
 pub fn get_cache_dir(target: &str, backend: &str) -> Result<PathBuf> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -137,14 +140,31 @@ pub fn get_cache_dir(target: &str, backend: &str) -> Result<PathBuf> {
 pub fn get_cache_dir_under(root: &PathBuf, target: &str, backend: &str) -> PathBuf {
     root.join(".cache")
         .join("plexus-codegen")
-        .join("hub-codegen")
+        .join("service-codegen")
         .join(target)
         .join(backend)
 }
 
 /// Read cache manifest from disk
 pub fn read_cache_manifest(target: &str, backend: &str) -> Result<CodeCacheManifest> {
-    let cache_dir = get_cache_dir(target, backend)?;
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| anyhow::anyhow!("Cannot determine home directory"))?;
+    read_cache_manifest_under(&PathBuf::from(home), target, backend)
+}
+
+/// Read the cache manifest under `root`: the service-codegen directory's, else
+/// one a cache under the tool's old name left (NAMING-10). Writes go to the new
+/// directory only, so the first write moves the cache.
+pub fn read_cache_manifest_under(root: &PathBuf, target: &str, backend: &str) -> Result<CodeCacheManifest> {
+    let cache_dir = get_cache_dir_under(root, target, backend);
+    if cache_dir.join("manifest.json").exists() {
+        return read_cache_manifest_from(&cache_dir);
+    }
+    let old = root.join(".cache").join("plexus-codegen").join(LEGACY_CACHE_DIR).join(target).join(backend);
+    if old.join("manifest.json").exists() {
+        return read_cache_manifest_from(&old);
+    }
     read_cache_manifest_from(&cache_dir)
 }
 
@@ -195,7 +215,7 @@ mod tests {
         let toolchain = ToolchainVersions {
             synapse_cc: "0.1.0.0".to_string(),
             synapse: "0.2.0.0".to_string(),
-            hub_codegen: "0.1.0".to_string(),
+            service_codegen: "0.1.0".to_string(),
         };
 
         let manifest = CodeCacheManifest::new("typescript".to_string(), toolchain);
@@ -210,7 +230,7 @@ mod tests {
         let toolchain = ToolchainVersions {
             synapse_cc: "0.1.0.0".to_string(),
             synapse: "0.2.0.0".to_string(),
-            hub_codegen: "0.1.0".to_string(),
+            service_codegen: "0.1.0".to_string(),
         };
 
         let mut manifest = CodeCacheManifest::new("typescript".to_string(), toolchain);
@@ -235,7 +255,7 @@ mod tests {
         let toolchain = ToolchainVersions {
             synapse_cc: "0.1.0.0".to_string(),
             synapse: "0.2.0.0".to_string(),
-            hub_codegen: "0.1.0".to_string(),
+            service_codegen: "0.1.0".to_string(),
         };
 
         let manifest = CodeCacheManifest::new("typescript".to_string(), toolchain);
