@@ -1,7 +1,7 @@
 //! Deprecation annotation support (IR-7).
 //!
 //! When the IR contains deprecated surfaces (methods, types, params, or
-//! plugins) carrying `DeprecationInfo`, hub-codegen emits target-language
+//! plugins) carrying `DeprecationInfo`, service-codegen emits target-language
 //! annotations above the generated surface. This module exposes the shared
 //! helpers used by both the TypeScript and Rust backends.
 //!
@@ -49,7 +49,7 @@ impl Default for DeprecationOptions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeprecationWarning {
     /// Kind of surface: `"method"`, `"type"`, `"param"`, `"field"`, `"plugin"`,
-    /// or one of the schema-field kinds (`"children"`, `"is_hub"`,
+    /// or one of the schema-field kinds (`"children"`, `"is_parent"`,
     /// `"child_capabilities"`).
     pub kind: String,
     /// Fully qualified surface name (e.g. `"echo.old_ping"`).

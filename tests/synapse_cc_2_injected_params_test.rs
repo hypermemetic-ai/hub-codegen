@@ -2,7 +2,7 @@
 //!
 //! A `ParamDef` whose `pdSource.from` is anything but `rpc` (`auth`,
 //! `derived`, `header`, `cookie`, `query`) is filled by the server from the
-//! connection. hub-codegen 0.4.1 still wrote it into the generated method as
+//! connection. service-codegen 0.4.1 still wrote it into the generated method as
 //! an optional `unknown` argument — in name order, so `auth` took the first
 //! positional slot ahead of every real parameter. Now:
 //!
@@ -16,15 +16,15 @@
 //! 4. An IR without `pdSource` and without a static child generates byte
 //!    for byte what 0.4.1 generated (goldens written from the parent commit).
 //!
-//! The fixture is the IR of the ACCESS-6 spike (`synapse -i spike`): a hub
+//! The fixture is the IR of the ACCESS-6 spike (`synapse -i spike`): a service
 //! `spike` with `tickets` (`get`, `set_status`) and its static child
 //! `tickets.inputs` (`list`, `answer`), every method declaring `auth`
 //! (derived), `origin` (header) and `user` (auth, resolver
 //! `self.access.verify`).
 
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::ir::*;
-use hub_codegen::{generate_rust, generate_typescript, IR};
+use service_codegen::generator::{GenerationOptions, TransportEnv};
+use service_codegen::ir::*;
+use service_codegen::{generate_rust, generate_typescript, IR};
 use std::path::PathBuf;
 
 fn golden_dir() -> PathBuf {
@@ -279,7 +279,7 @@ fn rust_with_injected_params_compiles() {
 // 4 — absence: byte for byte as before
 // ─────────────────────────────────────────────────────────────
 
-/// The bare fixture generates exactly what hub-codegen 0.4.1 generated for
+/// The bare fixture generates exactly what service-codegen 0.4.1 generated for
 /// it (goldens written from the parent commit, fe42998).
 #[test]
 fn without_injected_params_the_output_is_unchanged() {

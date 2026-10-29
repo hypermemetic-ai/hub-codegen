@@ -2,7 +2,7 @@
 
     python -I -m pytest -m perf -s     # prints the measured numbers
 
-The MockHub serves from a thread with its own event loop, so the time is the
+The MockService serves from a thread with its own event loop, so the time is the
 client's: the reader, the routing, the inbox, ``decode=dict``.
 """
 
@@ -20,9 +20,9 @@ from pathlib import Path
 
 import pytest
 
-from runtime.transport import Hub
+from runtime.transport import Service
 
-from .mock_hub import DONE, MockHub, data
+from .mock_service import DONE, MockService, data
 
 pytestmark = pytest.mark.perf
 
@@ -32,39 +32,39 @@ ITEM = {"type": "summary", "summary": {"id": "PYTHON-8", "title": "The Python cl
 
 
 class ThreadedMock:
-    """A MockHub on its own loop in a thread, so its sending is not timed."""
+    """A MockService on its own loop in a thread, so its sending is not timed."""
 
     def __init__(self) -> None:
         self.loop = asyncio.new_event_loop()
-        self.hub = MockHub()
+        self.service = MockService()
         self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
 
-    def __enter__(self) -> MockHub:
+    def __enter__(self) -> MockService:
         self.thread.start()
-        asyncio.run_coroutine_threadsafe(self.hub.__aenter__(), self.loop).result(5)
-        return self.hub
+        asyncio.run_coroutine_threadsafe(self.service.__aenter__(), self.loop).result(5)
+        return self.service
 
     def __exit__(self, *exc: object) -> None:
-        asyncio.run_coroutine_threadsafe(self.hub.__aexit__(), self.loop).result(5)
+        asyncio.run_coroutine_threadsafe(self.service.__aexit__(), self.loop).result(5)
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.thread.join(5)
 
 
 @pytest.fixture
-def threaded() -> Iterator[MockHub]:
-    with ThreadedMock() as hub:
-        yield hub
+def threaded() -> Iterator[MockService]:
+    with ThreadedMock() as service:
+        yield service
 
 
-async def test_decode_10k_items(threaded: MockHub) -> None:
+async def test_decode_10k_items(threaded: MockService) -> None:
     items = [data(ITEM) for _ in range(N)] + [DONE]
     threaded.expect_call("tickets.list").reply(items, blast=True)
     threaded.expect_call("tickets.list").reply(items, blast=True)
-    async with Hub(threaded.url, backend="menger") as hub:
+    async with Service(threaded.url, backend="menger") as service:
         # throughput: wall time around the async for, no tracing
         t0 = time.perf_counter()
         n = 0
-        async for _ in hub.call("tickets.list", {}, decode=dict):
+        async for _ in service.call("tickets.list", {}, decode=dict):
             n += 1
         wall = time.perf_counter() - t0
         assert n == N
@@ -72,7 +72,7 @@ async def test_decode_10k_items(threaded: MockHub) -> None:
         tracemalloc.start()
         peaks: dict[int, int] = {}
         n = 0
-        async for _ in hub.call("tickets.list", {}, decode=dict):
+        async for _ in service.call("tickets.list", {}, decode=dict):
             n += 1
             if n in (1_000, N):
                 peaks[n] = tracemalloc.get_traced_memory()[1]
@@ -85,13 +85,13 @@ async def test_decode_10k_items(threaded: MockHub) -> None:
     assert growth <= 256 * 1024, f"peak grew {growth / 1024:.0f} KiB between 1,000 and 10,000 items"
 
 
-async def test_open_watch_memory(threaded: MockHub) -> None:
+async def test_open_watch_memory(threaded: MockService) -> None:
     for _ in range(100):
         threaded.expect_call("tickets.watch").reply([data({"type": "watching"})])
-    async with Hub(threaded.url, backend="menger") as hub:
+    async with Service(threaded.url, backend="menger") as service:
         tracemalloc.start()
         base = tracemalloc.get_traced_memory()[0]
-        streams = [hub.call("tickets.watch", {}, decode=dict) for _ in range(100)]
+        streams = [service.call("tickets.watch", {}, decode=dict) for _ in range(100)]
         for s in streams:
             await s.__anext__()
         held = tracemalloc.get_traced_memory()[0] - base

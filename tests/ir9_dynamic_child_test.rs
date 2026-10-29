@@ -12,11 +12,11 @@
 //!      when no `MethodRole::DynamicChild` is present.
 //!   7. Rust backend: a minimal gate struct + trait impls are emitted.
 
-use hub_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
-use hub_codegen::ir::*;
-use hub_codegen::generate_typescript;
+use service_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
+use service_codegen::ir::*;
+use service_codegen::generate_typescript;
 #[cfg(feature = "rust")]
-use hub_codegen::generate_rust;
+use service_codegen::generate_rust;
 use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────

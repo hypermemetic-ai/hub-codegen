@@ -1,6 +1,6 @@
-# hub-codegen Architecture Overview
+# service-codegen Architecture Overview
 
-hub-codegen is a pure, stateless Rust CLI that transforms a Synapse IR JSON document into typed client libraries (TypeScript or Rust). It is designed to be driven by an external orchestrator (synapse-cc) that owns file writes, merge decisions, caching, and dependency management — hub-codegen itself has no side effects in json output mode.
+service-codegen is a pure, stateless Rust CLI that transforms a Synapse IR JSON document into typed client libraries (TypeScript or Rust). It is designed to be driven by an external orchestrator (synapse-cc) that owns file writes, merge decisions, caching, and dependency management — service-codegen itself has no side effects in json output mode.
 
 ---
 
@@ -13,7 +13,7 @@ hub-codegen is a pure, stateless Rust CLI that transforms a Synapse IR JSON docu
   Synapse IR Builder  ──► ir.json  (irVersion: "2.0")
                                 │
                      ┌──────────┘
-                     │  hub-codegen --output-format json
+                     │  service-codegen --output-format json
                      ▼
               CodegenOutput (stdout JSON)
               ┌──────────────────────────┐
@@ -100,7 +100,7 @@ Direct use (`--output-format files`) is also supported and performs merge and ca
 
 **`src/merge.rs`** — Three-way merge producing `FileStatus` per file (`Unchanged`, `SafeToUpdate`, `NewFile`, `UserModified`). Files mode only.
 
-**`src/cache.rs`** — Reads and writes `~/.cache/plexus-codegen/hub-codegen/` manifest. Files mode only; synapse-cc maintains its own separate cache.
+**`src/cache.rs`** — Reads and writes `~/.cache/plexus-codegen/service-codegen/` manifest. Files mode only; synapse-cc maintains its own separate cache.
 
 ---
 
@@ -153,7 +153,7 @@ ir.json
 **files mode** (`--output-format files`) — default for direct CLI use
 - Writes generated files to `--output` directory.
 - Three-way merge protects user-modified files (`--merge-strategy skip` by default).
-- Writes cache manifest to `~/.cache/plexus-codegen/hub-codegen/{target}/{backend}/`.
+- Writes cache manifest to `~/.cache/plexus-codegen/service-codegen/{target}/{backend}/`.
 - Writes starter `package.json` once (user-owned thereafter; excluded from merge).
 
 ---

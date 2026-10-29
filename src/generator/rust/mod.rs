@@ -49,7 +49,7 @@ pub fn generate_with_options(ir: &IR, deprecation_opts: DeprecationOptions) -> R
     if ir.ir_version != "2.0" {
         anyhow::bail!(
             "Unsupported IR version: {}. Expected 2.0.\n\
-             This version of hub-codegen requires IR v2.0 with structured TypeRef.\n\
+             This version of service-codegen requires IR v2.0 with structured TypeRef.\n\
              Please regenerate IR with latest Synapse.",
             ir.ir_version
         );

@@ -8,7 +8,7 @@ Successfully implemented and validated a comprehensive incremental caching syste
 
 ### 1. Three-Way Merge System ✅
 
-**Location**: `/workspace/hypermemetic/hub-codegen/src/merge.rs`
+**Location**: `/workspace/hypermemetic/service-codegen/src/merge.rs`
 
 **Functionality**:
 - Compares cached hash vs current file hash vs new generated hash
@@ -24,13 +24,13 @@ Successfully implemented and validated a comprehensive incremental caching syste
 
 **CLI**:
 ```bash
-hub-codegen --merge-strategy skip    # Default: preserve user changes
-hub-codegen --merge-strategy force   # Overwrite everything
+service-codegen --merge-strategy skip    # Default: preserve user changes
+service-codegen --merge-strategy force   # Overwrite everything
 ```
 
 ### 2. Content Hashing System ✅
 
-**Location**: `/workspace/hypermemetic/hub-codegen/src/hash.rs`
+**Location**: `/workspace/hypermemetic/service-codegen/src/hash.rs`
 
 **Implementation**:
 - SHA-256 based hashing
@@ -45,7 +45,7 @@ hub-codegen --merge-strategy force   # Overwrite everything
 
 ### 3. Cache Manifest System ✅
 
-**Location**: `/workspace/hypermemetic/hub-codegen/src/cache.rs`
+**Location**: `/workspace/hypermemetic/service-codegen/src/cache.rs`
 
 **Structure**:
 ```rust
@@ -66,7 +66,7 @@ pub struct CodePluginCache {
 
 **Cache Directory**:
 ```
-~/.cache/plexus-codegen/hub-codegen/
+~/.cache/plexus-codegen/service-codegen/
 ├── typescript/
 │   └── substrate/
 │       └── manifest.json
@@ -82,21 +82,21 @@ pub struct CodePluginCache {
 **Changes**:
 - Fixed cache key from "all" → "default" (line 215)
 - Added CodeCacheManifest support
-- Integrated with hub-codegen's cache system
+- Integrated with service-codegen's cache system
 
 **Flow**:
 ```
 synapse-cc
   ↓ Generate IR
-  ↓ Call hub-codegen with output dir
-  ↓ hub-codegen reads cache manifest
+  ↓ Call service-codegen with output dir
+  ↓ service-codegen reads cache manifest
   ↓ Three-way merge
   ↓ Write updated cache manifest
 ```
 
 ### 5. Comprehensive Test Harness ✅
 
-**Location**: `/workspace/hypermemetic/hub-codegen/tests/`
+**Location**: `/workspace/hypermemetic/service-codegen/tests/`
 
 **Test Coverage**:
 - **15/15 tests passing** (100%)
@@ -153,7 +153,7 @@ Tested with actual Plexus substrate backend:
 - ✅ Regeneration completes successfully
 
 **Test 3: Conflict Detection**
-- ✅ User modifications detected by hub-codegen
+- ✅ User modifications detected by service-codegen
 - ✅ Modified files skipped (when using --merge-strategy skip)
 - ✅ Force overwrite works (when using --merge-strategy force)
 - ✅ User code preserved in skip mode
@@ -201,7 +201,7 @@ Result: ✅ User code preserved, warning shown
 -- synapse-cc wrote cache with key "all"
 Map.singleton "all" CodePluginCache
 
--- hub-codegen looked for key "default"
+-- service-codegen looked for key "default"
 manifest.plugins.get("default")  -- Not found!
 ```
 
@@ -210,7 +210,7 @@ manifest.plugins.get("default")  -- Not found!
 -- synapse-cc writes cache with key "default"
 Map.singleton "default" CodePluginCache
 
--- hub-codegen looks for key "default"
+-- service-codegen looks for key "default"
 manifest.plugins.get("default")  -- Found! ✅
 ```
 
@@ -289,7 +289,7 @@ let cache_entry = CodePluginCache {
 
 ### Bug #1: Cache Key Mismatch ✅
 
-**Issue**: synapse-cc wrote "all", hub-codegen read "default"
+**Issue**: synapse-cc wrote "all", service-codegen read "default"
 
 **Root Cause**: Inconsistent plugin key naming
 
@@ -309,7 +309,7 @@ let cache_entry = CodePluginCache {
 **Fix**: Preserve old hashes for skipped files in cache update
 
 **Files Modified**:
-- `/workspace/hypermemetic/hub-codegen/src/main.rs:123-150`
+- `/workspace/hypermemetic/service-codegen/src/main.rs:123-150`
 
 **Status**: ✅ Fixed and tested
 
@@ -329,11 +329,11 @@ let cache_entry = CodePluginCache {
 
 ```bash
 # First run (cold cache)
-hub-codegen cone-ir.json -o ./generated
+service-codegen cone-ir.json -o ./generated
 # Output: 88 files generated, cache manifest created
 
 # Second run (cache hit)
-hub-codegen cone-ir.json -o ./generated
+service-codegen cone-ir.json -o ./generated
 # Output: 86 files cached, 2 files updated (97.7% hit rate)
 ```
 
@@ -344,7 +344,7 @@ hub-codegen cone-ir.json -o ./generated
 echo "// Custom code" >> ./generated/cone/types.ts
 
 # Regenerate (default: skip)
-hub-codegen cone-ir.json -o ./generated
+service-codegen cone-ir.json -o ./generated
 # Output:
 #   WARNING: The following files have been modified and were NOT updated:
 #     cone/types.ts
@@ -352,7 +352,7 @@ hub-codegen cone-ir.json -o ./generated
 #   To overwrite them, use: --merge-strategy force
 
 # Force overwrite
-hub-codegen cone-ir.json -o ./generated --merge-strategy force
+service-codegen cone-ir.json -o ./generated --merge-strategy force
 # Output: 1 file updated (user code overwritten)
 ```
 
@@ -393,13 +393,13 @@ cargo run --example compare_configs \
 │                                                               │
 │  1. Connect to Plexus backend                                │
 │  2. Generate IR from schema                                  │
-│  3. Call hub-codegen with IR and output directory            │
+│  3. Call service-codegen with IR and output directory            │
 │                                                               │
 └────────────────────┬─────────────────────────────────────────┘
                      │
                      ↓
 ┌──────────────────────────────────────────────────────────────┐
-│                    hub-codegen                                │
+│                    service-codegen                                │
 │                                                               │
 │  4. Read cache manifest from ~/.cache/                       │
 │  5. Generate new code                                        │
@@ -487,7 +487,7 @@ Unchanged    SafeToUpdate
 
 ## Files Modified
 
-### hub-codegen (Rust)
+### service-codegen (Rust)
 
 1. **src/main.rs** (lines 123-150)
    - Cache preservation for skipped files
@@ -517,7 +517,7 @@ Unchanged    SafeToUpdate
 
 1. **src/SynapseCC/Pipeline.hs** (line 215)
    - Changed cache key from "all" → "default"
-   - Fixed consistency with hub-codegen
+   - Fixed consistency with service-codegen
 
 2. **src/SynapseCC/Types.hs**
    - Added CodeCacheManifest types

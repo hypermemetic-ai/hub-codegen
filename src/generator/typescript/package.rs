@@ -46,7 +46,7 @@ pub fn generate_package_json(transport: TransportEnv, has_bidir: bool, version_h
   "version": "0.0.0-{version_hash}",
   "type": "module",
   "main": "index.ts",
-  "_generatedBy": "hub-codegen",
+  "_generatedBy": "service-codegen",
   "scripts": {{
     {scripts}
   }},

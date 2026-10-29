@@ -1,6 +1,6 @@
-# hub-codegen Tests
+# service-codegen Tests
 
-This directory contains tests for the hub-codegen code generator, including comprehensive cache invalidation tests for the V2 granular hash system.
+This directory contains tests for the service-codegen code generator, including comprehensive cache invalidation tests for the V2 granular hash system.
 
 ## Test Organization
 
@@ -225,7 +225,7 @@ From `CACHE_CONTRACTS.md`:
 ### 1. Using TestIRBuilder
 
 ```rust
-use hub_codegen::ir::*;
+use service_codegen::ir::*;
 
 let ir = TestIRBuilder::new("my_plugin")
     .with_method("my_method")
@@ -305,7 +305,7 @@ cargo test test_name -- --nocapture --test-threads=1
 
 ```bash
 # Check cache directory
-ls -la ~/.cache/plexus-codegen/hub-codegen/
+ls -la ~/.cache/plexus-codegen/service-codegen/
 
 # Clear cache
 rm -rf ~/.cache/plexus-codegen/

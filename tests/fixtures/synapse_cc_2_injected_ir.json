@@ -610,7 +610,7 @@
       "tdNamespace": ""
     },
     ".PlexusStreamItem": {
-      "tdDescription": "Universal stream item - all activations emit this type\n\nThe caller (DynamicHub routing layer) wraps activation responses with\nmetadata. This is the only type that crosses the wire.",
+      "tdDescription": "Universal stream item - all activations emit this type\n\nThe caller (DynamicService routing layer) wraps activation responses with\nmetadata. This is the only type that crosses the wire.",
       "tdKind": {
         "keDiscriminator": "type",
         "keVariants": [

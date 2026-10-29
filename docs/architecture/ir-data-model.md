@@ -2,14 +2,14 @@
 
 ## Overview
 
-The **Intermediate Representation (IR)** is a language-agnostic JSON schema that bridges Rust type definitions in substrate plugins with typed client code generation. The IR is produced by Synapse's IR Builder (Haskell) via schema introspection, deserialized by hub-codegen into Rust structs, and then consumed by language-specific generators to emit TypeScript (and Rust) clients.
+The **Intermediate Representation (IR)** is a language-agnostic JSON schema that bridges Rust type definitions in substrate plugins with typed client code generation. The IR is produced by Synapse's IR Builder (Haskell) via schema introspection, deserialized by service-codegen into Rust structs, and then consumed by language-specific generators to emit TypeScript (and Rust) clients.
 
 ```
 Substrate Plugins (Rust types)
   ↓ schemars JSON Schema
 Synapse IR Builder (Haskell)
   ↓ IR v2.0 JSON
-hub-codegen IR Deserialization (Rust)
+service-codegen IR Deserialization (Rust)
   ↓ structured IR types
 Language Generators (TypeScript / Rust)
   ↓

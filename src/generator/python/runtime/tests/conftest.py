@@ -4,10 +4,10 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from .mock_hub import MockHub
+from .mock_service import MockService
 
 
 @pytest.fixture
-async def mock() -> AsyncIterator[MockHub]:
-    async with MockHub() as hub:
-        yield hub
+async def mock() -> AsyncIterator[MockService]:
+    async with MockService() as service:
+        yield service

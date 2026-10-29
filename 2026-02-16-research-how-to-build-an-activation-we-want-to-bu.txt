@@ -8,7 +8,7 @@
 │               *  ▘▘ ▝▝  *               │                                    │
 │                                         │                                    │
 │         Sonnet 4.5 · Claude API         │                                    │
-│   /workspace/hypermemetic/hub-codegen   │                                    │
+│   /workspace/hypermemetic/service-codegen   │                                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
   /model to try Opus 4.5
@@ -29,11 +29,11 @@ orchestrator. don't document how to build an orchestrator, just do the first
 
   What You Need to Know
 
-  Activations are self-contained microservices in the Plexus ecosystem that expose typed RPC methods. They're defined in the substrate codebase (not in hub-codegen, which is just the client generator).
+  Activations are self-contained microservices in the Plexus ecosystem that expose typed RPC methods. They're defined in the substrate codebase (not in service-codegen, which is just the client generator).
 
   The Pattern for Building a New Activation
 
-  1. Define in Substrate using the #[hub_method] macro:
+  1. Define in Substrate using the #[plexus_macros::method] macro:
   // In substrate codebase
   #[derive(Serialize, Deserialize, JsonSchema)]
   #[serde(tag = "type", rename_all = "snake_case")]
@@ -45,7 +45,7 @@ orchestrator. don't document how to build an orchestrator, just do the first
   }
 
   impl AgentOrchestratorActivation {
-      #[hub_method(streaming, description = "Orchestrate Claude Code agents")]
+      #[plexus_macros::method(streaming, description = "Orchestrate Claude Code agents")]
       async fn orchestrate(&self, params: OrchestrateParams)
           -> impl Stream<Item = AgentEvent> {
           // Your implementation calling Claude Code
@@ -65,10 +65,10 @@ orchestrator. don't document how to build an orchestrator, just do the first
   Architecture
 
   Your New Activation (in substrate)
-      ↓ exposes JSON Schema via #[hub_method]
+      ↓ exposes JSON Schema via #[plexus_macros::method]
   Synapse (introspects schemas)
       ↓ generates IR (Intermediate Representation)
-  hub-codegen (this repo)
+  service-codegen (this repo)
       ↓ generates TypeScript/Rust clients
   Type-Safe Clients (can call your activation)
 
@@ -76,7 +76,7 @@ orchestrator. don't document how to build an orchestrator, just do the first
 
   - Transport layer generation: src/generator/typescript/transport.rs:104-392
   - Method schema spec: docs/architecture/16679174944041108735_method-schema-spec.md
-  - Multi-hub protocol: docs/architecture/16679517135570018559_multi-hub-transport-envelope.md
+  - Multi-service protocol: docs/architecture/16679517135570018559_multi-service-transport-envelope.md
   - Rust client examples: docs/architecture/16677426370165267711_rust_examples.md
 
   Next Steps for Your Claude Code Orchestrator
@@ -86,7 +86,7 @@ orchestrator. don't document how to build an orchestrator, just do the first
   2. Define methods like orchestrate(), spawn_agent(), etc.
   3. Implement streaming event types for orchestration progress
   4. Call into Claude Code API from within your activation
-  5. Generate clients using this hub-codegen tool
+  5. Generate clients using this service-codegen tool
 
   The activation would live alongside existing ones like cone (LLM agents) and arbor (conversation trees) in the substrate codebase.
 
@@ -124,12 +124,12 @@ document it inside a new microservice repo called orcha
      //! A standalone Plexus activation for orchestrating Claude Code 
      agents and managing
      //! complex multi-agent workflows.
-     mod hub;
-     pub use hub::OrchaHub;
+     mod service;
+     pub use service::OrchaService;
 
-● Write(/workspace/hypermemetic/orcha/src/hub.rs)
-  ⎿  Wrote 232 lines to ../orcha/src/hub.rs                                
-     //! Orcha Hub - Agent Orchestration Activation
+● Write(/workspace/hypermemetic/orcha/src/service.rs)
+  ⎿  Wrote 232 lines to ../orcha/src/service.rs                                
+     //! Orcha Service - Agent Orchestration Activation
      //!
      //! This module implements the core Orcha activation, providing 
      methods for:
@@ -152,7 +152,7 @@ document it inside a new microservice repo called orcha
      //! - HTTP with SSE (Model Context Protocol) on port 44106
      use anyhow::Result;
      use clap::Parser;
-     use orcha::OrchaHub;
+     use orcha::OrchaService;
 
      … +89 lines (ctrl+o to expand)
 
@@ -218,8 +218,8 @@ document it inside a new microservice repo called orcha
   ├── docs/
   │   └── ARCHITECTURE.md         # Deep dive into architecture & research findings
   └── src/
-      ├── lib.rs                  # Re-exports OrchaHub
-      ├── hub.rs                  # Main activation implementation
+      ├── lib.rs                  # Re-exports OrchaService
+      ├── service.rs                  # Main activation implementation
       └── bin/
           └── orcha.rs            # Standalone server binary
 
@@ -243,7 +243,7 @@ document it inside a new microservice repo called orcha
     - Comparison with substrate embedded pattern (/workspace/hypermemetic/plexus-substrate/src/builder.rs:109)
     - Why orcha uses standalone pattern (scaling, iteration, isolation)
   2. Core Components
-    - Activation layer with #[hub_methods] macro
+    - Activation layer with #[plexus_macros::activation] macro
     - Transport layer (WebSocket/stdio/MCP HTTP)
     - Type system requirements (internally-tagged enums)
   3. Protocol Flow
@@ -252,7 +252,7 @@ document it inside a new microservice repo called orcha
     - Wire format examples
   4. Client Generation Pipeline
     - How synapse generates IR from activation
-    - How hub-codegen creates TypeScript/Rust clients
+    - How service-codegen creates TypeScript/Rust clients
     - Usage examples with type-safe APIs
   5. Service Discovery
     - Registry integration patterns
@@ -284,9 +284,9 @@ document it inside a new microservice repo called orcha
   Next Steps
 
   The documentation outlines how to:
-  1. Implement Claude Code API integration (src/hub.rs:136-146)
+  1. Implement Claude Code API integration (src/service.rs:136-146)
   2. Add state management for tracking orchestrations
-  3. Generate TypeScript/Rust clients using synapse + hub-codegen
+  3. Generate TypeScript/Rust clients using synapse + service-codegen
   4. Optionally integrate with plexus-registry for service discovery
 
   All the research on the standalone activation pattern is now documented in the repo, ready for implementing the actual agent orchestrator!

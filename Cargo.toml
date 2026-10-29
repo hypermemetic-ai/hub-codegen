@@ -1,9 +1,9 @@
 [package]
-name = "hub-codegen"
-version = "0.5.0"
+name = "service-codegen"
+version = "0.5.1"
 edition = "2021"
 license = "AGPL-3.0-only"
-description = "Multi-language code generator for Hub plugins from Synapse IR"
+description = "Multi-language code generator for Plexus services from Synapse IR"
 
 [features]
 default = ["typescript", "rust"]
@@ -25,9 +25,9 @@ pretty_assertions = "1.4"
 tempfile = "3.8"
 
 [[bin]]
-name = "hub-codegen"
+name = "service-codegen"
 path = "src/main.rs"
 
 [lib]
-name = "hub_codegen"
+name = "service_codegen"
 path = "src/lib.rs"

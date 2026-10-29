@@ -8,8 +8,8 @@
 //! arrives before its call's subscription id is answered, not yielded
 //! (`tests/ts_returns17/runtime.test.ts`).
 
-use hub_codegen::generator::{GenerationOptions, TransportEnv};
-use hub_codegen::{generate_typescript, IR};
+use service_codegen::generator::{GenerationOptions, TransportEnv};
+use service_codegen::{generate_typescript, IR};
 use std::path::PathBuf;
 
 fn fixture(name: &str) -> IR {

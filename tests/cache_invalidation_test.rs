@@ -4,8 +4,8 @@
 //! different plugin configurations and validating that caches are correctly
 //! invalidated based on hash changes.
 
-use hub_codegen::ir::*;
-use hub_codegen::{cache::*, hash::*};
+use service_codegen::ir::*;
+use service_codegen::{cache::*, hash::*};
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -62,7 +62,7 @@ impl TestIRBuilder {
     }
 
     /// Build the IR with the configured structure
-    fn build(self) -> hub_codegen::IR {
+    fn build(self) -> service_codegen::IR {
         let mut ir_types = self.types;
         let mut ir_methods = HashMap::new();
         let mut ir_plugins = HashMap::new();
@@ -101,7 +101,7 @@ impl TestIRBuilder {
         );
         let ir_hash = compute_hash(&ir_content);
 
-        hub_codegen::IR {
+        service_codegen::IR {
             ir_version: "2.0".to_string(),
             ir_backend: "test".to_string(),
             ir_hash: Some(ir_hash),
@@ -117,8 +117,8 @@ impl TestIRBuilder {
 #[derive(Debug)]
 struct CacheTestScenario {
     name: String,
-    initial_ir: hub_codegen::IR,
-    modified_ir: hub_codegen::IR,
+    initial_ir: service_codegen::IR,
+    modified_ir: service_codegen::IR,
     expected_cache_hit: bool,
     description: String,
 }
@@ -126,8 +126,8 @@ struct CacheTestScenario {
 impl CacheTestScenario {
     fn new(
         name: &str,
-        initial_ir: hub_codegen::IR,
-        modified_ir: hub_codegen::IR,
+        initial_ir: service_codegen::IR,
+        modified_ir: service_codegen::IR,
         expected_cache_hit: bool,
         description: &str,
     ) -> Self {
@@ -142,7 +142,7 @@ impl CacheTestScenario {
 }
 
 /// Helper to compute plugin IR hash for cache validation
-fn compute_plugin_ir_hash(ir: &hub_codegen::IR, plugin: &str) -> String {
+fn compute_plugin_ir_hash(ir: &service_codegen::IR, plugin: &str) -> String {
     // Filter types and methods for this plugin
     let plugin_types: HashMap<_, _> = ir
         .ir_types
@@ -312,7 +312,7 @@ fn test_cache_manifest_operations() {
     let toolchain = ToolchainVersions {
         synapse_cc: "0.1.0.0".to_string(),
         synapse: "0.2.0.0".to_string(),
-        hub_codegen: "0.1.0".to_string(),
+        service_codegen: "0.1.0".to_string(),
     };
 
     // Create a new manifest
@@ -454,7 +454,7 @@ fn test_end_to_end_cache_workflow() {
     let toolchain = ToolchainVersions {
         synapse_cc: "0.1.0.0".to_string(),
         synapse: "0.2.0.0".to_string(),
-        hub_codegen: "0.1.0".to_string(),
+        service_codegen: "0.1.0".to_string(),
     };
 
     // Step 1: First generation (cold cache)

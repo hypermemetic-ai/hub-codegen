@@ -1,9 +1,9 @@
 //! REQ-7 acceptance test: generated transport emits typed error classes
 //! for the four semantic JSON-RPC error codes.
 
-use hub_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
-use hub_codegen::ir::*;
-use hub_codegen::generate_typescript;
+use service_codegen::generator::{GenerationOptions, GenerateSelector, TransportEnv};
+use service_codegen::ir::*;
+use service_codegen::generate_typescript;
 use std::collections::HashMap;
 
 fn opts() -> GenerationOptions {

@@ -1,8 +1,8 @@
-# hub-codegen CLI and Pipeline Architecture
+# service-codegen CLI and Pipeline Architecture
 
 ## Overview
 
-**hub-codegen** is a pure, stateless Rust CLI that transforms Synapse IR (Intermediate Representation) JSON into language-specific client code. It reads IR from stdin or a file, applies generation options (transport type, target language, artifact selector), generates code files and metadata, and outputs them either directly to disk (files mode) or as structured JSON (json mode). The CLI supports multiple target languages via Cargo feature flags, with TypeScript as the default. It is designed to be embedded in orchestration tools (like synapse-cc) that handle merge decisions, caching, and dependency management.
+**service-codegen** is a pure, stateless Rust CLI that transforms Synapse IR (Intermediate Representation) JSON into language-specific client code. It reads IR from stdin or a file, applies generation options (transport type, target language, artifact selector), generates code files and metadata, and outputs them either directly to disk (files mode) or as structured JSON (json mode). The CLI supports multiple target languages via Cargo feature flags, with TypeScript as the default. It is designed to be embedded in orchestration tools (like synapse-cc) that handle merge decisions, caching, and dependency management.
 
 ---
 
@@ -55,7 +55,7 @@ The main CLI is defined in `src/main.rs` using clap derive macros for parsing co
 #### Output Format
 
 - **`--output-format <FORMAT>`** (default: `"files"`) — Selects the entire output pipeline:
-  - `files` — Write generated files to disk at `--output`, perform three-way merge, maintain cache manifest at `~/.cache/plexus-codegen/hub-codegen/<target>/<backend>/manifest.json`, write starter package.json if not present, print merge summary to stderr
+  - `files` — Write generated files to disk at `--output`, perform three-way merge, maintain cache manifest at `~/.cache/plexus-codegen/service-codegen/<target>/<backend>/manifest.json`, write starter package.json if not present, print merge summary to stderr
   - `json` — Emit structured JSON to stdout (no file writes). Content includes generated files, file hashes, warnings, versions, and dependencies. Used by synapse-cc.
 
 #### Smoke Test Configuration
@@ -84,8 +84,8 @@ Convert clap-parsed arguments into the internal `GenerationOptions` struct (`mai
 Dispatch to target language generator (`main.rs:156–170`):
 
 ```
-TypeScript: hub_codegen::generate_typescript(&ir, &options)?
-Rust:       hub_codegen::generate_rust(&ir)?
+TypeScript: service_codegen::generate_typescript(&ir, &options)?
+Rust:       service_codegen::generate_rust(&ir)?
 ```
 
 Returns a `GenerationResult` containing:
@@ -108,7 +108,7 @@ Emit to stdout as a single JSON object — no file I/O, no merge, no cache write
   "files": { "types.ts": "...", "rpc.ts": "...", ... },
   "fileHashes": { "types.ts": "abc1..." },
   "warnings": [ { "location": "cone.chat", "message": "..." } ],
-  "hubCodegenVersion": "0.2.0",
+  "serviceCodegenVersion": "0.2.0",
   "dependencies": { "ws": "^8.18.0" },
   "devDependencies": { "typescript": "^5.0.0" }
 }
@@ -138,7 +138,7 @@ struct CodegenOutput<'a> {
     files: &'a HashMap<String, String>,
     file_hashes: &'a HashMap<String, String>,
     warnings: Vec<WarningOutput<'a>>,
-    hub_codegen_version: &'static str,
+    service_codegen_version: &'static str,
     dependencies: &'a HashMap<String, String>,
     dev_dependencies: &'a HashMap<String, String>,
 }
@@ -191,13 +191,13 @@ pub struct Warning { pub location: String, pub message: String }
 └── .codegen-metadata.json       # Toolchain info + file hashes
 ```
 
-Cache manifest: `~/.cache/plexus-codegen/hub-codegen/typescript/<backend>/manifest.json`
+Cache manifest: `~/.cache/plexus-codegen/service-codegen/typescript/<backend>/manifest.json`
 
 ---
 
 ## Version Management
 
-- **hub-codegen version** — `env!("CARGO_PKG_VERSION")` via `HUB_CODEGEN_VERSION` constant (`src/lib.rs`). Included in .codegen-metadata.json.
+- **service-codegen version** — `env!("CARGO_PKG_VERSION")` via `SERVICE_CODEGEN_VERSION` constant (`src/lib.rs`). Included in .codegen-metadata.json.
 - **package.json version** — `"0.0.0-<16-char-hash>"` where hash is computed from generated code files (excluding package.json and metadata). Changes only when code changes.
 - **IR version** — Must be `"2.0"` (enforced in TypeScript generator).
 - **Cache manifest version** — `"2.0"` in `CodeCacheManifest`.
@@ -215,16 +215,16 @@ Cache manifest: `~/.cache/plexus-codegen/hub-codegen/typescript/<backend>/manife
 
 ## Integration with synapse-cc
 
-synapse-cc drives hub-codegen via json mode:
+synapse-cc drives service-codegen via json mode:
 
-1. Calls `hub-codegen --output-format json`
+1. Calls `service-codegen --output-format json`
 2. Parses stdout as `CodegenOutput`
 3. Performs its own three-way merge (`SynapseCC/Merge.hs`)
 4. Adds dependencies via `bun add` / `bun add -D`
 5. Writes IR and cache manifests to `synapse.lock`
 6. Runs build, test, and other language tools
 
-This keeps hub-codegen a pure code generator while synapse-cc owns merge, cache, and write decisions.
+This keeps service-codegen a pure code generator while synapse-cc owns merge, cache, and write decisions.
 
 ---
 

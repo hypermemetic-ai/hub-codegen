@@ -229,7 +229,7 @@ pub const TS_STREAM_ITEM_ERROR_RECOVERABLE_WITH_REFUSAL: &str = r#"  /** Whether
 pub const TS_FORBIDDEN_CLASS: &str = r#"
 // === AUTH-9: the typed refusal ===
 //
-// A gated hub (AUTH-2) refuses a call with an error item that names what it
+// A gated service (AUTH-2) refuses a call with an error item that names what it
 // needed — `{"type":"error","error_kind":"forbidden","grant":"tickets.set_status",
 // "scope":"IDENTITY","roles":["editor","admin"],"held_on":["MENGER"],
 // "code":"-32003","message":"needs tickets.set_status on IDENTITY",…}` — and

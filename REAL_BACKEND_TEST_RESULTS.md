@@ -2,7 +2,7 @@
 
 Date: 2026-02-11
 Backend: Plexus Substrate (running on localhost:4444)
-Test Framework: synapse-cc + hub-codegen + substrate
+Test Framework: synapse-cc + service-codegen + substrate
 
 ## Executive Summary
 
@@ -63,7 +63,7 @@ IR Cache (`~/.cache/plexus-codegen/synapse/ir/substrate/manifest.json`):
 }
 ```
 
-Code Cache (`~/.cache/plexus-codegen/hub-codegen/typescript/substrate/manifest.json`):
+Code Cache (`~/.cache/plexus-codegen/service-codegen/typescript/substrate/manifest.json`):
 ```json
 {
   "ccmPlugins": {
@@ -144,7 +144,7 @@ Unchanged: 85 files (was 86 in Test 2, now 85)
 
 **Root Cause Analysis**:
 
-The three-way merge logic IS implemented correctly in hub-codegen, but there's a **cache key mismatch** bug:
+The three-way merge logic IS implemented correctly in service-codegen, but there's a **cache key mismatch** bug:
 
 **synapse-cc writes** cache with key `"all"`:
 ```haskell
@@ -152,21 +152,21 @@ The three-way merge logic IS implemented correctly in hub-codegen, but there's a
 Map.singleton "all" CodePluginCache
 ```
 
-**hub-codegen reads** cache with key `"default"`:
+**service-codegen reads** cache with key `"default"`:
 ```rust
-// /workspace/hypermemetic/hub-codegen/src/main.rs:147
+// /workspace/hypermemetic/service-codegen/src/main.rs:147
 manifest.plugins.insert("default".to_string(), cache_entry);
 ```
 
 **Impact**:
-- When hub-codegen looks for cached hashes, it searches for key "default"
+- When service-codegen looks for cached hashes, it searches for key "default"
 - Cache manifest only has key "all"
-- hub-codegen doesn't find cached hashes
+- service-codegen doesn't find cached hashes
 - Conflict detection logic never runs because `cached_hash` is always `None`
 
 **Verification**:
 ```bash
-$ cat ~/.cache/plexus-codegen/hub-codegen/typescript/substrate/manifest.json | jq '.ccmPlugins | keys'
+$ cat ~/.cache/plexus-codegen/service-codegen/typescript/substrate/manifest.json | jq '.ccmPlugins | keys'
 [
   "all"
 ]
@@ -175,7 +175,7 @@ $ cat ~/.cache/plexus-codegen/hub-codegen/typescript/substrate/manifest.json | j
 **Fix Required**:
 Change either:
 1. synapse-cc line 215: `"all"` → `"default"`, OR
-2. hub-codegen line 147: `"default"` → `"all"`
+2. service-codegen line 147: `"default"` → `"all"`
 
 **⚠️ PARTIAL PASS**: Three-way merge code exists and is correct, but cache key bug prevents it from functioning
 
@@ -231,23 +231,23 @@ All three match because Plexus substrate returns composite hash only. V2 granula
    - IR includes plugin hash information
 
 3. **Code Generation**
-   - hub-codegen generates TypeScript code correctly
+   - service-codegen generates TypeScript code correctly
    - All 88 files generated successfully
    - TypeScript compiles without errors
    - Smoke tests pass
 
 4. **Three-Way Merge Implementation**
-   - Merge logic exists in hub-codegen
+   - Merge logic exists in service-codegen
    - File status determination is correct
    - Merge strategies (skip/force/interactive) are defined
 
 ### What Needs Fixing ⚠️
 
 1. **Cache Key Mismatch Bug** (CRITICAL)
-   - synapse-cc uses "all", hub-codegen uses "default"
+   - synapse-cc uses "all", service-codegen uses "default"
    - Prevents conflict detection from working
    - **Impact**: User modifications will be silently overwritten
-   - **Fix**: One-line change in either synapse-cc or hub-codegen
+   - **Fix**: One-line change in either synapse-cc or service-codegen
 
 2. **Minor: 2 Files Always Regenerate**
    - types.ts and transport.ts marked as "new" on every run
@@ -297,7 +297,7 @@ All three match because Plexus substrate returns composite hash only. V2 granula
    - Map.singleton "all" CodePluginCache
    + Map.singleton "default" CodePluginCache
 
-   // OR Option 2: Fix hub-codegen
+   // OR Option 2: Fix service-codegen
    - manifest.plugins.insert("default".to_string(), cache_entry);
    + manifest.plugins.insert("all".to_string(), cache_entry);
    ```
@@ -335,7 +335,7 @@ All three match because Plexus substrate returns composite hash only. V2 granula
 
 7. **Add synapse-cc Flag for Merge Strategy**
    - Add `--merge-strategy` flag to synapse-cc CLI
-   - Pass through to hub-codegen
+   - Pass through to service-codegen
    - Allow users to choose skip/force/interactive
 
 8. **Implement Interactive Merge**
