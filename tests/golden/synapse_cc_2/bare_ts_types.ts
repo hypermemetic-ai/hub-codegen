@@ -7,13 +7,15 @@
 
 // === Core Transport Types ===
 // These types define the wire format for all plexus streaming responses.
+// Field names are the wire's (plexus-wire spec/03): snake_case, but for the
+// request item's, which plexus-core sends in camelCase (POLYGLOT-12).
 
 /** Metadata applied by the caller when wrapping activation responses */
 export interface StreamMetadata {
   /** Call path through the system (e.g., ["plexus", "health"]) */
   provenance: string[];
   /** Hash of plexus configuration for cache invalidation */
-  plexusHash: string;
+  plexus_hash: string;
   /** Unix timestamp (seconds) when the event was wrapped */
   timestamp: number;
 }
@@ -24,7 +26,7 @@ export interface PlexusStreamItemData {
   /** Metadata from calling layer */
   metadata: StreamMetadata;
   /** Type identifier for deserialization (e.g., "health.status") */
-  contentType: string;
+  content_type: string;
   /** The actual payload (serialized activation event) */
   content: unknown;
 }

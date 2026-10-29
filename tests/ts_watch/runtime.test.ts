@@ -10,7 +10,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { watch, watchWith, PlexusRpcClient, PlexusError, Alpha, Beta, Gamma, type MethodStream } from '../index';
+import { watch, watchWith, PlexusRpcClient, PlexusError, Alpha, Beta, Gamma, type MethodSource } from '../index';
 
 const BACKEND = 'hub';
 
@@ -257,7 +257,7 @@ test('a stream already being watched is refused at the call', () => {
 
 test('a MethodStream source is tagged by its own path', async () => {
   async function* events() { yield { type: 'posted', message: 1 } as const; yield { type: 'posted', message: 2 } as const; }
-  const chats: MethodStream<'chats.watch', { type: 'posted'; message: number }> = Object.assign(events(), { method: 'chats.watch' as const });
+  const chats: MethodSource<'chats.watch', { type: 'posted'; message: number }> = Object.assign(events(), { method: 'chats.watch' as const });
   const items = [];
   for await (const it of watch(chats)) items.push(it);
   assert.deepEqual(items, [

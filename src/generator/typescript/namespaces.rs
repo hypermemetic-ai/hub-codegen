@@ -208,8 +208,10 @@ fn generate_namespace(
     let uses_collect_one  = flat_methods.iter().any(|m| !m.md_streaming);
     let uses_dynamic_child = !dynamic_children.is_empty();
 
+    // RETURNS-17: a streaming method returns a MethodStream (the runtime's
+    // class, so a value import), where it was `yield* extractData(...)`.
     let mut rpc_helpers: Vec<&str> = [
-        if uses_extract_data { Some("extractData") } else { None },
+        if uses_extract_data { Some("MethodStream") } else { None },
         if uses_collect_one  { Some("collectOne")  } else { None },
     ]
     .into_iter()
@@ -369,9 +371,10 @@ fn generate_namespace(
         );
         let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
-        // Streaming methods return AsyncGenerator, non-streaming return Promise
+        // Streaming methods return a MethodStream that carries their path
+        // (RETURNS-17); non-streaming return Promise
         let full_return = if method.md_streaming {
-            format!("AsyncGenerator<{}>", return_type)
+            format!("MethodStream<'{}', {}>", method.md_full_path, return_type)
         } else {
             format!("Promise<{}>", return_type)
         };
@@ -503,9 +506,10 @@ fn generate_namespace(
             }
         }
         if method.md_streaming {
-            lines.push(format!("  async *{}({}): AsyncGenerator<{}> {{", method_name, params_signature, return_type));
+            let stream_type = format!("MethodStream<'{}', {}>", full_path, return_type);
+            lines.push(format!("  {}({}): {} {{", method_name, params_signature, stream_type));
             lines.push(format!("    const stream = this.rpc.call('{}', {});", full_path, params_object));
-            lines.push(format!("    yield* extractData<{}>(stream);", return_type));
+            lines.push(format!("    return new {}('{}', stream);", stream_type, full_path));
             lines.push("  }".to_string());
         } else {
             lines.push(format!("  async {}({}): Promise<{}> {{", method_name, params_signature, return_type));

@@ -144,12 +144,13 @@ fn ts_leaves_injected_params_out_and_keeps_the_breadcrumbs() {
         }
     }
     // signatures and params objects: the caller's own parameters, in order
-    assert!(tickets.contains("  setStatus(id: TicketId, status: Status): AsyncGenerator<SpikeEvent>;"));
-    assert!(tickets.contains("  async *setStatus(id: TicketId, status: Status): AsyncGenerator<SpikeEvent> {"));
+    // RETURNS-17: a streaming method returns a MethodStream that carries its path
+    assert!(tickets.contains("  setStatus(id: TicketId, status: Status): MethodStream<'tickets.set_status', SpikeEvent>;"));
+    assert!(tickets.contains("  setStatus(id: TicketId, status: Status): MethodStream<'tickets.set_status', SpikeEvent> {"));
     assert!(tickets.contains("this.rpc.call('tickets.set_status', { id, status });"));
-    assert!(tickets.contains("  get(id: TicketId): AsyncGenerator<SpikeEvent>;"));
+    assert!(tickets.contains("  get(id: TicketId): MethodStream<'tickets.get', SpikeEvent>;"));
     assert!(tickets.contains("this.rpc.call('tickets.get', { id });"));
-    assert!(inputs.contains("  answer(ticket: TicketId, value: Status): AsyncGenerator<SpikeEvent>;"));
+    assert!(inputs.contains("  answer(ticket: TicketId, value: Status): MethodStream<'tickets.inputs.answer', SpikeEvent>;"));
     assert!(inputs.contains("this.rpc.call('tickets.inputs.answer', { ticket, value });"));
     // the breadcrumbs stay
     for crumb in ["@server-derived auth", "@reads-header origin", "@requiresAuth — resolver: self.access.verify"] {
@@ -163,8 +164,8 @@ fn ts_a_method_with_only_injected_params_takes_no_arguments() {
     ir.ir_methods.get_mut("tickets.get").unwrap().md_params.retain(|p| p.is_injected());
     let ts = generate_typescript(&ir, &opts()).expect("generate");
     let tickets = &ts.files["tickets/client.ts"];
-    assert!(tickets.contains("  get(): AsyncGenerator<SpikeEvent>;"), "{tickets}");
-    assert!(tickets.contains("  async *get(): AsyncGenerator<SpikeEvent> {"));
+    assert!(tickets.contains("  get(): MethodStream<'tickets.get', SpikeEvent>;"), "{tickets}");
+    assert!(tickets.contains("  get(): MethodStream<'tickets.get', SpikeEvent> {"));
     assert!(tickets.contains("this.rpc.call('tickets.get', {});"));
     assert!(tickets.contains("@requiresAuth — resolver: self.access.verify"));
 }
@@ -254,7 +255,7 @@ fn rust_with_injected_params_compiles() {
 
     let ts = generate_typescript(&ir, &opts()).expect("generate");
     let svc_ts = &ts.files["svc/client.ts"];
-    assert!(svc_ts.contains("  whoami(): AsyncGenerator<string>;"), "{svc_ts}");
+    assert!(svc_ts.contains("  whoami(): MethodStream<'svc.whoami', string>;"), "{svc_ts}");
     assert!(svc_ts.contains("  ping(text: string): Promise<string>;"));
     assert!(svc_ts.contains("  readonly kids: SvcKidsClient;"));
 
