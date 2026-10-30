@@ -106,6 +106,11 @@ JSDoc breadcrumb (`@requiresAuth — resolver: …`, `@reads-header origin`,
 it was an optional `unknown` argument). A static child (`mdRole:
 static_child`) is a typed sub-client: `tickets.inputs.answer(…)`.
 
+A type the protocol root declares (namespace `""` in an IR 2.0) and a
+namespace uses is generated in the namespace that refers to it most — a tie
+to the shortest name, then the first — and imported by the others; the
+root's own types are the transport's and are not generated (TICKETS-37).
+
 ### Rust
 ```
 generated/

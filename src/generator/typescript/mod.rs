@@ -152,6 +152,10 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
         );
     }
 
+    // TICKETS-37: a type the protocol root declares and a generated
+    // namespace uses lives in that namespace, and every other imports it.
+    let ir: &IR = &crate::service_types::rehome_service_types(ir);
+
     // Collect warnings for unknown types
     collect_warnings(ir, &mut warnings);
 

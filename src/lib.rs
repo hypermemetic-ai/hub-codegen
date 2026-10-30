@@ -11,6 +11,7 @@ pub mod merge;
 pub mod deprecation;
 pub mod credential_surface;
 pub mod grant_surface;
+pub mod service_types;
 
 pub use ir::IR;
 pub use generator::{GenerationResult, Warning, GenerationOptions, TransportEnv, GenerateSelector};
