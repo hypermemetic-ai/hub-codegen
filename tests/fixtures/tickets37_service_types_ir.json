@@ -1,0 +1,636 @@
+{
+  "irBackend": "svc",
+  "irHash": "0000000000000037",
+  "irMetadata": null,
+  "irMethods": {
+    ".schema": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "The service's own schema (the protocol root: never generated)",
+      "mdFullPath": ".schema",
+      "mdName": "schema",
+      "mdNamespace": "",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "method",
+          "pdRequired": false,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            },
+            "tag": "RefOptional"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "PluginSchema",
+          "qnNamespace": ""
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": false
+    },
+    "auth.requires": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "What a method needs: its grant, target and roles",
+      "mdFullPath": "auth.requires",
+      "mdName": "requires",
+      "mdNamespace": "auth",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The method, as <activation>.<method>",
+          "pdName": "method",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "MethodPath",
+              "qnNamespace": ""
+            },
+            "tag": "RefNamed"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "AuthEvent",
+          "qnNamespace": "auth"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    },
+    "auth.whoami": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Who the caller is",
+      "mdFullPath": "auth.whoami",
+      "mdName": "whoami",
+      "mdNamespace": "auth",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "Where the caller says it comes from",
+          "pdName": "origin",
+          "pdRequired": false,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "Origin",
+              "qnNamespace": ""
+            },
+            "tag": "RefNamed"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "user",
+          "pdRequired": false,
+          "pdSource": {
+            "from": "auth",
+            "resolver": "self.access.verify"
+          },
+          "pdType": {
+            "tag": "RefAny"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "AuthEvent",
+          "qnNamespace": "auth"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    },
+    "members.list": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Every member and the scopes of their grants",
+      "mdFullPath": "members.list",
+      "mdName": "list",
+      "mdNamespace": "members",
+      "mdParams": [],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "MembersEvent",
+          "qnNamespace": "members"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    },
+    "members.teams": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "The teams namespace \u2014 `members.teams.<method>`.",
+      "mdFullPath": "members.teams",
+      "mdName": "teams",
+      "mdNamespace": "members",
+      "mdParams": [],
+      "mdReturns": {
+        "tag": "RefUnknown"
+      },
+      "mdRole": {
+        "kind": "static_child"
+      },
+      "mdStreaming": false
+    },
+    "members.teams.grant": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Grant a team a role on a scope",
+      "mdFullPath": "members.teams.grant",
+      "mdName": "grant",
+      "mdNamespace": "members.teams",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The team",
+          "pdName": "team",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": [
+              "string",
+              null
+            ],
+            "tag": "RefPrimitive"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "Where the grant holds",
+          "pdName": "scope",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "qnLocalName": "Scope",
+              "qnNamespace": ""
+            },
+            "tag": "RefNamed"
+          }
+        }
+      ],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "MembersEvent",
+          "qnNamespace": "members"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    },
+    "orgs.list": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdDescription": "Every organization's grants",
+      "mdFullPath": "orgs.list",
+      "mdName": "list",
+      "mdNamespace": "orgs",
+      "mdParams": [],
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "OrgsEvent",
+          "qnNamespace": "orgs"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      },
+      "mdStreaming": true
+    }
+  },
+  "irPluginRequests": null,
+  "irPlugins": {
+    "": [
+      "schema"
+    ],
+    "auth": [
+      "requires",
+      "whoami"
+    ],
+    "members": [
+      "list",
+      "teams"
+    ],
+    "members.teams": [
+      "grant"
+    ],
+    "orgs": [
+      "list"
+    ]
+  },
+  "irTypes": {
+    ".Grantee": {
+      "tdDescription": "Who holds a grant, and where",
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "scope",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "qnLocalName": "Scope",
+                "qnNamespace": ""
+              },
+              "tag": "RefNamed"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "kind",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "qnLocalName": "GranteeKind",
+                "qnNamespace": ""
+              },
+              "tag": "RefNamed"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "Grantee",
+      "tdNamespace": ""
+    },
+    ".GranteeKind": {
+      "tdDescription": null,
+      "tdKind": {
+        "kseValues": [
+          "principal",
+          "team",
+          "everyone"
+        ],
+        "tag": "KindStringEnum"
+      },
+      "tdName": "GranteeKind",
+      "tdNamespace": ""
+    },
+    ".MethodPath": {
+      "tdDescription": "A method's path, `<activation>.<method>`",
+      "tdKind": {
+        "kpFormat": null,
+        "kpType": "string",
+        "tag": "KindPrimitive"
+      },
+      "tdName": "MethodPath",
+      "tdNamespace": ""
+    },
+    ".Origin": {
+      "tdDescription": "An origin, scheme and host",
+      "tdKind": {
+        "kpFormat": null,
+        "kpType": "string",
+        "tag": "KindPrimitive"
+      },
+      "tdName": "Origin",
+      "tdNamespace": ""
+    },
+    ".PluginSchema": {
+      "tdDescription": "Only the protocol root's schema names it",
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "namespace",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "credentials",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "contents": {
+                  "qnLocalName": "RequiredCredential",
+                  "qnNamespace": ""
+                },
+                "tag": "RefNamed"
+              },
+              "tag": "RefArray"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "PluginSchema",
+      "tdNamespace": ""
+    },
+    ".RequiredCredential": {
+      "tdDescription": "Only the protocol root's schema names it",
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "scope",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "qnLocalName": "Scope",
+                "qnNamespace": ""
+              },
+              "tag": "RefNamed"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "RequiredCredential",
+      "tdNamespace": ""
+    },
+    ".Scope": {
+      "tdDescription": "Where a grant holds: `*`, `org:NAME`, a shortcode, or `under ID`",
+      "tdKind": {
+        "kpFormat": null,
+        "kpType": "string",
+        "tag": "KindPrimitive"
+      },
+      "tdName": "Scope",
+      "tdNamespace": ""
+    },
+    "auth.AuthEvent": {
+      "tdDescription": null,
+      "tdKind": {
+        "keDiscriminator": "type",
+        "keVariants": [
+          {
+            "vdDescription": null,
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "grant",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "requires"
+          },
+          {
+            "vdDescription": null,
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "principal",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "whoami"
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "AuthEvent",
+      "tdNamespace": "auth"
+    },
+    "members.MembersEvent": {
+      "tdDescription": null,
+      "tdKind": {
+        "keDiscriminator": "type",
+        "keVariants": [
+          {
+            "vdDescription": null,
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "principal",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "Principal",
+                    "qnNamespace": "members"
+                  },
+                  "tag": "RefNamed"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "scope",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "Scope",
+                    "qnNamespace": ""
+                  },
+                  "tag": "RefNamed"
+                }
+              }
+            ],
+            "vdName": "granted"
+          },
+          {
+            "vdDescription": null,
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "principal",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "Principal",
+                    "qnNamespace": "members"
+                  },
+                  "tag": "RefNamed"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "scope",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "Scope",
+                    "qnNamespace": ""
+                  },
+                  "tag": "RefNamed"
+                }
+              }
+            ],
+            "vdName": "revoked"
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "MembersEvent",
+      "tdNamespace": "members"
+    },
+    "members.Principal": {
+      "tdDescription": "A principal: `key:HEX`, `idp:SUB`, \u2026",
+      "tdKind": {
+        "kpFormat": null,
+        "kpType": "string",
+        "tag": "KindPrimitive"
+      },
+      "tdName": "Principal",
+      "tdNamespace": "members"
+    },
+    "orgs.Grant": {
+      "tdDescription": null,
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "scope",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "qnLocalName": "Scope",
+                "qnNamespace": ""
+              },
+              "tag": "RefNamed"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "grantee",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "qnLocalName": "Grantee",
+                "qnNamespace": ""
+              },
+              "tag": "RefNamed"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "principal",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "qnLocalName": "Principal",
+                "qnNamespace": "members"
+              },
+              "tag": "RefNamed"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "origin",
+            "fdRequired": false,
+            "fdType": {
+              "contents": {
+                "qnLocalName": "Origin",
+                "qnNamespace": ""
+              },
+              "tag": "RefNamed"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "Grant",
+      "tdNamespace": "orgs"
+    },
+    "orgs.OrgsEvent": {
+      "tdDescription": null,
+      "tdKind": {
+        "keDiscriminator": "type",
+        "keVariants": [
+          {
+            "vdDescription": null,
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "grant",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "qnLocalName": "Grant",
+                    "qnNamespace": "orgs"
+                  },
+                  "tag": "RefNamed"
+                }
+              }
+            ],
+            "vdName": "grant"
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "OrgsEvent",
+      "tdNamespace": "orgs"
+    }
+  },
+  "irVersion": "2.0"
+}
