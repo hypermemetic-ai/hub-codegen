@@ -27,9 +27,12 @@ pub struct GenerationMetadata {
     pub gm_ir_version: String,
 }
 
-/// Top-level IR structure (matches Synapse output)
+/// Top-level IR structure (matches Synapse output).
+///
+/// Decoded through [`IR::check_cardinality`]: an IR 3.0 says every method's
+/// cardinality, and one that does not is refused, naming the method.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(remote = "Self", rename_all = "camelCase")]
 pub struct IR {
     /// IR format version
     pub ir_version: String,
@@ -78,6 +81,49 @@ pub struct IR {
     /// map (pre-AUTH IRs), which generates byte-identical output.
     #[serde(default, deserialize_with = "deserialize_null_as_empty_roles", skip_serializing_if = "HashMap::is_empty")]
     pub ir_plugin_roles: HashMap<String, BTreeMap<String, Vec<String>>>,
+}
+
+impl Serialize for IR {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        IR::serialize(self, s)
+    }
+}
+
+impl<'de> Deserialize<'de> for IR {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        let v = serde_json::Value::deserialize(d)?;
+        IR::check_cardinality(&v).map_err(D::Error::custom)?;
+        IR::deserialize(v).map_err(D::Error::custom)
+    }
+}
+
+impl IR {
+    /// RETURNS-36 review #6: IR 3.0 writes every method's `mdCardinality`
+    /// (RETURNS-13: read from the schema, never inferred), so a 3.0 method
+    /// without it is refused, naming the method — never read as `One`. An
+    /// IR 2.x derives it from `mdStreaming` ([`MethodDef::normalize_wire`]);
+    /// an IR of any other version is left to [`check_ir_version`].
+    pub fn check_cardinality(v: &serde_json::Value) -> Result<(), String> {
+        if v.get("irVersion").and_then(|x| x.as_str()) != Some("3.0") {
+            return Ok(());
+        }
+        let Some(methods) = v.get("irMethods").and_then(|m| m.as_object()) else { return Ok(()) };
+        let mut missing: Vec<&str> = methods
+            .iter()
+            .filter(|(_, m)| m.get("mdCardinality").map_or(true, |c| c.is_null()))
+            .map(|(k, _)| k.as_str())
+            .collect();
+        if missing.is_empty() {
+            return Ok(());
+        }
+        missing.sort();
+        Err(format!(
+            "IR 3.0 says every method's mdCardinality; {} has none: {}",
+            if missing.len() == 1 { "this method" } else { "these methods" },
+            missing.join(", ")
+        ))
+    }
 }
 
 fn deserialize_null_as_empty_roles<'de, D>(de: D) -> Result<HashMap<String, BTreeMap<String, Vec<String>>>, D::Error>
@@ -828,7 +874,9 @@ impl<'de> Deserialize<'de> for MethodDef {
 impl MethodDef {
     /// One reading for every IR version (RETURNS-15). On a method's JSON:
     /// - no `mdCardinality` (IR 2.x): it is `"many"` when `mdStreaming` is
-    ///   true, else `"one"`; `mdStreaming` itself is dropped;
+    ///   true, else `"one"`; `mdStreaming` itself is dropped. An IR 3.0
+    ///   method without it never gets here: [`IR::check_cardinality`]
+    ///   refuses the IR first;
     /// - `mdInjected` (IR 2.1 / 3.0, SYNAPSE-CC-8: a param the server
     ///   supplies, out of `mdParams`): each is appended to `mdParams` with its
     ///   `pdSource`, so the generators leave it out of what is sent and

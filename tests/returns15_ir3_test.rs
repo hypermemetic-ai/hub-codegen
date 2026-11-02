@@ -314,7 +314,7 @@ fn a_method_writes_its_cardinality() {
 fn only_ir_2_0_2_1_and_3_0_are_read() {
     for v in ["2.0", "2.1", "3.0"] {
         check_ir_version(v).unwrap_or_else(|e| panic!("{v}: {e}"));
-        let ir = one_method_ir(v, fire(serde_json::json!({})));
+        let ir = one_method_ir(v, fire(serde_json::json!({ "mdCardinality": "one" })));
         generate_typescript(&ir, &GenerationOptions::default()).unwrap_or_else(|e| panic!("{v}: {e}"));
         generate_rust(&ir).unwrap_or_else(|e| panic!("{v}: {e}"));
     }
