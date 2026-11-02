@@ -80,7 +80,8 @@ fn count(ir: &IR, refs: &mut BTreeMap<String, BTreeMap<String, usize>>, ns: &str
         TypeRef::RefNamed(qn) if qn.qn_namespace.is_empty() && ir.ir_types.contains_key(&format!(".{}", qn.qn_local_name)) => {
             *refs.entry(qn.qn_local_name.clone()).or_default().entry(ns.to_string()).or_default() += 1;
         }
-        TypeRef::RefArray(inner) | TypeRef::RefOptional(inner) => count(ir, refs, ns, inner),
+        TypeRef::RefArray(inner) | TypeRef::RefOptional(inner) | TypeRef::RefMap(inner) => count(ir, refs, ns, inner),
+        TypeRef::RefTuple(items) => items.iter().for_each(|t| count(ir, refs, ns, t)),
         _ => {}
     }
 }
@@ -117,7 +118,8 @@ fn rename(tr: &mut TypeRef, homes: &BTreeMap<String, String>) {
                 *qn_namespace = home.clone();
             }
         }
-        TypeRef::RefArray(inner) | TypeRef::RefOptional(inner) => rename(inner, homes),
+        TypeRef::RefArray(inner) | TypeRef::RefOptional(inner) | TypeRef::RefMap(inner) => rename(inner, homes),
+        TypeRef::RefTuple(items) => items.iter_mut().for_each(|t| rename(t, homes)),
         _ => {}
     }
 }
@@ -127,7 +129,7 @@ fn rename(tr: &mut TypeRef, homes: &BTreeMap<String, String>) {
 fn kind_refs(kind: &TypeKind) -> Vec<&TypeRef> {
     match kind {
         TypeKind::KindStruct { ks_fields } => ks_fields.iter().map(|f| &f.fd_type).collect(),
-        TypeKind::KindEnum { ke_variants, .. } => ke_variants.iter().flat_map(|v| v.vd_fields.iter().map(|f| &f.fd_type)).collect(),
+        TypeKind::KindEnum { ke_variants, .. } => ke_variants.iter().flat_map(|v| v.type_refs()).collect(),
         TypeKind::KindAlias { ka_target } => vec![ka_target],
         TypeKind::KindPrimitive { .. } | TypeKind::KindStringEnum { .. } => Vec::new(),
     }
@@ -136,7 +138,7 @@ fn kind_refs(kind: &TypeKind) -> Vec<&TypeRef> {
 fn kind_refs_mut(kind: &mut TypeKind) -> Vec<&mut TypeRef> {
     match kind {
         TypeKind::KindStruct { ks_fields } => ks_fields.iter_mut().map(|f| &mut f.fd_type).collect(),
-        TypeKind::KindEnum { ke_variants, .. } => ke_variants.iter_mut().flat_map(|v| v.vd_fields.iter_mut().map(|f| &mut f.fd_type)).collect(),
+        TypeKind::KindEnum { ke_variants, .. } => ke_variants.iter_mut().flat_map(|v| v.vd_fields.iter_mut().map(|f| &mut f.fd_type).chain(v.vd_ref.as_mut())).collect(),
         TypeKind::KindAlias { ka_target } => vec![ka_target],
         TypeKind::KindPrimitive { .. } | TypeKind::KindStringEnum { .. } => Vec::new(),
     }

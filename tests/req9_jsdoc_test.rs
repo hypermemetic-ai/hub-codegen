@@ -46,7 +46,7 @@ fn method(name: &str, params: Vec<ParamDef>) -> MethodDef {
         md_full_path: format!("svc.{}", name),
         md_namespace: "svc".to_string(),
         md_description: Some(format!("The {} method", name)),
-        md_streaming: false,
+        md_cardinality: Cardinality::One, md_error: None, md_progress: None,
         md_params: params,
         md_returns: TypeRef::RefPrimitive("string".to_string(), None),
         md_bidir_type: None,

@@ -256,7 +256,7 @@ mod tests {
             md_full_path: "cone.send_message".to_string(),
             md_namespace: "cone".to_string(),
             md_description: None,
-            md_streaming: false,
+            md_cardinality: crate::ir::Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,

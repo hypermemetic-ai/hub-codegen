@@ -24,7 +24,7 @@ fn tiny_ir() -> IR {
         md_full_path: "svc.ping".to_string(),
         md_namespace: "svc".to_string(),
         md_description: Some("ping".to_string()),
-        md_streaming: false,
+        md_cardinality: Cardinality::One, md_error: None, md_progress: None,
         md_params: vec![],
         md_returns: TypeRef::RefPrimitive("string".to_string(), None),
         md_bidir_type: None,

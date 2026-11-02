@@ -112,6 +112,11 @@ fn collect_ns_refs_from_typeref(tr: &TypeRef, namespaces: &mut HashSet<String>) 
         }
         TypeRef::RefArray(inner) => collect_ns_refs_from_typeref(inner, namespaces),
         TypeRef::RefOptional(inner) => collect_ns_refs_from_typeref(inner, namespaces),
+        TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+            for c in tr.children() {
+                collect_ns_refs_from_typeref(c, namespaces);
+            }
+        }
         _ => {}
     }
 }
@@ -126,8 +131,8 @@ fn collect_ns_refs_from_kind(kind: &TypeKind, namespaces: &mut HashSet<String>) 
         }
         TypeKind::KindEnum { ke_variants, .. } => {
             for variant in ke_variants {
-                for field in &variant.vd_fields {
-                    collect_ns_refs_from_typeref(&field.fd_type, namespaces);
+                for t in variant.type_refs() {
+                    collect_ns_refs_from_typeref(t, namespaces);
                 }
             }
         }
@@ -143,14 +148,7 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     let mut warnings = Vec::new();
 
     // Validate IR version
-    if ir.ir_version != "2.0" {
-        anyhow::bail!(
-            "Unsupported IR version: {}. Expected 2.0.\n\
-             This version of service-codegen requires IR v2.0 with structured TypeRef.\n\
-             Please regenerate IR with latest Synapse.",
-            ir.ir_version
-        );
-    }
+    crate::ir::check_ir_version(&ir.ir_version)?;
 
     // TICKETS-37: a type the protocol root declares and a generated
     // namespace uses lives in that namespace, and every other imports it.

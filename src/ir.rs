@@ -294,6 +294,10 @@ pub enum TypeKind {
         ke_discriminator: String,
         #[serde(rename = "keVariants")]
         ke_variants: Vec<VariantDef>,
+        /// How the variants are told apart on the wire (IR 2.1's `keRepr`;
+        /// absent — an IR 2.0's every enum — is `Internal`).
+        #[serde(rename = "keRepr", default, skip_serializing_if = "EnumRepr::is_internal")]
+        ke_repr: EnumRepr,
     },
     /// Type alias
     KindAlias {
@@ -312,6 +316,28 @@ pub enum TypeKind {
         #[serde(rename = "kseValues")]
         kse_values: Vec<String>,
     },
+}
+
+/// How an enum's variants are told apart on the wire (IR 2.1's `keRepr`,
+/// SYNAPSE-CC-8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum EnumRepr {
+    /// `{"<tag>": "variant", …fields}` — the tag is `ke_discriminator`.
+    #[default]
+    Internal,
+    /// `{"variant": {…fields}}`, or `"variant"` for a unit one (serde's
+    /// default); `ke_discriminator` is `""`.
+    External,
+    /// The variant's own shape (serde's untagged); a variant names its type
+    /// in `vd_ref`.
+    Untagged,
+}
+
+impl EnumRepr {
+    pub fn is_internal(&self) -> bool {
+        *self == EnumRepr::Internal
+    }
 }
 
 /// Field in a struct
@@ -342,6 +368,16 @@ pub struct VariantDef {
     pub vd_description: Option<String>,
     #[serde(default)]
     pub vd_fields: Vec<FieldDef>,
+    /// An untagged (or external newtype) variant's type (IR 2.1's `vdRef`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vd_ref: Option<TypeRef>,
+}
+
+impl VariantDef {
+    /// Every type the variant refers to: its fields', and its `vd_ref`.
+    pub fn type_refs(&self) -> Vec<&TypeRef> {
+        self.vd_fields.iter().map(|f| &f.fd_type).chain(self.vd_ref.as_ref()).collect()
+    }
 }
 
 /// Qualified name for type references (namespace.localName)
@@ -398,6 +434,11 @@ pub enum TypeRef {
     RefAny,
     /// Unknown type (schema gap) - should warn
     RefUnknown,
+    /// An object with string keys and values of one type (IR 2.1's `RefMap`,
+    /// `additionalProperties: V` and no properties).
+    RefMap(Box<TypeRef>),
+    /// A fixed-length array, one type per position (IR 2.1's `RefTuple`).
+    RefTuple(Vec<TypeRef>),
 }
 
 impl<'de> serde::Deserialize<'de> for TypeRef {
@@ -464,25 +505,108 @@ impl<'de> serde::Deserialize<'de> for TypeRef {
             }
             "RefAny" => Ok(TypeRef::RefAny),
             "RefUnknown" => Ok(TypeRef::RefUnknown),
+            // IR 2.1 (SYNAPSE-CC-8), carried into 3.0. `RefJson` is a
+            // `serde_json::Value`, the `RefAny` of 2.0. A child's return is
+            // its client, which the role (static/dynamic child) generates; the
+            // ref itself is never typed. A refinement's bounds are the
+            // server's to check (ACCESS-8): the base type is what is carried.
+            "RefJson" => Ok(TypeRef::RefAny),
+            "RefChild" => Ok(TypeRef::RefAny),
+            "RefRefined" => {
+                let base = obj.get("contents")
+                    .and_then(|c| c.as_array())
+                    .and_then(|c| c.first())
+                    .ok_or_else(|| D::Error::custom("RefRefined requires [base, refinements] contents"))?;
+                serde_json::from_value(base.clone())
+                    .map_err(|e| D::Error::custom(format!("RefRefined base: {}", e)))
+            }
+            "RefMap" => {
+                let contents = obj.get("contents")
+                    .ok_or_else(|| D::Error::custom("RefMap requires contents"))?;
+                let inner: TypeRef = serde_json::from_value(contents.clone())
+                    .map_err(|e| D::Error::custom(format!("RefMap value: {}", e)))?;
+                Ok(TypeRef::RefMap(Box::new(inner)))
+            }
+            "RefTuple" => {
+                let contents = obj.get("contents")
+                    .ok_or_else(|| D::Error::custom("RefTuple requires contents"))?;
+                let items: Vec<TypeRef> = serde_json::from_value(contents.clone())
+                    .map_err(|e| D::Error::custom(format!("RefTuple items: {}", e)))?;
+                Ok(TypeRef::RefTuple(items))
+            }
             other => Err(D::Error::custom(format!("unknown TypeRef tag: {}", other))),
         }
     }
 }
 
-/// Method definition
+/// One item or many (RETURNS-1, IR 3.0's `mdCardinality`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Cardinality {
+    /// One item: the call answers once.
+    #[default]
+    One,
+    /// A stream of items.
+    Many,
+}
+
+impl Cardinality {
+    /// `Many` when `streaming`, else `One` — an IR 2.x's `mdStreaming`.
+    pub fn from_streaming(streaming: bool) -> Self {
+        if streaming { Cardinality::Many } else { Cardinality::One }
+    }
+}
+
+/// The IR versions this service-codegen reads: 2.0 (synapse ≤ 3.16), 2.1
+/// (synapse 3.17) and 3.0 (synapse after RETURNS-36). Every generator calls
+/// this first.
+pub const SUPPORTED_IR_VERSIONS: [&str; 3] = ["2.0", "2.1", "3.0"];
+
+/// Refuse an IR this service-codegen cannot read, naming what it reads.
+pub fn check_ir_version(version: &str) -> anyhow::Result<()> {
+    if SUPPORTED_IR_VERSIONS.contains(&version) {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "IR {version} is not supported; service-codegen {} reads IR 2.0, 2.1 and 3.0 (synapse 3.16 through the one that writes 3.0)",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+/// Method definition.
+///
+/// Read from IR 3.0 (RETURNS-13: `mdReturns` is the item `T`, `mdError` /
+/// `mdProgress` the method's error and progress types, `mdCardinality` one
+/// or many) and from IR 2.x (RETURNS-15: `mdStreaming` becomes the
+/// cardinality, `mdError` / `mdProgress` are `None`; an IR 2.1 or 3.0
+/// `mdInjected` param becomes an `md_params` entry with its `pdSource`, which
+/// every generator already leaves out of what is sent and documents). See
+/// [`MethodDef::normalize_wire`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(remote = "Self", rename_all = "camelCase")]
 pub struct MethodDef {
     pub md_name: String,
     pub md_full_path: String,
     pub md_namespace: String,
     #[serde(default)]
     pub md_description: Option<String>,
-    #[serde(default)]
-    pub md_streaming: bool,
+    /// One item or many (IR 3.0 `mdCardinality`, `"one"` / `"many"`; an IR
+    /// 2.x's `mdStreaming: true` is `Many`). Generators branch on it — never
+    /// on the shape of `md_returns`.
+    pub md_cardinality: Cardinality,
     #[serde(default)]
     pub md_params: Vec<ParamDef>,
+    /// The item: what one success carries. In an IR 2.x, the whole event
+    /// type the method yields.
     pub md_returns: TypeRef,
+    /// The error type `E` of a `Result<T, E>` item (IR 3.0); `None` when the
+    /// method is infallible, and always in an IR 2.x.
+    #[serde(default)]
+    pub md_error: Option<TypeRef>,
+    /// The type its progress frames carry (IR 3.0); `None` when it reports
+    /// no progress, and always in an IR 2.x.
+    #[serde(default)]
+    pub md_progress: Option<TypeRef>,
     /// Bidirectional channel type parameter T.
     ///
     /// When a method uses `BidirChannel<StandardRequest<T>, StandardResponse<T>>` or
@@ -686,7 +810,56 @@ impl ParamDef {
     }
 }
 
+impl Serialize for MethodDef {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        MethodDef::serialize(self, s)
+    }
+}
+
+impl<'de> Deserialize<'de> for MethodDef {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        let mut v = serde_json::Value::deserialize(d)?;
+        MethodDef::normalize_wire(&mut v);
+        MethodDef::deserialize(v).map_err(D::Error::custom)
+    }
+}
+
 impl MethodDef {
+    /// One reading for every IR version (RETURNS-15). On a method's JSON:
+    /// - no `mdCardinality` (IR 2.x): it is `"many"` when `mdStreaming` is
+    ///   true, else `"one"`; `mdStreaming` itself is dropped;
+    /// - `mdInjected` (IR 2.1 / 3.0, SYNAPSE-CC-8: a param the server
+    ///   supplies, out of `mdParams`): each is appended to `mdParams` with its
+    ///   `pdSource`, so the generators leave it out of what is sent and
+    ///   document it, as they do an IR 2.0's injected param.
+    pub fn normalize_wire(v: &mut serde_json::Value) {
+        let Some(o) = v.as_object_mut() else { return };
+        let streaming = o.remove("mdStreaming").and_then(|s| s.as_bool()).unwrap_or(false);
+        if !o.contains_key("mdCardinality") {
+            o.insert("mdCardinality".into(), serde_json::json!(if streaming { "many" } else { "one" }));
+        }
+        if let Some(serde_json::Value::Array(injected)) = o.remove("mdInjected") {
+            let params = o.entry("mdParams").or_insert_with(|| serde_json::json!([]));
+            if let Some(params) = params.as_array_mut() {
+                for ip in injected {
+                    params.push(serde_json::json!({
+                        "pdName": ip.get("ipName").cloned().unwrap_or(serde_json::Value::Null),
+                        "pdType": { "tag": "RefJson" },
+                        "pdDescription": ip.get("ipDescription").cloned().unwrap_or(serde_json::Value::Null),
+                        "pdRequired": false,
+                        "pdSource": ip.get("ipSource").cloned().unwrap_or(serde_json::Value::Null),
+                    }));
+                }
+            }
+        }
+    }
+
+    /// A stream of items (`md_cardinality == Many`).
+    pub fn is_streaming(&self) -> bool {
+        self.md_cardinality == Cardinality::Many
+    }
+
     /// SYNAPSE-CC-2: the parameters a client sends — `md_params` without
     /// the injected ones ([`ParamDef::is_injected`]), in IR order. For an IR
     /// without `pdSource` this is `md_params` itself.
@@ -713,6 +886,8 @@ impl TypeRef {
             TypeRef::RefOptional(inner) => format!("{} | null", inner.to_ts()),
             TypeRef::RefAny => "unknown".to_string(),     // Intentionally dynamic
             TypeRef::RefUnknown => "unknown".to_string(), // Schema gap (will warn)
+            TypeRef::RefMap(inner) => format!("Record<string, {}>", inner.to_ts()),
+            TypeRef::RefTuple(items) => format!("[{}]", items.iter().map(|t| t.to_ts()).collect::<Vec<_>>().join(", ")),
         }
     }
 
@@ -729,6 +904,11 @@ impl TypeRef {
             TypeRef::RefOptional(inner) => format!("{} | null", inner.to_ts_in_namespace(current_namespace)),
             TypeRef::RefAny => "unknown".to_string(),
             TypeRef::RefUnknown => "unknown".to_string(),
+            TypeRef::RefMap(inner) => format!("Record<string, {}>", inner.to_ts_in_namespace(current_namespace)),
+            TypeRef::RefTuple(items) => format!(
+                "[{}]",
+                items.iter().map(|t| t.to_ts_in_namespace(current_namespace)).collect::<Vec<_>>().join(", ")
+            ),
         }
     }
 
@@ -737,6 +917,16 @@ impl TypeRef {
         match self {
             TypeRef::RefNamed(qname) => qname.namespace(),
             _ => None,
+        }
+    }
+
+    /// The refs directly inside this one (an array's, an optional's, a
+    /// map's value, a tuple's items).
+    pub fn children(&self) -> Vec<&TypeRef> {
+        match self {
+            TypeRef::RefArray(inner) | TypeRef::RefOptional(inner) | TypeRef::RefMap(inner) => vec![inner],
+            TypeRef::RefTuple(items) => items.iter().collect(),
+            _ => Vec::new(),
         }
     }
 
@@ -751,6 +941,8 @@ impl TypeRef {
             TypeRef::RefUnknown => true,
             TypeRef::RefArray(inner) => inner.contains_unknown(),
             TypeRef::RefOptional(inner) => inner.contains_unknown(),
+            TypeRef::RefMap(inner) => inner.contains_unknown(),
+            TypeRef::RefTuple(items) => items.iter().any(TypeRef::contains_unknown),
             _ => false,
         }
     }

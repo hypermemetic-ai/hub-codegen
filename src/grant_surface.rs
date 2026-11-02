@@ -405,7 +405,7 @@ mod tests {
             md_full_path: format!("tickets.{}", name),
             md_namespace: "tickets".to_string(),
             md_description: Some("Change a ticket's status".to_string()),
-            md_streaming: true,
+            md_cardinality: crate::ir::Cardinality::Many, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefAny,
             md_bidir_type: None,

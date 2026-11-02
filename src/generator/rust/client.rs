@@ -681,7 +681,7 @@ fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
     };
 
     // Generate return type and implementation based on streaming
-    if method.md_streaming {
+    if method.is_streaming() {
         // Streaming method - returns filtered stream of typed data
         format!(
             r#"{doc}
@@ -753,6 +753,8 @@ fn type_ref_to_rust(tr: &TypeRef, ir: &IR) -> String {
         TypeRef::RefOptional(inner) => format!("Option<{}>", type_ref_to_rust(inner, ir)),
         TypeRef::RefAny => "serde_json::Value".to_string(),
         TypeRef::RefUnknown => "serde_json::Value".to_string(),
+        TypeRef::RefMap(inner) => format!("std::collections::BTreeMap<String, {}>", type_ref_to_rust(inner, ir)),
+        TypeRef::RefTuple(items) => format!("({})", items.iter().map(|t| type_ref_to_rust(t, ir)).collect::<Vec<_>>().join(", ")),
     }
 }
 
@@ -837,8 +839,8 @@ fn collect_cross_namespace_imports_hierarchical(
             }
             TypeKind::KindEnum { ke_variants, .. } => {
                 for variant in ke_variants {
-                    for field in &variant.vd_fields {
-                        scan_type_ref_hierarchical(&field.fd_type, &node.full_path, ir, &mut imports);
+                    for t in variant.type_refs() {
+                        scan_type_ref_hierarchical(t, &node.full_path, ir, &mut imports);
                     }
                 }
             }
@@ -899,6 +901,11 @@ fn scan_type_ref_hierarchical(
         TypeRef::RefOptional(inner) => {
             scan_type_ref_hierarchical(inner, current_namespace, ir, imports);
         }
+        TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+            for c in tr.children() {
+                scan_type_ref_hierarchical(c, current_namespace, ir, imports);
+            }
+        }
         _ => {}
     }
 }
@@ -925,6 +932,11 @@ fn collect_cross_namespace_type_imports(ir: &IR, current_namespace: &str) -> Has
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, ir, current_namespace, imports),
             TypeRef::RefOptional(inner) => collect_from_type_ref(inner, ir, current_namespace, imports),
+            TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+                for c in tr.children() {
+                    collect_from_type_ref(c, ir, current_namespace, imports);
+                }
+            }
             _ => {}
         }
     }
@@ -954,8 +966,8 @@ fn collect_cross_namespace_type_imports(ir: &IR, current_namespace: &str) -> Has
                 }
                 TypeKind::KindEnum { ke_variants, .. } => {
                     for variant in ke_variants {
-                        for field in &variant.vd_fields {
-                            collect_from_type_ref(&field.fd_type, ir, current_namespace, &mut imports);
+                        for t in variant.type_refs() {
+                            collect_from_type_ref(t, ir, current_namespace, &mut imports);
                         }
                     }
                 }

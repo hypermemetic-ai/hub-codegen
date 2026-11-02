@@ -1313,6 +1313,20 @@ Then: Method cache miss, children cache hit
 - Always write latest version
 - Provide migration path
 
+### The IR version rule
+
+service-codegen reads IR 2.0, 2.1 and 3.0 (RETURNS-15) and refuses any other
+version before it generates or writes anything: `IR <v> is not supported;
+service-codegen <version> reads IR 2.0, 2.1 and 3.0 …`. The code cache never
+skips a generation — every run generates, and the manifest's file hashes only
+tell the three-way merge which files were edited on disk — so an entry
+written by an older service-codegen is never served as output: the manifest's
+`toolchain.service-codegen` records the version that wrote it, and the next
+run rewrites it. An IR's version changes the generated output only through
+`.codegen-metadata.json` (it names the version) and so `package.json`'s
+content hash; the same method written as IR 2.0 and as IR 3.0 generates the
+same client.
+
 ### Cache Format Changes
 
 **Breaking change process:**

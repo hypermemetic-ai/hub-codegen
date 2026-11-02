@@ -8,7 +8,7 @@ The **Intermediate Representation (IR)** is a language-agnostic JSON schema that
 Plexus service activations (Rust types)
   ↓ schemars JSON Schema
 Synapse IR Builder (Haskell)
-  ↓ IR v2.0 JSON
+  ↓ IR 3.0 JSON (2.0 and 2.1 read too)
 service-codegen IR Deserialization (Rust)
   ↓ structured IR types
 Language Generators (TypeScript / Rust)
@@ -24,7 +24,7 @@ The top-level IR JSON object:
 
 | Field | Type | Required | Semantics |
 |-------|------|----------|-----------|
-| `irVersion` | string | Yes | Must be `"2.0"`. Mismatches abort generation. |
+| `irVersion` | string | Yes | `"2.0"` (synapse ≤ 3.16), `"2.1"` (synapse 3.17) or `"3.0"` (RETURNS-13, synapse after RETURNS-36); any other aborts generation (`ir::check_ir_version`). |
 | `irBackend` | string | Yes | Backend name (e.g. `"menger"`). Used in file headers. |
 | `irHash` | string | No | 16-char hex content hash (stable across timestamps). Used by synapse-cc for cache invalidation. |
 | `irMetadata` | object | No | Toolchain metadata (generators, timestamps). Intentionally **excluded from file hashes** to prevent spurious cache churn. |
@@ -91,6 +91,11 @@ The most important type. Haskell Aeson emits `{"tag": "RefFoo", "contents": ...}
 | `RefOptional` | `RefOptional(Box<TypeRef>)` | `T \| null` |
 | `RefAny` | `RefAny` | `unknown` (intentional, no warning) |
 | `RefUnknown` | `RefUnknown` | `unknown` (schema gap, emits warning) |
+| `RefMap` (2.1) | `RefMap(Box<TypeRef>)` | `Record<string, V>`; Rust `BTreeMap<String, V>` |
+| `RefTuple` (2.1) | `RefTuple(Vec<TypeRef>)` | `[A, B]`; Rust `(A, B)` |
+| `RefJson` (2.1) | read as `RefAny` | `unknown`; Rust `serde_json::Value` |
+| `RefRefined` (2.1) | read as its base | the base type (the bounds are the server's to check) |
+| `RefChild` (2.1) | read as `RefAny` | never typed: the child's role generates its client |
 
 `to_ts_in_namespace(current_ns)` returns just the local name when the type is in the same namespace; cross-namespace types are imported separately.
 
@@ -101,14 +106,26 @@ pub struct MethodDef {
     pub md_name: String,              // "chat"
     pub md_full_path: String,         // "cone.chat"  (wire method name)
     pub md_namespace: String,         // "cone"
-    pub md_streaming: bool,           // true → AsyncGenerator<T>
+    pub md_cardinality: Cardinality,  // One → Promise<T>; Many → MethodStream<'cone.chat', T>
     pub md_params: Vec<ParamDef>,
-    pub md_returns: TypeRef,
+    pub md_returns: TypeRef,          // the item T (IR 2.x: the whole event type)
+    pub md_error: Option<TypeRef>,    // E of a Result<T, E> item (IR 3.0)
+    pub md_progress: Option<TypeRef>, // what its progress frames carry (IR 3.0)
     pub md_bidir_type: Option<TypeRef>, // present if bidirectional
+    // … role, deprecation, credentials, grant (see ir.rs)
 }
 ```
 
 `md_full_path` is passed verbatim to `rpc.call()` on the wire.
+
+**One reading for every IR version** (RETURNS-15, `MethodDef::normalize_wire`):
+IR 3.0 writes `mdCardinality` (`"one"` / `"many"`), `mdError`, `mdProgress`
+and no `mdStreaming`; an IR 2.x's `mdStreaming: true` is `Many`, and its
+`mdError` / `mdProgress` are `None`. An IR 2.1 / 3.0 `mdInjected` param (one
+the server supplies, SYNAPSE-CC-8) is read into `md_params` with its
+`pdSource`, so it is documented and never sent, as an IR 2.0's injected
+param is. The generators branch on `md_cardinality` and never on the shape
+of `md_returns`; typing `md_error` and `md_progress` is RETURNS-17 / -18's.
 
 ### `QualifiedName` (`ir.rs:131`)
 
@@ -132,6 +149,7 @@ pub struct VariantDef {
     pub vd_name: String,              // "data" | "error" | etc.
     pub vd_description: Option<String>,
     pub vd_fields: Vec<FieldDef>,
+    pub vd_ref: Option<TypeRef>,      // IR 2.1: an untagged / newtype variant's type
 }
 ```
 

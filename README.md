@@ -60,6 +60,12 @@ synapse -P <port> -i <backend> | cargo run -- -o ./generated   # IR on stdin
 
 `cargo run -- --help` lists every option.
 
+It reads IR 2.0 (synapse ≤ 3.16), 2.1 (synapse 3.17) and 3.0 (RETURNS-13:
+each method's item, error, progress and cardinality), and refuses any other
+version before it writes anything. A method generates by its cardinality —
+one item is a `Promise<T>`, many a `MethodStream<'ns.m', T>` — whichever
+version said it.
+
 ## Output
 
 TypeScript:
