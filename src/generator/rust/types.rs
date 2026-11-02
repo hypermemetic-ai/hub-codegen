@@ -167,8 +167,10 @@ pub fn generate_typedef(typedef: &TypeDef) -> String {
             ke_discriminator,
             ke_variants,
         } => {
+            // No `rename_all`: each variant carries its exact wire tag
+            // (see `generate_variants`).
             format!(
-                "{}#[derive(Debug, Clone, Serialize, Deserialize)]\n#[serde(tag = \"{}\", rename_all = \"lowercase\")]\npub enum {} {{\n{}\n}}",
+                "{}#[derive(Debug, Clone, Serialize, Deserialize)]\n#[serde(tag = \"{}\")]\npub enum {} {{\n{}\n}}",
                 doc_comment,
                 ke_discriminator,
                 type_name,
@@ -292,7 +294,13 @@ fn generate_fields(fields: &[FieldDef]) -> String {
         .join("\n")
 }
 
-/// Generate enum variants
+/// Generate enum variants.
+///
+/// Every variant is renamed to its wire tag (`vd_name`) explicitly. The
+/// variant name is the tag PascalCased, and no container `rename_all` maps
+/// every tag back: `lowercase` turned `StatusChanged` into
+/// `"statuschanged"` where the wire says `"status_changed"`, and
+/// `snake_case` would still miss tags that aren't snake_case (RETURNS-16).
 fn generate_variants(variants: &[VariantDef]) -> String {
     variants
         .iter()
@@ -306,9 +314,10 @@ fn generate_variants(variants: &[VariantDef]) -> String {
             };
 
             let variant_name = to_pascal(&variant.vd_name);
+            let rename = format!("    #[serde(rename = \"{}\")]\n", variant.vd_name);
 
             if variant.vd_fields.is_empty() {
-                format!("{}    {},", doc, variant_name)
+                format!("{}{}    {},", doc, rename, variant_name)
             } else {
                 // Generate variant fields without 'pub' - enum fields inherit visibility
                 let fields = variant
@@ -339,8 +348,8 @@ fn generate_variants(variants: &[VariantDef]) -> String {
                     .join("\n");
 
                 format!(
-                    "{}    {} {{\n{}\n    }},",
-                    doc, variant_name, fields
+                    "{}{}    {} {{\n{}\n    }},",
+                    doc, rename, variant_name, fields
                 )
             }
         })

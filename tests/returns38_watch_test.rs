@@ -20,6 +20,8 @@
 
 #[path = "support/naming.rs"]
 mod common_naming;
+#[path = "support/returns_line.rs"]
+mod returns_line;
 
 use service_codegen::generator::{GenerationOptions, TransportEnv};
 use service_codegen::{generate_rust, generate_typescript, IR};
@@ -148,7 +150,7 @@ fn existing_output_unchanged() {
                 } else {
                     now.clone()
                 };
-                assert_eq!(&sha256(&common_naming::as_recorded(&dir, &now)), hash, "{dir}/{path} changed — every existing method's output must stay byte for byte");
+                assert_eq!(&sha256(&common_naming::as_recorded(&dir, &returns_line::before_returns_line(&now))), hash, "{dir}/{path} changed — every existing method's output must stay byte for byte");
                 compared += 1;
             }
             for path in files.keys() {

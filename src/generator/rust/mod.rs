@@ -146,6 +146,10 @@ fn collect_warnings(ir: &IR, warnings: &mut Vec<Warning>) {
             _ => {}
         }
     }
+
+    // The IR's maps iterate in a per-process random order; sort so the
+    // warnings list is identical run to run (RETURNS-23).
+    warnings.sort();
 }
 
 fn generate_lib(ir: &IR) -> String {

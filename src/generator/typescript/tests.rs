@@ -13,8 +13,22 @@ pub fn has_bidir_methods(ir: &IR) -> bool {
     ir.ir_plugins.contains_key("interactive")
 }
 
+/// The `const <name> = …` declaration a generated smoke test reads its backend
+/// URL from: `PLEXUS_URL`, falling back to the URL given at generation time
+/// (`--backend-url`). With none given no URL is baked in, and the test fails
+/// fast when `PLEXUS_URL` is unset.
+fn url_declaration(name: &str, backend_url: Option<&str>) -> String {
+    match backend_url {
+        Some(url) => format!(r#"const {name} = process.env.PLEXUS_URL ?? "{url}";"#),
+        None => format!(
+            r#"const {name} = process.env.PLEXUS_URL ?? "";
+if (!{name}) throw new Error("PLEXUS_URL is not set: export the backend's WebSocket URL (ws://host:port)");"#
+        ),
+    }
+}
+
 /// Generate smoke test content
-pub fn generate_smoke_test(ir: &IR, transport: TransportEnv, backend_url: &str) -> String {
+pub fn generate_smoke_test(ir: &IR, transport: TransportEnv, backend_url: Option<&str>) -> String {
     let backend = &ir.ir_backend;
 
     let import_line = if transport != TransportEnv::None {
@@ -30,7 +44,7 @@ import {{ test, expect, beforeAll, afterAll }} from "bun:test";
 {import_line}
 import type {{ PlexusStreamItem }} from "../types";
 
-const WS_URL = process.env.PLEXUS_URL ?? "{backend_url}";
+{url_decl}
 
 let client: PlexusRpcClient;
 
@@ -64,7 +78,7 @@ test("{backend}.schema returns stream ending in done", async () => {{
   expect(items.length).toBeGreaterThan(0);
   expect(items[items.length - 1].type).toBe("done");
 }}, 10_000);
-"#, backend = backend, import_line = import_line, backend_url = backend_url)
+"#, backend = backend, import_line = import_line, url_decl = url_declaration("WS_URL", backend_url))
 }
 
 /// Generate schema walk smoke test (no test framework, plain executable TypeScript).
@@ -72,19 +86,20 @@ test("{backend}.schema returns stream ending in done", async () => {{
 /// Uses well-known Plexus endpoints:
 ///   `_info` → `{backend}.schema` → `{backend}.activation_schema`
 /// These exist on every conformant Plexus backend regardless of loaded plugins.
-pub fn generate_schema_walk_smoke(_ir: &IR, transport: TransportEnv, transport_path: &str) -> String {
+pub fn generate_schema_walk_smoke(_ir: &IR, transport: TransportEnv, transport_path: &str, backend_url: Option<&str>) -> String {
     let import_line = if transport != TransportEnv::None {
         format!("import {{ PlexusRpcClient }} from \"{transport_path}\";")
     } else {
         "import { PlexusRpcClient } from '@plexus/rpc-client';".to_string()
     };
+    let url_decl = url_declaration("URL", backend_url);
 
     format!(r#"// Auto-generated schema walk smoke test
 // Run with: bun smoke.ts  (no test framework required)
 
 {import_line}
 
-const URL = process.env.PLEXUS_URL ?? "ws://127.0.0.1:4444";
+{url_decl}
 const rpc = new PlexusRpcClient({{ url: URL }});
 
 function assert(cond: boolean, msg: string): asserts cond {{
@@ -120,7 +135,7 @@ console.log(`\u2713 ${{schema.activations.length}} activations validated (${{bac
 /// - prompt (text input)
 /// - select (option selection)
 /// - confirm (yes/no)
-pub fn generate_bidir_smoke_test(ir: &IR, transport: TransportEnv, backend_url: &str) -> String {
+pub fn generate_bidir_smoke_test(ir: &IR, transport: TransportEnv, backend_url: Option<&str>) -> String {
     let backend = &ir.ir_backend;
 
     let import_line = if transport != TransportEnv::None {
@@ -136,7 +151,7 @@ import {{ test, expect, beforeAll, afterAll }} from "bun:test";
 {import_line}
 import type {{ StandardRequest, StandardResponse }} from "../types";
 
-const WS_URL = process.env.PLEXUS_URL ?? "{backend_url}";
+{url_decl}
 
 let client: PlexusRpcClient;
 const requestsReceived: StandardRequest[] = [];
@@ -184,5 +199,5 @@ test("interactive.wizard receives all request types", async () => {{
   expect(requestsReceived.some(r => r.type === "select")).toBe(true);
   expect(requestsReceived.some(r => r.type === "confirm")).toBe(true);
 }}, 30_000);
-"#, backend = backend, import_line = import_line, backend_url = backend_url)
+"#, backend = backend, import_line = import_line, url_decl = url_declaration("WS_URL", backend_url))
 }

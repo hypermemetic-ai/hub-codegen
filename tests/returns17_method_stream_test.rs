@@ -19,6 +19,8 @@
 
 #[path = "support/naming.rs"]
 mod common_naming;
+#[path = "support/returns_line.rs"]
+mod returns_line;
 
 use service_codegen::generator::{GenerationOptions, TransportEnv};
 use service_codegen::{generate_rust, generate_typescript, IR};
@@ -205,7 +207,7 @@ fn existing_output_unchanged() {
         } else {
             content.clone()
         };
-        assert_eq!(&sha256(&common_naming::as_recorded(path, &content)), hash, "{path} changed beyond RETURNS-17's spelling");
+        assert_eq!(&sha256(&common_naming::as_recorded(path, &returns_line::before_returns_line(&content))), hash, "{path} changed beyond RETURNS-17's spelling");
         compared += 1;
     }
     for path in now.keys() {

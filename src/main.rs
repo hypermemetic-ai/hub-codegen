@@ -5,7 +5,7 @@ use clap::{Parser, ValueEnum};
 use service_codegen::cache::{read_cache_manifest, write_cache_manifest, CodeCacheManifest, ToolchainVersions, CodePluginCache};
 use service_codegen::merge::{merge_generated_code, print_merge_summary, MergeStrategy};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{self, Read};
 use std::path::PathBuf;
 
@@ -49,15 +49,23 @@ enum CliGenerate {
     Package,
 }
 
+/// `--output-format json` payload. Its maps are `BTreeMap`s so they
+/// serialize in key order: the same IR gives byte-identical stdout
+/// (RETURNS-23).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CodegenOutput<'a> {
-    files: &'a HashMap<String, String>,
-    file_hashes: &'a HashMap<String, String>,
+    files: BTreeMap<&'a str, &'a str>,
+    file_hashes: BTreeMap<&'a str, &'a str>,
     warnings: Vec<WarningOutput<'a>>,
     service_codegen_version: &'static str,
-    dependencies: &'a HashMap<String, String>,
-    dev_dependencies: &'a HashMap<String, String>,
+    dependencies: BTreeMap<&'a str, &'a str>,
+    dev_dependencies: BTreeMap<&'a str, &'a str>,
+}
+
+/// Borrow a string map in key order.
+fn sorted(map: &HashMap<String, String>) -> BTreeMap<&str, &str> {
+    map.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect()
 }
 
 #[derive(Serialize)]
@@ -111,9 +119,10 @@ struct Args {
     #[arg(long, default_value = "../transport")]
     smoke_transport_path: String,
 
-    /// Backend WebSocket URL embedded as fallback in generated smoke tests
-    #[arg(long, default_value = "ws://localhost:4444")]
-    backend_url: String,
+    /// Backend WebSocket URL generated smoke tests fall back to when PLEXUS_URL
+    /// is unset. No default: without it the smoke tests require PLEXUS_URL.
+    #[arg(long)]
+    backend_url: Option<String>,
 
     /// IR-7: Exit with a non-zero status after writing files when generated
     /// code consumes any deprecated IR surface. stderr still carries one
@@ -204,21 +213,21 @@ fn main() -> Result<()> {
     match args.output_format {
         OutputFormat::Json => {
             let out = CodegenOutput {
-                files: &result.files,
-                file_hashes: &result.file_hashes,
+                files: sorted(&result.files),
+                file_hashes: sorted(&result.file_hashes),
                 warnings: result.warnings.iter().map(|w| WarningOutput {
                     location: &w.location,
                     message: &w.message,
                 }).collect(),
                 service_codegen_version: service_codegen::SERVICE_CODEGEN_VERSION,
-                dependencies: &result.dependencies,
-                dev_dependencies: &result.dev_dependencies,
+                dependencies: sorted(&result.dependencies),
+                dev_dependencies: sorted(&result.dev_dependencies),
             };
             println!("{}", serde_json::to_string(&out)?);
         }
         OutputFormat::Files => {
             if args.dry_run {
-                for (path, content) in &result.files {
+                for (path, content) in sorted(&result.files) {
                     println!("=== {} ===", path);
                     println!("{}", content);
                     println!();

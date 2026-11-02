@@ -12,7 +12,7 @@ fn opts() -> GenerationOptions {
         generate: GenerateSelector::All,
         plugins_filter: None,
         smoke_transport_path: "../transport".to_string(),
-        backend_url: "ws://localhost:4444".to_string(),
+        backend_url: None,
         deprecation: Default::default(),
     }
 }

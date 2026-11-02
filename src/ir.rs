@@ -33,7 +33,7 @@ pub struct GenerationMetadata {
 pub struct IR {
     /// IR format version
     pub ir_version: String,
-    /// Backend name (e.g., "substrate", "plexus")
+    /// Backend name (e.g., "menger", "starter")
     pub ir_backend: String,
     /// Plexus hash for versioning (optional, computed from schema tree)
     #[serde(default)]
