@@ -251,6 +251,32 @@ fn ir2_streaming_is_the_cardinality() {
     }
 }
 
+/// RETURNS-36 review #6: IR 3.0 always says a method's cardinality; one that
+/// does not is refused, naming the method — never guessed `One`. IR 2.x
+/// keeps deriving it from `mdStreaming` (absent: `One`).
+#[test]
+fn ir3_without_cardinality_is_refused_naming_the_method() {
+    let json = |version: &str| serde_json::json!({
+        "irVersion": version,
+        "irBackend": "kiln",
+        "irTypes": {},
+        "irMethods": { "kiln.fire": fire(serde_json::json!({ "mdStreaming": true })) },
+        "irPlugins": { "kiln": ["fire"] }
+    });
+    let err = serde_json::from_value::<IR>(json("3.0")).expect_err("an IR 3.0 method with no mdCardinality").to_string();
+    assert!(err.contains("kiln.fire") && err.contains("mdCardinality"), "{err}");
+    // with it, the same method reads
+    let mut ok = json("3.0");
+    ok["irMethods"]["kiln.fire"]["mdCardinality"] = serde_json::json!("many");
+    let ir: IR = serde_json::from_value(ok).expect("decodes");
+    assert_eq!(method(&ir, "kiln.fire").md_cardinality, Cardinality::Many);
+    // IR 2.x: derived, as before
+    for v in ["2.0", "2.1"] {
+        let ir: IR = serde_json::from_value(json(v)).unwrap_or_else(|e| panic!("{v}: {e}"));
+        assert_eq!(method(&ir, "kiln.fire").md_cardinality, Cardinality::Many, "{v}");
+    }
+}
+
 #[test]
 fn a_method_generates_the_same_from_ir2_and_ir3() {
     for (streaming, card) in [(true, "many"), (false, "one")] {
