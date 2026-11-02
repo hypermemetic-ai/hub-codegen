@@ -188,6 +188,29 @@ fn conformance_ir3_rust_compiles() {
     cargo_checks(&fixture("returns15_conformance_ir"), "conformance");
 }
 
+/// The same fixture's IR as the merged synapse builds it (synapse 4.0.0 at
+/// 645688b, RETURNS-36's merge: IR 3.0 over IR 2.1's reader, via
+/// `buildIRFromSchema` on plexus-macros returns/0.7's `expected/schema.json`,
+/// the same four doc comments respelled): `SchemaResult` is an untagged enum of
+/// `PluginSchema | MethodSchema`, and `irRefusals` names one site
+/// (`conformance.Schema`, a JSON Schema type list), typed `unknown` here.
+#[test]
+fn synapse4_conformance_ir3_generates_and_checks() {
+    let ir = fixture("returns15_synapse4_conformance_ir");
+    assert_eq!(ir.ir_version, "3.0");
+    assert_eq!(method(&ir, "conformance.load").md_cardinality, Cardinality::Many);
+    assert_eq!(named_local(&method(&ir, "conformance.lookup").md_error).as_deref(), Some("LookupError"));
+    match &ir.ir_types["conformance.SchemaResult"].td_kind {
+        TypeKind::KindEnum { ke_repr, .. } => assert_eq!(*ke_repr, EnumRepr::Untagged),
+        k => panic!("{k:?}"),
+    }
+    let files = ts(&ir);
+    assert!(files["conformance/types.ts"].contains("export type SchemaResult = SchemaResultPluginSchema | SchemaResultMethodSchema;"));
+    assert!(files["conformance/client.ts"].contains("  schema(): Promise<SchemaResult>;"));
+    type_checks(&files);
+    cargo_checks(&ir, "conformance4");
+}
+
 // ─────────────────────────────────────────────────────────────
 // 2. IR 2.x reads as it did
 // ─────────────────────────────────────────────────────────────
