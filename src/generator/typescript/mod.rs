@@ -7,6 +7,7 @@ pub mod transport;
 pub mod package;
 pub mod tests;
 pub mod watch;
+pub mod input;
 
 use crate::ir::{IR, TypeRef, TypeKind};
 use crate::generator::{GenerationResult, Warning, GenerationOptions, GenerateSelector, TransportEnv};
@@ -75,6 +76,9 @@ fn resolve_type_dependencies(ir: &IR, requested: &[String]) -> PluginPartition {
                     continue;
                 }
                 collect_ns_refs_from_typeref(&method.md_returns, &mut new_deps);
+                if let Some(input) = &method.md_input {
+                    collect_ns_refs_from_typeref(input, &mut new_deps);
+                }
                 for param in &method.sent_params() {
                     collect_ns_refs_from_typeref(&param.pd_type, &mut new_deps);
                 }
@@ -202,6 +206,10 @@ fn generate_code_files(
     files.insert("types.ts".to_string(), types::generate_types(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
     files.insert("watch.ts".to_string(), watch::generate_watch());
+    // BIDIR-19: the input half's runtime, only for an IR that has one.
+    if ir.has_input() {
+        files.insert("input.ts".to_string(), input::generate_input_runtime());
+    }
 
     // When --plugins is specified, partition namespaces into requested (full gen)
     // and type-dependency-only (types.ts stubs). Otherwise generate everything.
@@ -269,6 +277,9 @@ fn generate_transport_only(ir: &IR, options: &GenerationOptions) -> HashMap<Stri
     files.insert("types.ts".to_string(), types::generate_protocol_types_for(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
     files.insert("watch.ts".to_string(), watch::generate_watch());
+    if ir.has_input() {
+        files.insert("input.ts".to_string(), input::generate_input_runtime());
+    }
     files.insert("transport.ts".to_string(), transport::generate_transport(options.transport, ir));
     files
 }
@@ -284,6 +295,9 @@ fn generate_rpc_only(
     files.insert("types.ts".to_string(), types::generate_types(ir));
     files.insert("rpc.ts".to_string(), rpc::generate_rpc_client());
     files.insert("watch.ts".to_string(), watch::generate_watch());
+    if ir.has_input() {
+        files.insert("input.ts".to_string(), input::generate_input_runtime());
+    }
     files.insert("index.ts".to_string(), generate_index(ir, options.transport));
     files
 }
@@ -458,6 +472,11 @@ fn generate_index_filtered(ir: &IR, transport: TransportEnv, only_namespaces: Op
     lines.push("// Many streams as one: watch(a, b, c)".to_string());
     lines.push("export * from './watch';".to_string());
     lines.push("".to_string());
+
+    // BIDIR-19: the input half, only for an IR that has one
+    if ir.has_input() {
+        lines.extend(input::INDEX_EXPORT.iter().map(|l| l.to_string()));
+    }
 
     lines.push("// Namespace modules (types + clients)".to_string());
 

@@ -1,0 +1,478 @@
+{
+  "irBackend": "perf5",
+  "irHash": null,
+  "irMetadata": null,
+  "irMethods": {
+    "bench.stats": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdCardinality": "one",
+      "mdDescription": "What the server has served.",
+      "mdError": null,
+      "mdFullPath": "bench.stats",
+      "mdGrant": "bench.stats",
+      "mdName": "stats",
+      "mdNamespace": "bench",
+      "mdParams": [],
+      "mdProgress": null,
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "Stat",
+          "qnNamespace": "bench"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      }
+    },
+    "ingest.bytes": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdCardinality": "one",
+      "mdDescription": "BIDIR-17's raw ingress: chunks as they come, each beginning with\nwhen it was sent (CLOCK_MONOTONIC ns, big-endian). The method only\nconsumes: binary frames and base64 JSON reach it alike.",
+      "mdError": null,
+      "mdFullPath": "ingest.bytes",
+      "mdGrant": "ingest.bytes",
+      "mdInput": {
+        "contents": [
+          "string",
+          "binary"
+        ],
+        "tag": "RefPrimitive"
+      },
+      "mdName": "bytes",
+      "mdNamespace": "ingest",
+      "mdParams": [],
+      "mdProgress": null,
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "IngestEvent",
+          "qnNamespace": "ingest"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      }
+    },
+    "ingest.items": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdCardinality": "one",
+      "mdDescription": "Take items as they come; answer how late they came.",
+      "mdError": null,
+      "mdFullPath": "ingest.items",
+      "mdGrant": "ingest.items",
+      "mdInput": {
+        "contents": {
+          "qnLocalName": "Item",
+          "qnNamespace": "ingest"
+        },
+        "tag": "RefNamed"
+      },
+      "mdName": "items",
+      "mdNamespace": "ingest",
+      "mdParams": [],
+      "mdProgress": null,
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "IngestEvent",
+          "qnNamespace": "ingest"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      }
+    },
+    "ingest.tokens": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdCardinality": "many",
+      "mdDescription": "Count tokens as they come, one item a running count.",
+      "mdError": null,
+      "mdFullPath": "ingest.tokens",
+      "mdGrant": "ingest.tokens",
+      "mdInput": {
+        "contents": [
+          "string",
+          null
+        ],
+        "tag": "RefPrimitive"
+      },
+      "mdName": "tokens",
+      "mdNamespace": "ingest",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "The run the tokens belong to",
+          "pdName": "run",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": [
+              "string",
+              null
+            ],
+            "tag": "RefPrimitive"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "Stop after this many",
+          "pdName": "limit",
+          "pdRequired": false,
+          "pdSource": null,
+          "pdType": {
+            "contents": [
+              "integer",
+              "uint32"
+            ],
+            "tag": "RefPrimitive"
+          }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "Labels for the run",
+          "pdName": "meta",
+          "pdRequired": false,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            },
+            "tag": "RefMap"
+          }
+        }
+      ],
+      "mdProgress": null,
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "IngestEvent",
+          "qnNamespace": "ingest"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      }
+    }
+  },
+  "irPluginRequests": null,
+  "irPlugins": {
+    "bench": [
+      "stats"
+    ],
+    "ingest": [
+      "bytes",
+      "items",
+      "tokens"
+    ]
+  },
+  "irTypes": {
+    "bench.Stat": {
+      "tdDescription": "What the server has served.",
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "calls",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "integer",
+                "uint64"
+              ],
+              "tag": "RefPrimitive"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "items",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "integer",
+                "uint64"
+              ],
+              "tag": "RefPrimitive"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "Stat",
+      "tdNamespace": "bench"
+    },
+    "ingest.IngestEvent": {
+      "tdDescription": null,
+      "tdKind": {
+        "keDiscriminator": "type",
+        "keVariants": [
+          {
+            "vdDescription": "Every item taken, and how long each took to reach the method.",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "items",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "integer",
+                    "uint64"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "p50_us",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "number",
+                    "double"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "p99_us",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "number",
+                    "double"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "max_us",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "number",
+                    "double"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "taken"
+          },
+          {
+            "vdDescription": "Every chunk taken and its bytes.",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "items",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "integer",
+                    "uint64"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "bytes",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "integer",
+                    "uint64"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "p50_us",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "number",
+                    "double"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "p99_us",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "number",
+                    "double"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "p999_us",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "number",
+                    "double"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "max_us",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "number",
+                    "double"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              },
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "hist",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": {
+                    "contents": [
+                      {
+                        "contents": [
+                          "integer",
+                          "uint64"
+                        ],
+                        "tag": "RefPrimitive"
+                      },
+                      {
+                        "contents": [
+                          "integer",
+                          "uint64"
+                        ],
+                        "tag": "RefPrimitive"
+                      }
+                    ],
+                    "tag": "RefTuple"
+                  },
+                  "tag": "RefArray"
+                }
+              }
+            ],
+            "vdName": "received"
+          },
+          {
+            "vdDescription": "A running count of the tokens taken.",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "count",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "integer",
+                    "uint64"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "tokens"
+          },
+          {
+            "vdDescription": null,
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "message",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "error"
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "IngestEvent",
+      "tdNamespace": "ingest"
+    },
+    "ingest.Item": {
+      "tdDescription": "One item in: when its frame was sent, and a pad of the scenario's size.",
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "at",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "integer",
+                "uint64"
+              ],
+              "tag": "RefPrimitive"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "pad",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "Item",
+      "tdNamespace": "ingest"
+    }
+  },
+  "irVersion": "3.0"
+}

@@ -182,6 +182,8 @@ fn generate_cargo_toml(ir: &IR) -> String {
     // Always use 0.1.0 for version - hash is metadata, not a semver version
     let version = "0.1.0";
     let metadata = ir.ir_hash.as_deref().map(|h| format!(" (hash: {})", h)).unwrap_or_default();
+    // BIDIR-19: an `Input<Bytes>` method's chunks are `bytes::Bytes`.
+    let bytes = if ir.has_binary_input() { "bytes = \"1\"\n" } else { "" };
 
     format!(
         r#"[package]
@@ -199,10 +201,10 @@ futures = "0.3"
 anyhow = "1.0"
 async-stream = "0.3"
 thiserror = "1.0"
-
+{}
 [dev-dependencies]
 tokio-test = "0.4"
 "#,
-        version, metadata
+        version, metadata, bytes
     )
 }
