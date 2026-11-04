@@ -58,7 +58,196 @@ pub fn generate_base_client_with_ir(ir: &IR) -> String {
         content.push_str(grant_surface::rust_requirement_decls());
         content.push('\n');
     }
+    // BIDIR-19: the input half, only when a method has one.
+    if ir.has_input() {
+        content.push('\n');
+        content.push_str(&generate_input_client(&ir.ir_backend));
+    }
     content
+}
+
+/// BIDIR-19: the base client's input half (plexus-wire spec/10): a call
+/// whose input is sent beside it, one item a frame, only while the
+/// service's credit allows; an `Input<Bytes>` item as one binary frame
+/// `[0x01][subscription u64 BE][seq u64 BE][payload]`. `credit`, `ack` and
+/// `input_closed` are spent here and never yielded.
+fn generate_input_client(backend: &str) -> String {
+    r#"// === BIDIR-19: the input half (plexus-wire spec/10) ===
+
+/// The service's namespace: what `{ns}.call`, `{ns}.input` and `{ns}.end` are named by.
+const SERVICE_NAMESPACE: &str = __BACKEND__;
+
+/// One item of a call's input half.
+pub enum InputItem {
+    /// An item as JSON, in a `{ns}.input` frame.
+    Json(serde_json::Value),
+    /// An `Input<Bytes>` item: one WebSocket binary frame.
+    Binary(Vec<u8>),
+}
+
+/// What a method with an input half sends.
+pub type InputStream = Pin<Box<dyn Stream<Item = InputItem> + Send>>;
+
+impl PlexusClient {
+    /// A stream of items as JSON input.
+    pub fn json_input<T: serde::Serialize>(input: impl Stream<Item = T> + Send + 'static) -> InputStream {
+        Box::pin(input.map(|item| InputItem::Json(serde_json::to_value(&item).unwrap_or(serde_json::Value::Null))))
+    }
+
+    /// A stream of byte chunks as binary input, one frame a chunk.
+    pub fn binary_input<B: AsRef<[u8]>>(input: impl Stream<Item = B> + Send + 'static) -> InputStream {
+        Box::pin(input.map(|chunk| InputItem::Binary(chunk.as_ref().to_vec())))
+    }
+
+    /// Call a method with an input half: `input` is sent as the call runs,
+    /// within the credit the service grants, and ended when it ends.
+    pub(crate) async fn call_stream_with_input(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+        mut input: InputStream,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<PlexusStreamItem>> + Send>>> {
+        let (ws_stream, _) = connect_async(&self.url).await?;
+        let (mut write, mut read) = ws_stream.split();
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": format!("{}.call", SERVICE_NAMESPACE),
+            "params": { "method": method, "params": params },
+        });
+        write.send(Message::Text(request.to_string())).await?;
+
+        let stream = async_stream::stream! {
+            let mut subscription: Option<u64> = None;
+            let mut credit: u64 = 0;
+            let mut seq: u64 = 0;
+            let mut open = true;
+            loop {
+                let feeding = open && credit > 0 && subscription.is_some();
+                tokio::select! {
+                    biased;
+                    msg = read.next() => {
+                        let text = match msg {
+                            Some(Ok(Message::Text(text))) => text,
+                            Some(Ok(Message::Close(_))) | None => {
+                                yield Err(anyhow!("the connection closed under {} after {} input frames; nothing was resent", method_name(&request), seq));
+                                break;
+                            }
+                            Some(Ok(_)) => continue,
+                            Some(Err(e)) => {
+                                yield Err(e.into());
+                                break;
+                            }
+                        };
+                        let Ok(frame) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
+                        if frame.get("id").and_then(|i| i.as_u64()) == Some(1) {
+                            if let Some(err) = frame.get("error") {
+                                yield Err(anyhow!("Plexus error: {}", err));
+                                break;
+                            }
+                            subscription = frame.get("result").and_then(|r| r.as_u64());
+                            continue;
+                        }
+                        let Some(result) = frame.get("params").and_then(|p| p.get("result")) else { continue };
+                        match result.get("type").and_then(|t| t.as_str()) {
+                            Some("credit") => credit += result.get("n").and_then(|n| n.as_u64()).unwrap_or(0),
+                            Some("ack") => {}
+                            Some("input_closed") => open = false,
+                            _ => match serde_json::from_value::<PlexusStreamItem>(result.clone()) {
+                                Ok(item) => {
+                                    let last = matches!(item, PlexusStreamItem::Done { .. } | PlexusStreamItem::Error { .. });
+                                    yield Ok(item);
+                                    if last {
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    yield Err(anyhow!("Failed to parse PlexusStreamItem: {}", e));
+                                    break;
+                                }
+                            },
+                        }
+                    }
+                    item = input.next(), if feeding => {
+                        let sub = subscription.expect("feeding needs the subscription");
+                        let sent = match item {
+                            Some(InputItem::Json(item)) => {
+                                let frame = json!({
+                                    "jsonrpc": "2.0",
+                                    "method": format!("{}.input", SERVICE_NAMESPACE),
+                                    "params": { "subscription": sub, "seq": seq, "items": [item] },
+                                });
+                                write.send(Message::Text(frame.to_string())).await
+                            }
+                            Some(InputItem::Binary(payload)) => {
+                                let mut frame = Vec::with_capacity(17 + payload.len());
+                                frame.push(0x01);
+                                frame.extend_from_slice(&sub.to_be_bytes());
+                                frame.extend_from_slice(&seq.to_be_bytes());
+                                frame.extend_from_slice(&payload);
+                                write.send(Message::Binary(frame)).await
+                            }
+                            None => {
+                                open = false;
+                                let frame = json!({
+                                    "jsonrpc": "2.0",
+                                    "method": format!("{}.end", SERVICE_NAMESPACE),
+                                    "params": { "subscription": sub, "seq": seq },
+                                });
+                                if let Err(e) = write.send(Message::Text(frame.to_string())).await {
+                                    yield Err(e.into());
+                                    break;
+                                }
+                                continue;
+                            }
+                        };
+                        if let Err(e) = sent {
+                            yield Err(anyhow!("the connection closed under {} after {} input frames; nothing was resent: {}", method_name(&request), seq, e));
+                            break;
+                        }
+                        seq += 1;
+                        credit -= 1;
+                    }
+                }
+            }
+        };
+
+        Ok(Box::pin(stream))
+    }
+
+    /// [`Self::call_single`], for a method with an input half.
+    pub(crate) async fn call_single_with_input<T: serde::de::DeserializeOwned>(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+        input: InputStream,
+    ) -> Result<T> {
+        let mut stream = self.call_stream_with_input(method, params, input).await?;
+        while let Some(item) = stream.next().await {
+            match item? {
+                PlexusStreamItem::Data { content, content_type, .. } => {
+                    return serde_json::from_value(content)
+                        .map_err(|e| anyhow!("Failed to deserialize {}: {}", content_type, e));
+                }
+                PlexusStreamItem::Error { message, code, .. } => {
+                    return Err(anyhow!("Plexus error{}: {}",
+                        code.map(|c| format!(" [{}]", c)).unwrap_or_default(),
+                        message
+                    ));
+                }
+                PlexusStreamItem::Done { .. } => return Err(anyhow!("Stream completed without data")),
+                PlexusStreamItem::Progress { .. } => continue,
+            }
+        }
+        Err(anyhow!("Stream ended without result"))
+    }
+}
+
+fn method_name(request: &serde_json::Value) -> String {
+    request["params"]["method"].as_str().unwrap_or("the call").to_string()
+}
+"#
+    .replace("__BACKEND__", &format!("{:?}", backend))
 }
 
 /// Generate base client struct with WebSocket transport
@@ -680,6 +869,83 @@ fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
         format!("client: &PlexusClient, {}", param_list.join(", "))
     };
 
+    // BIDIR-19: the input half is the last argument, as any stream of the
+    // method's items (an `Input<Bytes>`'s are `bytes::Bytes`), sent under
+    // the service's credit as the call runs.
+    if let Some(input) = &method.md_input {
+        let taken: Vec<String> = sent.iter().map(|p| escape_keyword(&to_snake(&p.pd_name))).collect();
+        let mut ident = "input".to_string();
+        while taken.contains(&ident) {
+            ident.push('_');
+        }
+        let (item, encode) = if input.is_binary() {
+            ("::bytes::Bytes".to_string(), "binary_input")
+        } else {
+            (type_ref_to_rust(input, ir), "json_input")
+        };
+        let param_str = format!("{}, {}: impl Stream<Item = {}> + Send + 'static", param_str, ident, item);
+        let mut doc_lines = doc_lines;
+        doc_lines.push("///".to_string());
+        doc_lines.push(format!(
+            "/// `{}`: the input half (plexus-wire spec/10), sent as the call runs, only while the service's credit allows{}.",
+            ident,
+            if input.is_binary() { "; each chunk one binary frame" } else { "" }
+        ));
+        let input_arg = format!("PlexusClient::{}({})", encode, ident);
+        return if method.is_streaming() {
+            format!(
+                r#"{doc}
+pub async fn {name}({params}) -> Result<Pin<Box<dyn Stream<Item = Result<{ret_type}>> + Send>>> {{
+    let stream = client.call_stream_with_input("{full_path}", {params_json}, {input_arg}).await?;
+
+    // Filter and transform stream items to typed data
+    let typed_stream = stream.filter_map(|item| async move {{
+        match item {{
+            Ok(PlexusStreamItem::Data {{ content, .. }}) => {{
+                match serde_json::from_value::<{ret_type}>(content) {{
+                    Ok(data) => Some(Ok(data)),
+                    Err(e) => Some(Err(e.into())),
+                }}
+            }}
+            Ok(PlexusStreamItem::Error {{ message, code, .. }}) => {{
+                Some(Err(anyhow!("Plexus error{{}}: {{}}",
+                    code.map(|c| format!(" [{{}}]", c)).unwrap_or_default(),
+                    message
+                )))
+            }}
+            Ok(PlexusStreamItem::Progress {{ .. }}) => None, // Skip progress
+            Ok(PlexusStreamItem::Done {{ .. }}) => None, // Stream will end
+            Err(e) => Some(Err(e)),
+        }}
+    }});
+
+    Ok(Box::pin(typed_stream))
+}}"#,
+                doc = doc_lines.join("\n"),
+                name = method_name,
+                params = param_str,
+                ret_type = return_type,
+                full_path = method.md_full_path,
+                params_json = params_json,
+                input_arg = input_arg,
+            )
+        } else {
+            format!(
+                r#"{doc}
+pub async fn {name}({params}) -> Result<{ret_type}> {{
+    client.call_single_with_input("{full_path}", {params_json}, {input_arg}).await
+}}"#,
+                doc = doc_lines.join("\n"),
+                name = method_name,
+                params = param_str,
+                ret_type = return_type,
+                full_path = method.md_full_path,
+                params_json = params_json,
+                input_arg = input_arg,
+            )
+        };
+    }
+
     // Generate return type and implementation based on streaming
     if method.is_streaming() {
         // Streaming method - returns filtered stream of typed data
@@ -825,6 +1091,10 @@ fn collect_cross_namespace_imports_hierarchical(
         scan_type_ref_hierarchical(&method.md_returns, &node.full_path, ir, &mut imports);
         for param in &method.sent_params() {
             scan_type_ref_hierarchical(&param.pd_type, &node.full_path, ir, &mut imports);
+        }
+        // BIDIR-19: the input half's item type
+        if let Some(input) = &method.md_input {
+            scan_type_ref_hierarchical(input, &node.full_path, ir, &mut imports);
         }
     }
 

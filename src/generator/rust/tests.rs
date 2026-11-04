@@ -97,7 +97,7 @@ mod tests {
                 md_deprecation: None,
             md_requires_credential: None,
             md_auth_posture: None,
-            md_public: false, md_grant: None, md_target: None, md_long_description: None,
+            md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,
             },
         );
 
@@ -127,7 +127,7 @@ mod tests {
                 md_deprecation: None,
             md_requires_credential: None,
             md_auth_posture: None,
-            md_public: false, md_grant: None, md_target: None, md_long_description: None,
+            md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,
             },
         );
 

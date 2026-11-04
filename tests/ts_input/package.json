@@ -1,0 +1,10 @@
+{
+  "name": "service-codegen-ts-input-tests",
+  "private": true,
+  "description": "BIDIR-19: the type-level tests of the input half and its run against a real service, run by tests/bidir19_input_test.rs",
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "expect-type": "1.4.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -3,6 +3,26 @@
 Releases before 0.5.2 are the repository's version tags (0.1.0 to 0.5.0) and
 NAMING-10's merge (0.5.1, the rename).
 
+## Unreleased
+
+- BIDIR-19: a method with an input half (`mdInput`, plexus-wire spec/10) is
+  generated. TypeScript: the pull form takes the input last
+  (`AsyncIterable<T> | Iterable<T>`, pulled only while the service's credit
+  is unspent) and `open<Method>()` answers `{ input, output, onDisconnect }`,
+  whose `input.write()` always queues — never refused, never dropped
+  (`buffered`, `onPressure` past `pressureAt`, `unsent()`, `unacked()`,
+  `end()`); a disconnect is always `onDisconnect({ sent, acked, unsent })` and
+  a `DisconnectedError` on the output, nothing resent; `past_credit`,
+  `out_of_sequence`, `invalid_input`, `too_much_input` and `input_closed` are
+  typed errors; an `AbortSignal` unsubscribes. An `Input<Bytes>` item (the IR's
+  `RefPrimitive string binary`) is a `Uint8Array`, one WebSocket binary
+  message `[0x01][subscription u64 BE][seq u64 BE][payload]`. The runtime is
+  `input.ts` and the transport's hooks, generated only for an IR with an
+  input half. Rust: the input is the last argument,
+  `impl Stream<Item = T> + Send + 'static` (`::bytes::Bytes` for bytes), sent
+  by the base client under credit. An IR without one generates byte-identical
+  output. `MethodDef.md_input`, `TypeRef::is_binary`, `IR::has_input`.
+
 ## 0.6.0 — 2026-11-02
 
 RETURNS-36 brings the returns/0.7 line over main, and RETURNS-15 with it:

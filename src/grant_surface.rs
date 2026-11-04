@@ -416,7 +416,7 @@ mod tests {
             md_public: false,
             md_grant: grant.map(str::to_string),
             md_target: target.map(str::to_string),
-            md_long_description: long.map(str::to_string),
+            md_long_description: long.map(str::to_string), md_input: None,
         }
     }
 

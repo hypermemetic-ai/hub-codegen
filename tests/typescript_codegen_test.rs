@@ -32,7 +32,7 @@ fn minimal_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     let mut ir_plugins = HashMap::new();
     ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
@@ -319,7 +319,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     ir_methods.insert(
         "health.status".to_string(),
@@ -332,7 +332,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("boolean".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     ir_methods.insert(
         "solar.earth.info".to_string(),
@@ -345,7 +345,7 @@ fn multi_ns_ir() -> IR {
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
-            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None,},
+            md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     let mut ir_plugins = HashMap::new();
     ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
