@@ -9,6 +9,11 @@
 //   (`#[serde(rename = "status_changed")]`) instead of `rename_all =
 //   "lowercase"`, which spelled `status_changed` as `statuschanged`.
 //
+// - RETURNS-46: every namespace's aggregate, `{Ns}Event`, in a new
+//   `<ns>/events.ts`, which `<ns>/index.ts` re-exports. The new files are
+//   not in the records ([`is_returns46_events`]) and the export line is
+//   taken back out; tests/returns46_aggregate_tree_test.rs holds them.
+//
 // The output is spelled back as the records had it before it is hashed;
 // anything else that moved still fails the hash. Each change has its own
 // test that holds the new form (tests/returns16_variant_tags_test.rs,
@@ -17,9 +22,17 @@
 const SMOKE_NOW: &str = "const WS_URL = process.env.PLEXUS_URL ?? \"\";\nif (!WS_URL) throw new Error(\"PLEXUS_URL is not set: export the backend's WebSocket URL (ws://host:port)\");\n";
 const SMOKE_BEFORE: &str = "const WS_URL = process.env.PLEXUS_URL ?? \"ws://localhost:4444\";\n";
 
+const EVENTS_EXPORT: &str = "export * from './events';\n";
+
+/// RETURNS-46: a namespace's `events.ts`, the aggregate, new since the records.
+#[allow(dead_code)]
+pub fn is_returns46_events(path: &str) -> bool {
+    path.ends_with("/events.ts")
+}
+
 /// Today's output, as the records before RETURNS-36 had it.
 pub fn before_returns_line(s: &str) -> String {
-    let s = s.replace(SMOKE_NOW, SMOKE_BEFORE);
+    let s = s.replace(SMOKE_NOW, SMOKE_BEFORE).replacen(EVENTS_EXPORT, "", 1);
     let lines: Vec<&str> = s.split('\n').collect();
     let mut out: Vec<String> = Vec::with_capacity(lines.len());
     let mut in_tagged_enum = false;

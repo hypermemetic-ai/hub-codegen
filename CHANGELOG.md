@@ -3,6 +3,16 @@
 Releases before 0.5.2 are the repository's version tags (0.1.0 to 0.5.0) and
 NAMING-10's merge (0.5.1, the rename).
 
+## Unreleased
+
+- RETURNS-46: every namespace gets its aggregate, `{Ns}Event` (`{Ns}Aggregate`
+  when the namespace has a type of that name), in `<ns>/events.ts`, which
+  `<ns>/index.ts` re-exports: one member per method, `{ method; event: I }`
+  (`Result<T, E>` for a method with an error type), one per static child
+  carrying the child's aggregate, one per dynamic child carrying
+  `{ name: string; event }` — the Rust aggregate's JSON. A dynamic child's
+  event is `unknown` from IR 3.0, which describes none of its methods.
+
 ## 0.6.0 — 2026-11-02
 
 RETURNS-36 brings the returns/0.7 line over main, and RETURNS-15 with it:

@@ -211,7 +211,7 @@ fn existing_output_unchanged() {
         compared += 1;
     }
     for path in now.keys() {
-        assert!(before.contains_key(path), "{path} is new");
+        assert!(before.contains_key(path) || returns_line::is_returns46_events(path), "{path} is new");
     }
     assert!(compared > 90, "compared {compared} files");
 }

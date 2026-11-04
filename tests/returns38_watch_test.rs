@@ -155,8 +155,8 @@ fn existing_output_unchanged() {
             }
             for path in files.keys() {
                 assert!(
-                    had.contains_key(path.as_str()) || path == "watch.ts",
-                    "{dir}/{path} is new; only watch.ts may be"
+                    had.contains_key(path.as_str()) || path == "watch.ts" || returns_line::is_returns46_events(path),
+                    "{dir}/{path} is new; only watch.ts (and RETURNS-46's events.ts) may be"
                 );
             }
             if dir.contains("-ts-") {

@@ -481,7 +481,7 @@
       "tdNamespace": "tree"
     },
     "tree.AuthPosture": {
-      "tdDescription": "Declared auth-enforcement posture of the activation a method belongs to.\n\nMirrors `plexus-macros`' RED-6 `auth = \"required\" | \"optional\" | \"mixed\" |\n\"none\"` activation attribute, which until R-1/R-2 (the ROLES+AP merged\nwave) was parsed and compile-enforced but never emitted — invisible to\nevery downstream IR consumer (synapse, hub-codegen, generated clients).\n\nSemantics (compile-time enforcement lives in plexus-macros; this is the\nescaped declaration):\n\n- `Required` — every method is auth-gated (`#[from_auth]`) or explicitly\n  `public`.\n- `Optional` — no enforcement; auth may be asymmetric across methods.\n- `Mixed` — like `Optional`, but the asymmetry is explicitly acknowledged.\n- `None` — affirmatively public activation; no method takes auth.\n\n# Wire back-compat\n\nAdded in R-2 (joint AP-1). Pre-existing readers tolerate the field's\nabsence (`auth_posture` is omitted on the wire when the activation never\ndeclared a posture) and pre-existing IRs that omit the field decode\ncleanly via `#[serde(default)]` on the field site. `#[non_exhaustive]`\nreserves space for future postures without breaking downstream match arms.",
+      "tdDescription": "Declared auth-enforcement posture of the activation a method belongs to.\n\nMirrors `plexus-macros`' RED-6 `auth = \"required\" | \"optional\" | \"mixed\" |\n\"none\"` activation attribute, which until R-1/R-2 (the ROLES+AP merged\nwave) was parsed and compile-enforced but never emitted — invisible to\nevery downstream IR consumer (synapse, service-codegen, generated clients).\n\nSemantics (compile-time enforcement lives in plexus-macros; this is the\nescaped declaration):\n\n- `Required` — every method is auth-gated (`#[from_auth]`) or explicitly\n  `public`.\n- `Optional` — no enforcement; auth may be asymmetric across methods.\n- `Mixed` — like `Optional`, but the asymmetry is explicitly acknowledged.\n- `None` — affirmatively public activation; no method takes auth.\n\n# Wire back-compat\n\nAdded in R-2 (joint AP-1). Pre-existing readers tolerate the field's\nabsence (`auth_posture` is omitted on the wire when the activation never\ndeclared a posture) and pre-existing IRs that omit the field decode\ncleanly via `#[serde(default)]` on the field site. `#[non_exhaustive]`\nreserves space for future postures without breaking downstream match arms.",
       "tdKind": {
         "kseValues": [
           "required",
@@ -1003,7 +1003,7 @@
       "tdNamespace": "tree"
     },
     "tree.MethodRole": {
-      "tdDescription": "Describes how a method participates in the activation graph.\n\nEvery method on a plugin is exactly one of three kinds:\n\n- `Rpc` — a regular RPC endpoint (the default).\n- `StaticChild` — the method returns a child activation by a static name\n  (no lookup argument). Used by `#[child]`-annotated methods on hubs.\n- `DynamicChild { .. }` — the method gates a dynamic child keyed by its\n  argument. `list_method` optionally names a sibling method that enumerates\n  available keys, and `search_method` optionally names a sibling method\n  that searches keys.\n\nThis tag is consumed by downstream tooling (synapse, synapse-cc,\nintrospection clients) to reconstruct the child graph without a separate\nside-table. Today's macros emit `MethodRole::Rpc` for every method; IR-3\npopulates child roles from `#[child]` annotations.\n\n# Wire back-compat\n\nAdded in IR-2. Serde defaults to `Rpc` for pre-IR schemas.\n`#[non_exhaustive]` reserves space for future variants without breaking\ndownstream match arms.",
+      "tdDescription": "Describes how a method participates in the activation graph.\n\nEvery method on a plugin is exactly one of three kinds:\n\n- `Rpc` — a regular RPC endpoint (the default).\n- `StaticChild` — the method returns a child activation by a static name\n  (no lookup argument). Used by `#[child]`-annotated methods on services.\n- `DynamicChild { .. }` — the method gates a dynamic child keyed by its\n  argument. `list_method` optionally names a sibling method that enumerates\n  available keys, and `search_method` optionally names a sibling method\n  that searches keys.\n\nThis tag is consumed by downstream tooling (synapse, synapse-cc,\nintrospection clients) to reconstruct the child graph without a separate\nside-table. Today's macros emit `MethodRole::Rpc` for every method; IR-3\npopulates child roles from `#[child]` annotations.\n\n# Wire back-compat\n\nAdded in IR-2. Serde defaults to `Rpc` for pre-IR schemas.\n`#[non_exhaustive]` reserves space for future variants without breaking\ndownstream match arms.",
       "tdKind": {
         "keDiscriminator": "kind",
         "keVariants": [
@@ -1240,7 +1240,7 @@
           },
           {
             "fdDefault": null,
-            "fdDescription": "AUTH-4: in a caller's view of a gated hub, where the caller holds this\nmethod's grant (`[\"MENGER\"]`, `[\"*\"]`), within its session's ceiling.\nAbsent outside a caller's view (and on a public method the caller\nholds nowhere).",
+            "fdDescription": "AUTH-4: in a caller's view of a gated service, where the caller holds this\nmethod's grant (`[\"MENGER\"]`, `[\"*\"]`), within its session's ceiling.\nAbsent outside a caller's view (and on a public method the caller\nholds nowhere).",
             "fdName": "held_on",
             "fdRequired": false,
             "fdType": {
@@ -1495,12 +1495,12 @@
       "tdNamespace": "tree"
     },
     "tree.PluginSchema": {
-      "tdDescription": "A plugin's schema with methods and child summaries.\n\nChildren are represented as summaries (namespace, description, hash) rather\nthan full recursive schemas. This enables lazy traversal - clients can fetch\nchild schemas individually via `{namespace}.schema`.\n\n- Leaf plugins have `children = None`\n- Hub plugins have `children = Some([ChildSummary, ...])`",
+      "tdDescription": "A plugin's schema with methods and child summaries.\n\nChildren are represented as summaries (namespace, description, hash) rather\nthan full recursive schemas. This enables lazy traversal - clients can fetch\nchild schemas individually via `{namespace}.schema`.\n\n- Leaf plugins have `children = None`\n- Service plugins have `children = Some([ChildSummary, ...])`",
       "tdKind": {
         "ksFields": [
           {
             "fdDefault": null,
-            "fdDescription": "Child plugin summaries (None = leaf plugin, Some = hub plugin)\n\n# Deprecated (IR-4)\n\nThis side-table is deterministically derived from the method list's\n`MethodRole` tags (one `ChildSummary` per non-`Rpc` method). It stays\non the wire for back-compat during the 0.5 transition window and is\nslated for removal in 0.6.\n\nConsumers reading child metadata should switch to iterating\n`methods` and filtering by `role != MethodRole::Rpc`. The name field\non each `MethodSchema` is the child's namespace.",
+            "fdDescription": "Child plugin summaries (None = leaf plugin, Some = service plugin)\n\n# Deprecated (IR-4)\n\nThis side-table is deterministically derived from the method list's\n`MethodRole` tags (one `ChildSummary` per non-`Rpc` method). It stays\non the wire for back-compat during the 0.5 transition window and is\nslated for removal in 0.6.\n\nConsumers reading child metadata should switch to iterating\n`methods` and filtering by `role != MethodRole::Rpc`. The name field\non each `MethodSchema` is the child's namespace.",
             "fdName": "children",
             "fdRequired": false,
             "fdType": {
@@ -1676,7 +1676,7 @@
           },
           {
             "fdDefault": null,
-            "fdDescription": "AUTH-4: which view of a gated hub this schema answers from —\n`anonymous` (only the door: the public methods) or `caller` (the\nmethods the caller holds). Absent from every schema a hub without a\ngate answers, so those stay byte-identical.",
+            "fdDescription": "AUTH-4: which view of a gated service this schema answers from —\n`anonymous` (only the door: the public methods) or `caller` (the\nmethods the caller holds). Absent from every schema a service without a\ngate answers, so those stay byte-identical.",
             "fdName": "view",
             "fdRequired": false,
             "fdType": {
@@ -1847,7 +1847,7 @@
       "tdNamespace": "tree"
     },
     "tree.ViewKind": {
-      "tdDescription": "AUTH-4: the two views of a gated hub. On the wire, `\"anonymous\"` or\n`\"caller\"`.",
+      "tdDescription": "AUTH-4: the two views of a gated service. On the wire, `\"anonymous\"` or\n`\"caller\"`.",
       "tdKind": {
         "kseValues": [
           "anonymous",

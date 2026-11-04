@@ -42,6 +42,15 @@ pub fn generate_namespaces(
     let mut sorted: Vec<(String, Vec<&MethodDef>)> = methods_by_ns.into_iter().collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
 
+    // RETURNS-46: the namespaces this run writes — a child's aggregate is
+    // imported from its `events.ts` only when it is one of them.
+    let generated: BTreeSet<String> = sorted
+        .iter()
+        .map(|(ns, _)| ns)
+        .filter(|ns| !ns.is_empty() && filter.is_none_or(|f| ns_matches_filter(ns, f)))
+        .cloned()
+        .collect();
+
     // Generate interface and implementation for each namespace
     for (namespace, methods) in sorted {
         // Skip empty namespace — those are core plexus methods
@@ -61,6 +70,7 @@ pub fn generate_namespaces(
         // Convert dotted namespace to directory path
         let path = namespace.replace('.', "/");
         files.insert(format!("{}/client.ts", path), content);
+        files.insert(format!("{}/events.ts", path), super::events::generate_events(&namespace, &methods, ir, &generated));
 
         // Check if this namespace has any types
         let has_types = ir.ir_types.values().any(|td| td.td_namespace == namespace);
@@ -119,9 +129,11 @@ fn generate_namespace_index(namespace: &str, has_types: bool) -> String {
         ""
     };
 
+    // RETURNS-46: the namespace's aggregate, `{Ns}Event`, from events.ts.
     format!(
         "// Auto-generated namespace module for {}\n\
-         {}export * from './client';\n",
+         {}export * from './client';\n\
+         export * from './events';\n",
         namespace, types_export
     )
 }
@@ -637,7 +649,7 @@ fn render_request_jsdoc_fallback(namespace: &str, ir: &IR) -> Vec<String> {
 
 /// SYNAPSE-CC-2: the namespace a static child accessor opens — its full
 /// path (`tickets.inputs`) — when the IR holds that namespace's methods.
-fn static_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
+pub(super) fn static_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
     if !matches!(method.md_role, MethodRole::StaticChild) {
         return None;
     }
@@ -677,7 +689,7 @@ fn dynamic_child_target_type(method: &MethodDef, ir: &IR) -> String {
 ///
 /// Returns `None` when the return type is not a `RefNamed` or the child
 /// namespace can't be determined.
-fn dynamic_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
+pub(super) fn dynamic_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
     let inner = unwrap_return_type(&method.md_returns);
     if let TypeRef::RefNamed(qn) = inner {
         let full = qn.full_name();
@@ -979,7 +991,7 @@ fn param_idents(params: &[ParamDef]) -> std::collections::HashMap<String, String
 }
 
 /// Convert to PascalCase
-fn to_pascal(s: &str) -> String {
+pub(super) fn to_pascal(s: &str) -> String {
     let mut result = String::new();
     let mut capitalize = true;
     for c in s.chars() {

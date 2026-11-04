@@ -2,6 +2,7 @@
 
 pub mod types;
 pub mod namespaces;
+pub mod events;
 pub mod rpc;
 pub mod transport;
 pub mod package;
