@@ -112,7 +112,7 @@ impl ConfigurableBackend {
                         md_full_path: full_path,
                         md_namespace: plugin_name.clone(),
                         md_description: Some(format!("Method {}", method_name)),
-                        md_streaming: false,
+                        md_cardinality: Cardinality::One, md_error: None, md_progress: None,
                         md_params: vec![ParamDef {
                             pd_name: "input".to_string(),
                             pd_type: TypeRef::RefPrimitive("string".to_string(), None),

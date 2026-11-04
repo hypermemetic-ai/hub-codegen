@@ -4,9 +4,14 @@ use crate::ir::{IR, MethodDef, MethodRole, TypeDef, TypeRef};
 use crate::credential_surface;
 use crate::grant_surface;
 use crate::deprecation::{self, DeprecationWarning};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-/// Node in namespace hierarchy tree
+/// Node in namespace hierarchy tree.
+///
+/// Built by [`build_namespace_tree`] with methods and types sorted by name
+/// and children keyed in a `BTreeMap`, so every walk over the tree — and
+/// therefore every generated module and warning list — has one defined
+/// order whatever the iteration order of the IR's `HashMap`s.
 pub struct NamespaceNode {
     /// Name of this namespace segment (e.g., "org")
     pub name: String,
@@ -14,14 +19,14 @@ pub struct NamespaceNode {
     /// Full dotted path (e.g., "hyperforge.org")
     pub full_path: String,
 
-    /// Methods defined at this exact namespace level
+    /// Methods defined at this exact namespace level, sorted by name
     pub methods: Vec<MethodDef>,
 
-    /// Types defined at this exact namespace level
+    /// Types defined at this exact namespace level, sorted by name
     pub types: Vec<TypeDef>,
 
-    /// Child namespaces
-    pub children: HashMap<String, NamespaceNode>,
+    /// Child namespaces, in name order
+    pub children: BTreeMap<String, NamespaceNode>,
 }
 
 impl NamespaceNode {
@@ -31,7 +36,7 @@ impl NamespaceNode {
             full_path,
             methods: Vec::new(),
             types: Vec::new(),
-            children: HashMap::new(),
+            children: BTreeMap::new(),
         }
     }
 }
@@ -183,12 +188,23 @@ impl PlexusClient {
 "#.to_string()
 }
 
-/// Build hierarchical namespace tree from IR
+/// Build hierarchical namespace tree from IR.
+///
+/// The IR's `ir_methods` / `ir_types` are `HashMap`s, whose iteration order
+/// is randomized per process; the generated modules emit each node's
+/// methods and types in `Vec` order. So the maps are walked in key order and
+/// every node's methods and types are then sorted by name — the order the
+/// TypeScript generator already uses — making the output byte-identical run
+/// to run (RETURNS-23). The IR carries no declaration order to preserve
+/// (synapse lists each plugin's methods alphabetically).
 pub fn build_namespace_tree(ir: &IR) -> NamespaceNode {
     let mut root = NamespaceNode::new(String::new(), String::new());
 
     // Insert all methods into tree
-    for method in ir.ir_methods.values() {
+    let mut method_paths: Vec<&String> = ir.ir_methods.keys().collect();
+    method_paths.sort();
+    for path in method_paths {
+        let method = &ir.ir_methods[path];
         if method.md_namespace.is_empty() {
             continue; // Skip core plexus methods
         }
@@ -196,14 +212,28 @@ pub fn build_namespace_tree(ir: &IR) -> NamespaceNode {
     }
 
     // Insert all types into tree
-    for typedef in ir.ir_types.values() {
+    let mut type_names: Vec<&String> = ir.ir_types.keys().collect();
+    type_names.sort();
+    for name in type_names {
+        let typedef = &ir.ir_types[name];
         if typedef.td_namespace.is_empty() {
             continue; // Skip core types (PlexusStreamItem, etc.)
         }
         insert_type_into_tree(&mut root, &typedef.td_namespace, typedef.clone());
     }
 
+    sort_namespace_tree(&mut root);
     root
+}
+
+/// Sort every node's methods and types by name (stable, so entries with
+/// equal names keep the IR-key order they were inserted in).
+fn sort_namespace_tree(node: &mut NamespaceNode) {
+    node.methods.sort_by(|a, b| a.md_name.cmp(&b.md_name));
+    node.types.sort_by(|a, b| a.td_name.cmp(&b.td_name));
+    for child in node.children.values_mut() {
+        sort_namespace_tree(child);
+    }
 }
 
 /// Insert method into namespace tree at correct path
@@ -306,9 +336,7 @@ fn generate_namespace_node(
         // Declare child modules if any
         if !node.children.is_empty() {
             content.push("// Child namespaces".to_string());
-            let mut child_names: Vec<_> = node.children.keys().collect();
-            child_names.sort();
-            for child_name in child_names {
+            for child_name in node.children.keys() {
                 content.push(format!("pub mod {};", child_name));
             }
             content.push("".to_string());
@@ -653,7 +681,7 @@ fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
     };
 
     // Generate return type and implementation based on streaming
-    if method.md_streaming {
+    if method.is_streaming() {
         // Streaming method - returns filtered stream of typed data
         format!(
             r#"{doc}
@@ -725,6 +753,8 @@ fn type_ref_to_rust(tr: &TypeRef, ir: &IR) -> String {
         TypeRef::RefOptional(inner) => format!("Option<{}>", type_ref_to_rust(inner, ir)),
         TypeRef::RefAny => "serde_json::Value".to_string(),
         TypeRef::RefUnknown => "serde_json::Value".to_string(),
+        TypeRef::RefMap(inner) => format!("std::collections::BTreeMap<String, {}>", type_ref_to_rust(inner, ir)),
+        TypeRef::RefTuple(items) => format!("({})", items.iter().map(|t| type_ref_to_rust(t, ir)).collect::<Vec<_>>().join(", ")),
     }
 }
 
@@ -809,8 +839,8 @@ fn collect_cross_namespace_imports_hierarchical(
             }
             TypeKind::KindEnum { ke_variants, .. } => {
                 for variant in ke_variants {
-                    for field in &variant.vd_fields {
-                        scan_type_ref_hierarchical(&field.fd_type, &node.full_path, ir, &mut imports);
+                    for t in variant.type_refs() {
+                        scan_type_ref_hierarchical(t, &node.full_path, ir, &mut imports);
                     }
                 }
             }
@@ -871,6 +901,11 @@ fn scan_type_ref_hierarchical(
         TypeRef::RefOptional(inner) => {
             scan_type_ref_hierarchical(inner, current_namespace, ir, imports);
         }
+        TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+            for c in tr.children() {
+                scan_type_ref_hierarchical(c, current_namespace, ir, imports);
+            }
+        }
         _ => {}
     }
 }
@@ -897,6 +932,11 @@ fn collect_cross_namespace_type_imports(ir: &IR, current_namespace: &str) -> Has
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, ir, current_namespace, imports),
             TypeRef::RefOptional(inner) => collect_from_type_ref(inner, ir, current_namespace, imports),
+            TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+                for c in tr.children() {
+                    collect_from_type_ref(c, ir, current_namespace, imports);
+                }
+            }
             _ => {}
         }
     }
@@ -926,8 +966,8 @@ fn collect_cross_namespace_type_imports(ir: &IR, current_namespace: &str) -> Has
                 }
                 TypeKind::KindEnum { ke_variants, .. } => {
                     for variant in ke_variants {
-                        for field in &variant.vd_fields {
-                            collect_from_type_ref(&field.fd_type, ir, current_namespace, &mut imports);
+                        for t in variant.type_refs() {
+                            collect_from_type_ref(t, ir, current_namespace, &mut imports);
                         }
                     }
                 }

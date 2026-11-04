@@ -8,8 +8,11 @@ pub mod rust;
 
 use std::collections::HashMap;
 
-/// A warning emitted during code generation
-#[derive(Debug, Clone)]
+/// A warning emitted during code generation.
+///
+/// Ordered by `location`, then `message`: generators return their warnings
+/// sorted, so the list is identical run to run (RETURNS-23).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Warning {
     pub location: String,
     pub message: String,
@@ -72,8 +75,10 @@ pub struct GenerationOptions {
     pub plugins_filter: Option<Vec<String>>,
     /// Import path for PlexusRpcClient in the smoke test (default: "../transport")
     pub smoke_transport_path: String,
-    /// Backend WebSocket URL used as fallback in generated smoke tests
-    pub backend_url: String,
+    /// Backend WebSocket URL generated smoke tests fall back to when
+    /// `PLEXUS_URL` is unset. `None` (the default): no URL is baked in and the
+    /// smoke tests require `PLEXUS_URL`.
+    pub backend_url: Option<String>,
     /// IR-7: Deprecation annotation emission toggle.
     /// Default `enabled: true` — annotations + stderr warnings are emitted
     /// when the IR is post-IR. Set to `enabled: false` via
@@ -88,7 +93,7 @@ impl Default for GenerationOptions {
             generate: GenerateSelector::All,
             plugins_filter: None,
             smoke_transport_path: "../transport".to_string(),
-            backend_url: "ws://localhost:4444".to_string(),
+            backend_url: None,
             deprecation: crate::deprecation::DeprecationOptions::default(),
         }
     }

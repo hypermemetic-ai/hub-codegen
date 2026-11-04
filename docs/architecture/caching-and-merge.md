@@ -48,7 +48,7 @@ The **plugin hash** concatenates `filename:hash\n` for all sorted files, then ha
 ```
 
 - `target`: language target (`"typescript"` or `"rust"`)
-- `backend`: from `IR.ir_backend` field (e.g., `"substrate"`)
+- `backend`: from `IR.ir_backend` field (e.g., `"menger"`)
 - Falls back to `USERPROFILE` on Windows
 
 ### Schema (Version 2.0)
@@ -268,6 +268,6 @@ Read errors are silently swallowed (`.ok()`). The merge proceeds treating all fi
 - Toolchain version mismatch → manifest updated, files regenerated
 - Performance: 1000 hash computations in < 100ms (actual: ~97µs per hash)
 
-**`CACHE_CONTRACTS.md`** — Full JSON schema spec and version contract documentation.
+**[`CACHE_CONTRACTS.md`](CACHE_CONTRACTS.md)** — Full JSON schema spec and version contract documentation.
 
-**`INCREMENTAL_CODEGEN.md`** — Design rationale and V2 roadmap (granular `self_hash` / `children_hash` per plugin, not yet implemented).
+**[`INCREMENTAL_CODEGEN.md`](INCREMENTAL_CODEGEN.md)** — Design rationale and V2 roadmap (granular `self_hash` / `children_hash` per plugin, not yet implemented).

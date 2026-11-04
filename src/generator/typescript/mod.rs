@@ -112,6 +112,11 @@ fn collect_ns_refs_from_typeref(tr: &TypeRef, namespaces: &mut HashSet<String>) 
         }
         TypeRef::RefArray(inner) => collect_ns_refs_from_typeref(inner, namespaces),
         TypeRef::RefOptional(inner) => collect_ns_refs_from_typeref(inner, namespaces),
+        TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+            for c in tr.children() {
+                collect_ns_refs_from_typeref(c, namespaces);
+            }
+        }
         _ => {}
     }
 }
@@ -126,8 +131,8 @@ fn collect_ns_refs_from_kind(kind: &TypeKind, namespaces: &mut HashSet<String>) 
         }
         TypeKind::KindEnum { ke_variants, .. } => {
             for variant in ke_variants {
-                for field in &variant.vd_fields {
-                    collect_ns_refs_from_typeref(&field.fd_type, namespaces);
+                for t in variant.type_refs() {
+                    collect_ns_refs_from_typeref(t, namespaces);
                 }
             }
         }
@@ -143,14 +148,7 @@ pub fn generate(ir: &IR, options: &GenerationOptions) -> Result<GenerationResult
     let mut warnings = Vec::new();
 
     // Validate IR version
-    if ir.ir_version != "2.0" {
-        anyhow::bail!(
-            "Unsupported IR version: {}. Expected 2.0.\n\
-             This version of service-codegen requires IR v2.0 with structured TypeRef.\n\
-             Please regenerate IR with latest Synapse.",
-            ir.ir_version
-        );
-    }
+    crate::ir::check_ir_version(&ir.ir_version)?;
 
     // TICKETS-37: a type the protocol root declares and a generated
     // namespace uses lives in that namespace, and every other imports it.
@@ -233,10 +231,10 @@ fn generate_code_files(
     let index_filter = partition.as_ref().map(|p| &p.requested);
     files.insert("index.ts".to_string(), generate_index_filtered(ir, options.transport, index_filter));
     files.insert("tsconfig.json".to_string(), package::generate_tsconfig(options.transport));
-    files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, &options.backend_url));
+    files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, options.backend_url.as_deref()));
 
     if tests::has_bidir_methods(ir) {
-        files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport, &options.backend_url));
+        files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport, options.backend_url.as_deref()));
     }
 
     files
@@ -310,7 +308,7 @@ fn generate_plugins_only(
 /// GenSmoke: schema walk smoke test (no test framework)
 fn generate_smoke_only(ir: &IR, options: &GenerationOptions) -> HashMap<String, String> {
     let mut files = HashMap::new();
-    let content = tests::generate_schema_walk_smoke(ir, options.transport, &options.smoke_transport_path);
+    let content = tests::generate_schema_walk_smoke(ir, options.transport, &options.smoke_transport_path, options.backend_url.as_deref());
     files.insert("smoke.ts".to_string(), content);
     files
 }
@@ -425,6 +423,10 @@ fn collect_warnings(ir: &IR, warnings: &mut Vec<Warning>) {
             _ => {}
         }
     }
+
+    // The IR's maps iterate in a per-process random order; sort so the
+    // warnings list is identical run to run (RETURNS-23).
+    warnings.sort();
 }
 
 fn generate_index(ir: &IR, transport: TransportEnv) -> String {

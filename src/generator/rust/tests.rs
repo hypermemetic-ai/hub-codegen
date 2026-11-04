@@ -56,7 +56,7 @@ mod tests {
                         VariantDef {
                             vd_name: "started".to_string(),
                             vd_description: Some("Check started".to_string()),
-                            vd_fields: vec![],
+                            vd_fields: vec![], vd_ref: None,
                         },
                         VariantDef {
                             vd_name: "completed".to_string(),
@@ -71,9 +71,9 @@ mod tests {
                                 fd_required: true,
                                 fd_default: None,
                                 fd_deprecation: None,
-                            }],
+                            }], vd_ref: None,
                         },
-                    ],
+                    ], ke_repr: Default::default(),
                 },
             },
         );
@@ -86,7 +86,7 @@ mod tests {
                 md_full_path: "health.check".to_string(),
                 md_namespace: "health".to_string(),
                 md_description: Some("Check service health".to_string()),
-                md_streaming: false,
+                md_cardinality: Cardinality::One, md_error: None, md_progress: None,
                 md_params: vec![],
                 md_returns: TypeRef::RefNamed(QualifiedName {
                     qn_namespace: "health".to_string(),
@@ -109,7 +109,7 @@ mod tests {
                 md_full_path: "health.watch".to_string(),
                 md_namespace: "health".to_string(),
                 md_description: Some("Watch health status changes".to_string()),
-                md_streaming: true,
+                md_cardinality: Cardinality::Many, md_error: None, md_progress: None,
                 md_params: vec![ParamDef {
                     pd_name: "interval".to_string(),
                     pd_type: TypeRef::RefPrimitive("integer".to_string(), Some("int64".to_string())),

@@ -204,8 +204,8 @@ fn generate_namespace(
     let cross_ns_imports = collect_cross_namespace_imports(&flat_methods, namespace);
 
     // Only import helpers that are actually used by this namespace's methods
-    let uses_extract_data = flat_methods.iter().any(|m| m.md_streaming);
-    let uses_collect_one  = flat_methods.iter().any(|m| !m.md_streaming);
+    let uses_extract_data = flat_methods.iter().any(|m| m.is_streaming());
+    let uses_collect_one  = flat_methods.iter().any(|m| !m.is_streaming());
     let uses_dynamic_child = !dynamic_children.is_empty();
 
     // RETURNS-17: a streaming method returns a MethodStream (the runtime's
@@ -373,7 +373,7 @@ fn generate_namespace(
 
         // Streaming methods return a MethodStream that carries their path
         // (RETURNS-17); non-streaming return Promise
-        let full_return = if method.md_streaming {
+        let full_return = if method.is_streaming() {
             format!("MethodStream<'{}', {}>", method.md_full_path, return_type)
         } else {
             format!("Promise<{}>", return_type)
@@ -505,7 +505,7 @@ fn generate_namespace(
                 }
             }
         }
-        if method.md_streaming {
+        if method.is_streaming() {
             let stream_type = format!("MethodStream<'{}', {}>", full_path, return_type);
             lines.push(format!("  {}({}): {} {{", method_name, params_signature, stream_type));
             lines.push(format!("    const stream = this.rpc.call('{}', {});", full_path, params_object));
@@ -767,6 +767,11 @@ fn collect_type_imports(methods: &[&MethodDef], namespace: &str) -> Vec<String> 
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, imports, namespace),
             TypeRef::RefOptional(inner) => collect_from_type_ref(inner, imports, namespace),
+            TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+                for c in tr.children() {
+                    collect_from_type_ref(c, imports, namespace);
+                }
+            }
             _ => {}
         }
     }
@@ -809,6 +814,11 @@ fn collect_cross_namespace_imports(methods: &[&MethodDef], current_namespace: &s
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, imports, current_namespace),
             TypeRef::RefOptional(inner) => collect_from_type_ref(inner, imports, current_namespace),
+            TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+                for c in tr.children() {
+                    collect_from_type_ref(c, imports, current_namespace);
+                }
+            }
             _ => {}
         }
     }

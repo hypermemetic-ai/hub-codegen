@@ -38,10 +38,9 @@ fn golden_dir() -> PathBuf {
 /// Compare `actual` against the committed golden file `name`, or rewrite
 /// the golden when `UPDATE_GOLDEN=1` is set in the environment.
 ///
-/// Golden inputs are chosen to be byte-deterministic: the TypeScript
-/// generator sorts methods by name; for Rust (which preserves HashMap
-/// iteration order per namespace) the golden fixtures put exactly one
-/// method in each namespace.
+/// Generated output is byte-deterministic: both generators sort a
+/// namespace's methods and types by name (the Rust generator since
+/// RETURNS-23).
 fn assert_golden(name: &str, actual: &str) {
     let path = golden_dir().join(name);
     if std::env::var("UPDATE_GOLDEN").is_ok() {
@@ -65,8 +64,7 @@ fn assert_golden(name: &str, actual: &str) {
     );
 }
 
-/// Build a `MethodDef` with the given credential surface. One method per
-/// namespace keeps Rust codegen byte-deterministic for golden comparison.
+/// Build a `MethodDef` with the given credential surface.
 fn surfaced_method(
     namespace: &str,
     name: &str,
@@ -80,7 +78,7 @@ fn surfaced_method(
         md_full_path: format!("{}.{}", namespace, name),
         md_namespace: namespace.to_string(),
         md_description: Some(description.to_string()),
-        md_streaming: false,
+        md_cardinality: Cardinality::One, md_error: None, md_progress: None,
         md_params: vec![],
         md_returns: TypeRef::RefPrimitive("string".to_string(), None),
         md_bidir_type: None,
@@ -185,7 +183,7 @@ fn credential_fixture() -> IR {
             md_full_path: "cone.send_message".to_string(),
             md_namespace: "cone".to_string(),
             md_description: Some("Send a message".to_string()),
-            md_streaming: false,
+            md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
@@ -210,7 +208,7 @@ fn credential_fixture() -> IR {
             md_full_path: "cone.ping".to_string(),
             md_namespace: "cone".to_string(),
             md_description: Some("Liveness check".to_string()),
-            md_streaming: false,
+            md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,
@@ -229,7 +227,7 @@ fn credential_fixture() -> IR {
             md_full_path: "cone.list".to_string(),
             md_namespace: "cone".to_string(),
             md_description: Some("List things".to_string()),
-            md_streaming: false,
+            md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
             md_bidir_type: None,

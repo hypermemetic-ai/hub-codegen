@@ -72,7 +72,7 @@ fn method(
         md_full_path: format!("{}.{}", namespace, name),
         md_namespace: namespace.to_string(),
         md_description: Some(description.to_string()),
-        md_streaming: streaming,
+        md_cardinality: Cardinality::from_streaming(streaming), md_error: None, md_progress: None,
         md_params: params,
         md_returns: TypeRef::RefPrimitive("string".to_string(), None),
         md_bidir_type: None,

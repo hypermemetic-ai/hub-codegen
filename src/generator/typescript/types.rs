@@ -1,6 +1,6 @@
 //! Type generation
 
-use crate::ir::{IR, TypeDef, TypeKind, TypeRef, FieldDef, VariantDef};
+use crate::ir::{EnumRepr, IR, TypeDef, TypeKind, TypeRef, FieldDef, VariantDef};
 use crate::deprecation::{self, DeprecationWarning};
 use crate::SERVICE_CODEGEN_VERSION;
 use std::collections::{HashSet, HashMap};
@@ -304,6 +304,11 @@ fn collect_all_referenced_types(ir: &IR) -> HashSet<String> {
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, refs),
             TypeRef::RefOptional(inner) => collect_from_type_ref(inner, refs),
+            TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+                for c in tr.children() {
+                    collect_from_type_ref(c, refs);
+                }
+            }
             _ => {}
         }
     }
@@ -331,6 +336,9 @@ fn collect_all_referenced_types(ir: &IR) -> HashSet<String> {
             TypeKind::KindEnum { ke_variants, .. } => {
                 for variant in ke_variants {
                     collect_from_fields(&variant.vd_fields, &mut refs);
+                    if let Some(t) = &variant.vd_ref {
+                        collect_from_type_ref(t, &mut refs);
+                    }
                 }
             }
             TypeKind::KindAlias { ka_target } => {
@@ -423,6 +431,11 @@ fn collect_cross_namespace_type_imports(typedefs: &[&TypeDef], current_namespace
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, imports, current_namespace),
             TypeRef::RefOptional(inner) => collect_from_type_ref(inner, imports, current_namespace),
+            TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+                for c in tr.children() {
+                    collect_from_type_ref(c, imports, current_namespace);
+                }
+            }
             _ => {}
         }
     }
@@ -442,6 +455,9 @@ fn collect_cross_namespace_type_imports(typedefs: &[&TypeDef], current_namespace
             TypeKind::KindEnum { ke_variants, .. } => {
                 for variant in ke_variants {
                     collect_from_fields(&variant.vd_fields, &mut imports, current_namespace);
+                    if let Some(t) = &variant.vd_ref {
+                        collect_from_type_ref(t, &mut imports, current_namespace);
+                    }
                 }
             }
             TypeKind::KindAlias { ka_target } => {
@@ -555,6 +571,11 @@ fn collect_missing_types_for_namespace(ir: &IR, namespace: &str) -> Vec<String> 
             }
             TypeRef::RefArray(inner) => collect_from_type_ref(inner, namespace, refs),
             TypeRef::RefOptional(inner) => collect_from_type_ref(inner, namespace, refs),
+            TypeRef::RefMap(_) | TypeRef::RefTuple(_) => {
+                for c in tr.children() {
+                    collect_from_type_ref(c, namespace, refs);
+                }
+            }
             _ => {}
         }
     }
@@ -645,8 +666,11 @@ fn generate_typedef_in_namespace(typedef: &TypeDef, namespace: &str) -> String {
         TypeKind::KindStruct { ks_fields } => {
             generate_interface_in_ns(&typedef.td_name, ks_fields, &typedef.td_description, namespace, false, None, "", &mut Vec::new())
         }
-        TypeKind::KindEnum { ke_discriminator, ke_variants } => {
+        TypeKind::KindEnum { ke_discriminator, ke_variants, ke_repr: EnumRepr::Internal } => {
             generate_union_in_ns(&typedef.td_name, ke_discriminator, ke_variants, &typedef.td_description, namespace)
+        }
+        TypeKind::KindEnum { ke_variants, ke_repr, .. } => {
+            generate_untagged_or_external_union(&typedef.td_name, *ke_repr, ke_variants, &typedef.td_description, namespace)
         }
         TypeKind::KindAlias { ka_target } => {
             generate_alias_in_ns(&typedef.td_name, ka_target, &typedef.td_description, namespace)
@@ -829,6 +853,61 @@ fn generate_union_in_ns(
     lines.join("\n")
 }
 
+/// An enum whose variants carry no internal tag (IR 2.1's `keRepr`):
+/// `external` — `{ name: {…fields} }`, `{ name: T }` for a newtype, `'name'`
+/// for a unit variant; `untagged` — each variant's own shape, its `vd_ref`
+/// or its fields. One exported type per variant, then the union.
+fn generate_untagged_or_external_union(
+    name: &str,
+    repr: EnumRepr,
+    variants: &[VariantDef],
+    desc: &Option<String>,
+    namespace: &str,
+) -> String {
+    let pascal_name = to_pascal(name);
+    let mut lines = Vec::new();
+    let fields_object = |fields: &[FieldDef]| -> String {
+        let body: Vec<String> = fields
+            .iter()
+            .map(|f| {
+                let optional = if f.fd_required { "" } else { "?" };
+                format!("{}{}: {}", to_camel(&f.fd_name), optional, f.fd_type.to_ts_in_namespace(namespace))
+            })
+            .collect();
+        format!("{{ {} }}", body.join("; "))
+    };
+    let mut flat_names = Vec::new();
+    for variant in variants {
+        let flat_name = format!("{}{}", pascal_name, to_pascal(&variant.vd_name));
+        let shape = match (&variant.vd_ref, variant.vd_fields.is_empty()) {
+            (Some(t), _) => t.to_ts_in_namespace(namespace),
+            (None, false) => fields_object(&variant.vd_fields),
+            (None, true) if repr == EnumRepr::External => String::new(),
+            (None, true) => "null".to_string(),
+        };
+        let ty = match repr {
+            EnumRepr::External if shape.is_empty() => format!("'{}'", variant.vd_name),
+            EnumRepr::External => format!("{{ {}: {} }}", variant.vd_name, shape),
+            _ => shape,
+        };
+        if let Some(d) = &variant.vd_description {
+            lines.push(format!("/** {} */", d));
+        }
+        lines.push(format!("export type {} = {};", flat_name, ty));
+        lines.push(String::new());
+        flat_names.push(flat_name);
+    }
+    if let Some(d) = desc {
+        let first_para = d.split("\n\n").next().unwrap_or(d).trim();
+        if !first_para.is_empty() {
+            lines.push(format!("/** {} */", first_para));
+        }
+    }
+    let union = if flat_names.is_empty() { "never".to_string() } else { flat_names.join(" | ") };
+    lines.push(format!("export type {} = {};", pascal_name, union));
+    lines.join("\n")
+}
+
 fn generate_alias_in_ns(name: &str, target: &TypeRef, desc: &Option<String>, namespace: &str) -> String {
     let mut lines = Vec::new();
     if let Some(d) = desc {
@@ -844,7 +923,7 @@ fn generate_typedef(typedef: &TypeDef) -> String {
         TypeKind::KindStruct { ks_fields } => {
             generate_interface(&typedef.td_name, ks_fields, &typedef.td_description)
         }
-        TypeKind::KindEnum { ke_discriminator, ke_variants } => {
+        TypeKind::KindEnum { ke_discriminator, ke_variants, .. } => {
             generate_discriminated_union(&typedef.td_name, ke_discriminator, ke_variants, &typedef.td_description)
         }
         TypeKind::KindAlias { ka_target } => {

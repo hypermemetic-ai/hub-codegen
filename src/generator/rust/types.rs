@@ -1,6 +1,6 @@
 //! Type generation for Rust
 
-use crate::ir::{FieldDef, IR, TypeDef, TypeKind, TypeRef, VariantDef};
+use crate::ir::{EnumRepr, FieldDef, IR, TypeDef, TypeKind, TypeRef, VariantDef};
 use crate::deprecation::{self, DeprecationWarning};
 
 /// Generate only core transport types (PlexusStreamItem, etc.)
@@ -166,11 +166,21 @@ pub fn generate_typedef(typedef: &TypeDef) -> String {
         TypeKind::KindEnum {
             ke_discriminator,
             ke_variants,
+            ke_repr,
         } => {
+            // No `rename_all`: each variant carries its exact wire tag
+            // (see `generate_variants`). IR 2.1's `keRepr`: an external
+            // enum is serde's default representation, an untagged one
+            // `#[serde(untagged)]`.
+            let repr = match ke_repr {
+                EnumRepr::Internal => format!("#[serde(tag = \"{}\")]\n", ke_discriminator),
+                EnumRepr::External => String::new(),
+                EnumRepr::Untagged => "#[serde(untagged)]\n".to_string(),
+            };
             format!(
-                "{}#[derive(Debug, Clone, Serialize, Deserialize)]\n#[serde(tag = \"{}\", rename_all = \"lowercase\")]\npub enum {} {{\n{}\n}}",
+                "{}#[derive(Debug, Clone, Serialize, Deserialize)]\n{}pub enum {} {{\n{}\n}}",
                 doc_comment,
-                ke_discriminator,
+                repr,
                 type_name,
                 generate_variants(ke_variants)
             )
@@ -292,7 +302,13 @@ fn generate_fields(fields: &[FieldDef]) -> String {
         .join("\n")
 }
 
-/// Generate enum variants
+/// Generate enum variants.
+///
+/// Every variant is renamed to its wire tag (`vd_name`) explicitly. The
+/// variant name is the tag PascalCased, and no container `rename_all` maps
+/// every tag back: `lowercase` turned `StatusChanged` into
+/// `"statuschanged"` where the wire says `"status_changed"`, and
+/// `snake_case` would still miss tags that aren't snake_case (RETURNS-16).
 fn generate_variants(variants: &[VariantDef]) -> String {
     variants
         .iter()
@@ -306,9 +322,13 @@ fn generate_variants(variants: &[VariantDef]) -> String {
             };
 
             let variant_name = to_pascal(&variant.vd_name);
+            let rename = format!("    #[serde(rename = \"{}\")]\n", variant.vd_name);
 
-            if variant.vd_fields.is_empty() {
-                format!("{}    {},", doc, variant_name)
+            if let Some(t) = &variant.vd_ref {
+                // IR 2.1: a newtype variant over its type
+                format!("{}{}    {}({}),", doc, rename, variant_name, type_ref_to_rust(t))
+            } else if variant.vd_fields.is_empty() {
+                format!("{}{}    {},", doc, rename, variant_name)
             } else {
                 // Generate variant fields without 'pub' - enum fields inherit visibility
                 let fields = variant
@@ -339,8 +359,8 @@ fn generate_variants(variants: &[VariantDef]) -> String {
                     .join("\n");
 
                 format!(
-                    "{}    {} {{\n{}\n    }},",
-                    doc, variant_name, fields
+                    "{}{}    {} {{\n{}\n    }},",
+                    doc, rename, variant_name, fields
                 )
             }
         })
@@ -369,6 +389,8 @@ fn type_ref_to_rust(tr: &TypeRef) -> String {
         TypeRef::RefOptional(inner) => format!("Option<{}>", type_ref_to_rust(inner)),
         TypeRef::RefAny => "serde_json::Value".to_string(),
         TypeRef::RefUnknown => "serde_json::Value".to_string(), // Fallback for unknown
+        TypeRef::RefMap(inner) => format!("std::collections::BTreeMap<String, {}>", type_ref_to_rust(inner)),
+        TypeRef::RefTuple(items) => format!("({})", items.iter().map(type_ref_to_rust).collect::<Vec<_>>().join(", ")),
     }
 }
 

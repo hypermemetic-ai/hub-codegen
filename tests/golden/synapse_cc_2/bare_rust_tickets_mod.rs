@@ -14,6 +14,31 @@ pub mod inputs;
 
 // === Types ===
 
+/// What the spike's methods answer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum SpikeEvent {
+    /// A ticket, as the caller sees it.
+    #[serde(rename = "ticket")]
+    Ticket {
+by: String,
+id: TicketId,
+status: Status,
+    },
+    /// An input answered.
+    #[serde(rename = "answered")]
+    Answered {
+by: String,
+ticket: TicketId,
+value: Status,
+    },
+    /// In-band refusal.
+    #[serde(rename = "error")]
+    Error {
+message: String,
+    },
+}
+
 /// A ticket's status — canonical spellings; `active` and `in review` are
 /// read too.
 /// 
@@ -36,28 +61,6 @@ pub enum Status {
 
 /// A ticket's id, `SHORT-N` (upper-cased on parse).
 pub type TicketId = String;
-
-/// What the spike's methods answer.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum SpikeEvent {
-    /// A ticket, as the caller sees it.
-    Ticket {
-by: String,
-id: TicketId,
-status: Status,
-    },
-    /// An input answered.
-    Answered {
-by: String,
-ticket: TicketId,
-value: Status,
-    },
-    /// In-band refusal.
-    Error {
-message: String,
-    },
-}
 
 // === Methods ===
 

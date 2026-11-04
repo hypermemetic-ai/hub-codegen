@@ -57,7 +57,7 @@ fn create_comprehensive_test_ir() -> IR {
                     VariantDef {
                         vd_name: "started".to_string(),
                         vd_description: Some("Echo started".to_string()),
-                        vd_fields: vec![],
+                        vd_fields: vec![], vd_ref: None,
                     },
                     VariantDef {
                         vd_name: "echoed".to_string(),
@@ -79,7 +79,7 @@ fn create_comprehensive_test_ir() -> IR {
                                 fd_required: true,
                                 fd_default: None, fd_deprecation: None,
                             },
-                        ],
+                        ], vd_ref: None,
                     },
                     VariantDef {
                         vd_name: "completed".to_string(),
@@ -90,9 +90,9 @@ fn create_comprehensive_test_ir() -> IR {
                             fd_description: Some("Total echoes".to_string()),
                             fd_required: true,
                             fd_default: None, fd_deprecation: None,
-                        }],
+                        }], vd_ref: None,
                     },
-                ],
+                ], ke_repr: Default::default(),
             },
         },
     );
@@ -135,7 +135,7 @@ fn create_comprehensive_test_ir() -> IR {
             md_full_path: "echo.once".to_string(),
             md_namespace: "echo".to_string(),
             md_description: Some("Echo a message once".to_string()),
-            md_streaming: false,
+            md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![ParamDef {
                 pd_name: "message".to_string(),
                 pd_type: TypeRef::RefPrimitive("string".to_string(), None),
@@ -159,7 +159,7 @@ fn create_comprehensive_test_ir() -> IR {
             md_full_path: "echo.echo".to_string(),
             md_namespace: "echo".to_string(),
             md_description: Some("Echo a message multiple times".to_string()),
-            md_streaming: true,
+            md_cardinality: Cardinality::Many, md_error: None, md_progress: None,
             md_params: vec![
                 ParamDef {
                     pd_name: "message".to_string(),

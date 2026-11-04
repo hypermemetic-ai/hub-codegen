@@ -1,0 +1,510 @@
+{
+  "irBackend": "kiln",
+  "irHash": "returns15-forms",
+  "irMetadata": null,
+  "irMethods": {
+    "kiln.get": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdCardinality": "one",
+      "mdDescription": "One firing.",
+      "mdError": {
+        "contents": {
+          "qnLocalName": "KilnError",
+          "qnNamespace": "kiln"
+        },
+        "tag": "RefNamed"
+      },
+      "mdFullPath": "kiln.get",
+      "mdGrant": "kiln.get",
+      "mdName": "get",
+      "mdNamespace": "kiln",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "id",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": [
+              "string",
+              null
+            ],
+            "tag": "RefPrimitive"
+          }
+        }
+      ],
+      "mdProgress": null,
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "Firing",
+          "qnNamespace": "kiln"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      }
+    },
+    "kiln.source": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdCardinality": "one",
+      "mdDescription": "Where the caller signed in.",
+      "mdError": null,
+      "mdFullPath": "kiln.source",
+      "mdGrant": "kiln.source",
+      "mdInjected": [
+        {
+          "ipDescription": null,
+          "ipName": "user",
+          "ipSource": {
+            "from": "auth",
+            "resolver": "self.access.verify"
+          }
+        }
+      ],
+      "mdName": "source",
+      "mdNamespace": "kiln",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "id",
+          "pdRequired": true,
+          "pdSource": null,
+          "pdType": {
+            "contents": [
+              "string",
+              null
+            ],
+            "tag": "RefPrimitive"
+          }
+        }
+      ],
+      "mdProgress": null,
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "Source",
+          "qnNamespace": "kiln"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      }
+    },
+    "kiln.temps": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdCardinality": "one",
+      "mdDescription": "Cone \u2192 temperature.",
+      "mdError": null,
+      "mdFullPath": "kiln.temps",
+      "mdGrant": "kiln.temps",
+      "mdName": "temps",
+      "mdNamespace": "kiln",
+      "mdParams": [],
+      "mdProgress": null,
+      "mdReturns": {
+        "contents": {
+          "contents": [
+            "number",
+            "double"
+          ],
+          "tag": "RefPrimitive"
+        },
+        "tag": "RefMap"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      }
+    },
+    "kiln.watch": {
+      "mdBidirResponseSchema": null,
+      "mdBidirResponseType": null,
+      "mdBidirType": null,
+      "mdCardinality": "many",
+      "mdDescription": "Every answer, as it comes.",
+      "mdError": null,
+      "mdFullPath": "kiln.watch",
+      "mdGrant": "kiln.watch",
+      "mdName": "watch",
+      "mdNamespace": "kiln",
+      "mdParams": [
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": null,
+          "pdName": "since",
+          "pdRequired": false,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "contents": [
+                "integer",
+                "int64"
+              ],
+              "tag": "RefPrimitive"
+            },
+            "tag": "RefOptional"
+          }
+        }
+      ],
+      "mdProgress": {
+        "contents": {
+          "qnLocalName": "Note",
+          "qnNamespace": "kiln"
+        },
+        "tag": "RefNamed"
+      },
+      "mdReturns": {
+        "contents": {
+          "qnLocalName": "Answer",
+          "qnNamespace": "kiln"
+        },
+        "tag": "RefNamed"
+      },
+      "mdRole": {
+        "kind": "rpc"
+      }
+    }
+  },
+  "irPluginHashes": null,
+  "irPluginRequests": null,
+  "irPlugins": {
+    "kiln": [
+      "get",
+      "source",
+      "temps",
+      "watch"
+    ]
+  },
+  "irTypes": {
+    "kiln.Answer": {
+      "tdDescription": null,
+      "tdKind": {
+        "keDiscriminator": "",
+        "keRepr": "untagged",
+        "keVariants": [
+          {
+            "vdDescription": null,
+            "vdFields": [],
+            "vdName": "Firing",
+            "vdRef": {
+              "contents": {
+                "qnLocalName": "Firing",
+                "qnNamespace": "kiln"
+              },
+              "tag": "RefNamed"
+            }
+          },
+          {
+            "vdDescription": null,
+            "vdFields": [],
+            "vdName": "KeyRef",
+            "vdRef": {
+              "contents": {
+                "qnLocalName": "KeyRef",
+                "qnNamespace": "kiln"
+              },
+              "tag": "RefNamed"
+            }
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "Answer",
+      "tdNamespace": "kiln"
+    },
+    "kiln.Firing": {
+      "tdDescription": "One firing.",
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": "Cone \u2192 temperature.",
+            "fdName": "temps",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "contents": [
+                  "number",
+                  "double"
+                ],
+                "tag": "RefPrimitive"
+              },
+              "tag": "RefMap"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "window",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                {
+                  "contents": [
+                    "integer",
+                    "int64"
+                  ],
+                  "tag": "RefPrimitive"
+                },
+                {
+                  "contents": [
+                    "integer",
+                    "int64"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              ],
+              "tag": "RefTuple"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "label",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                },
+                {
+                  "maxLength": 40
+                }
+              ],
+              "tag": "RefRefined"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "extra",
+            "fdRequired": false,
+            "fdType": {
+              "tag": "RefJson"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "shelves",
+            "fdRequired": true,
+            "fdType": {
+              "contents": {
+                "contents": {
+                  "contents": {
+                    "qnLocalName": "Shelf",
+                    "qnNamespace": "kiln"
+                  },
+                  "tag": "RefNamed"
+                },
+                "tag": "RefMap"
+              },
+              "tag": "RefArray"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "Firing",
+      "tdNamespace": "kiln"
+    },
+    "kiln.KeyRef": {
+      "tdDescription": null,
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "id",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "KeyRef",
+      "tdNamespace": "kiln"
+    },
+    "kiln.KilnError": {
+      "tdDescription": null,
+      "tdKind": {
+        "keDiscriminator": "kind",
+        "keVariants": [
+          {
+            "vdDescription": null,
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "id",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "not_found"
+          },
+          {
+            "vdDescription": null,
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "cone",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "integer",
+                    "uint8"
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "too_hot"
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "KilnError",
+      "tdNamespace": "kiln"
+    },
+    "kiln.Note": {
+      "tdDescription": null,
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "message",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            }
+          },
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "percentage",
+            "fdRequired": false,
+            "fdType": {
+              "contents": {
+                "contents": [
+                  "number",
+                  "float"
+                ],
+                "tag": "RefPrimitive"
+              },
+              "tag": "RefOptional"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "Note",
+      "tdNamespace": "kiln"
+    },
+    "kiln.Shelf": {
+      "tdDescription": null,
+      "tdKind": {
+        "ksFields": [
+          {
+            "fdDefault": null,
+            "fdDescription": null,
+            "fdName": "pieces",
+            "fdRequired": true,
+            "fdType": {
+              "contents": [
+                "integer",
+                "uint32"
+              ],
+              "tag": "RefPrimitive"
+            }
+          }
+        ],
+        "tag": "KindStruct"
+      },
+      "tdName": "Shelf",
+      "tdNamespace": "kiln"
+    },
+    "kiln.Source": {
+      "tdDescription": "Where a sign-in came from.",
+      "tdKind": {
+        "keDiscriminator": "",
+        "keRepr": "external",
+        "keVariants": [
+          {
+            "vdDescription": "A browser sign-in.",
+            "vdFields": [
+              {
+                "fdDefault": null,
+                "fdDescription": null,
+                "fdName": "redirect",
+                "fdRequired": true,
+                "fdType": {
+                  "contents": [
+                    "string",
+                    null
+                  ],
+                  "tag": "RefPrimitive"
+                }
+              }
+            ],
+            "vdName": "browser"
+          },
+          {
+            "vdDescription": null,
+            "vdFields": [],
+            "vdName": "agent"
+          },
+          {
+            "vdDescription": null,
+            "vdFields": [],
+            "vdName": "key",
+            "vdRef": {
+              "contents": {
+                "qnLocalName": "KeyRef",
+                "qnNamespace": "kiln"
+              },
+              "tag": "RefNamed"
+            }
+          }
+        ],
+        "tag": "KindEnum"
+      },
+      "tdName": "Source",
+      "tdNamespace": "kiln"
+    }
+  },
+  "irVersion": "3.0"
+}

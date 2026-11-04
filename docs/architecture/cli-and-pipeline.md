@@ -61,7 +61,7 @@ The main CLI is defined in `src/main.rs` using clap derive macros for parsing co
 #### Smoke Test Configuration
 
 - **`--smoke-transport-path <PATH>`** (default: `"../transport"`) — Import path for PlexusRpcClient in generated smoke tests.
-- **`--backend-url <URL>`** (default: `"ws://localhost:4444"`) — WebSocket URL embedded as fallback in generated smoke tests.
+- **`--backend-url <URL>`** (no default) — WebSocket URL the generated smoke tests fall back to when `PLEXUS_URL` is unset. Without it no URL is baked in, and the smoke tests require `PLEXUS_URL`. synapse-cc passes its configured backend's URL.
 
 #### Runtime Flags
 
@@ -155,7 +155,7 @@ pub struct GenerationOptions {
     pub generate: GenerateSelector,
     pub plugins_filter: Option<Vec<String>>,
     pub smoke_transport_path: String,
-    pub backend_url: String,
+    pub backend_url: Option<String>,
 }
 
 pub struct GenerationResult {
@@ -199,14 +199,14 @@ Cache manifest: `~/.cache/plexus-codegen/service-codegen/typescript/<backend>/ma
 
 - **service-codegen version** — `env!("CARGO_PKG_VERSION")` via `SERVICE_CODEGEN_VERSION` constant (`src/lib.rs`). Included in .codegen-metadata.json.
 - **package.json version** — `"0.0.0-<16-char-hash>"` where hash is computed from generated code files (excluding package.json and metadata). Changes only when code changes.
-- **IR version** — Must be `"2.0"` (enforced in TypeScript generator).
+- **IR version** — `"2.0"`, `"2.1"` or `"3.0"` (`ir::check_ir_version`, called by both generators first).
 - **Cache manifest version** — `"2.0"` in `CodeCacheManifest`.
 
 ---
 
 ## Error Handling
 
-- **IR parsing errors** — Bail if JSON invalid or IR version not `"2.0"`
+- **IR parsing errors** — Bail if JSON invalid or the IR version is none of `"2.0"`, `"2.1"`, `"3.0"`
 - **File I/O errors** — Propagate via `anyhow::Result`
 - **Feature gating** — Bail if target language not compiled in
 - **Schema gaps** — Emit warnings for `RefUnknown` types; `RefAny` (intentionally dynamic) does not warn
