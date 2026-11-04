@@ -77,6 +77,13 @@ export interface InputWriter<T> {
   readonly acked: number;
   /** Set once the service closed the half. */
   readonly closed: InputClosed | undefined;
+  /**
+   * The call is over — it answered, failed, was refused, dropped, aborted or
+   * let go by its reader: nothing more is sent. A write after it is kept
+   * (`unsent()`); how it ended is what the output (and, for a dropped
+   * socket, `onDisconnect`) said.
+   */
+  readonly ended: boolean;
   /** Fires once each time `buffered` reaches `pressureAt` from below. Returns its removal. */
   onPressure(handler: (pressure: Pressure) => void): () => void;
   /** The items written and never sent, in order. */
@@ -220,19 +227,6 @@ export interface InputWire {
 const FRAME_ITEMS = 256;
 const FRAME_BYTES = 1024 * 1024;
 
-/** A key of the client's types (camelCase) as the wire names it (snake_case): the inverse of the output's. */
-function toSnakeCase(key: string): string {
-  return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
-}
-
-function wireKeys(value: unknown): unknown {
-  if (value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map(wireKeys);
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value)) out[toSnakeCase(k)] = wireKeys(v);
-  return out;
-}
-
 /** `[0x01][subscription u64 BE][seq u64 BE][payload]` (BIDIR-17). */
 function binaryFrame(subscription: number, seq: number, payload: Uint8Array): Uint8Array {
   const frame = new Uint8Array(17 + payload.byteLength);
@@ -274,6 +268,8 @@ export class InputHalf<T> implements InputWriter<T> {
   #closed: InputClosed | undefined;
   /** The call's terminal item came. */
   #finished = false;
+  /** The call is over, however it ended. */
+  #callEnded = false;
   #disconnected: DisconnectInfo | undefined;
   #aborted = false;
   #abortReason: unknown;
@@ -304,6 +300,7 @@ export class InputHalf<T> implements InputWriter<T> {
   get sent(): number { return this.#sent; }
   get acked(): number { return this.#acked; }
   get closed(): InputClosed | undefined { return this.#closed; }
+  get ended(): boolean { return this.#callEnded || this.#finished || this.#disconnected !== undefined || this.#aborted; }
   /** The socket dropped under the call: what was said. */
   get disconnected(): DisconnectInfo | undefined { return this.#disconnected; }
   get aborted(): boolean { return this.#aborted; }
@@ -385,9 +382,17 @@ export class InputHalf<T> implements InputWriter<T> {
     }
   }
 
+  /** @internal The call is over, however it ended: send no more, pull no more, listen no more. */
+  callEnded(): void {
+    if (this.#callEnded) return;
+    this.#callEnded = true;
+    this.#unlisten?.();
+    this.#wake();
+  }
+
   /** @internal The socket under the call dropped (or the call was never acknowledged). Said once. */
   lost(): void {
-    if (this.#finished || this.#disconnected) return;
+    if (this.#finished || this.#disconnected || this.#callEnded) return;
     const info: DisconnectInfo = {
       method: this.method,
       sent: this.#sent,
@@ -419,7 +424,7 @@ export class InputHalf<T> implements InputWriter<T> {
 
   /** Abort the call: nothing more is sent; the output throws `reason`. */
   abort(reason?: unknown): void {
-    if (this.#aborted || this.#finished) return;
+    if (this.#aborted || this.#finished || this.#callEnded) return;
     this.#aborted = true;
     this.#abortReason = reason ?? new Error(`${this.method}: aborted`);
     this.#cancel?.();
@@ -452,7 +457,7 @@ export class InputHalf<T> implements InputWriter<T> {
   // ─── within ──────────────────────────────────────────────────────────────
 
   #over(): boolean {
-    return this.#finished || this.#closed !== undefined || this.#disconnected !== undefined || this.#aborted;
+    return this.#finished || this.#callEnded || this.#closed !== undefined || this.#disconnected !== undefined || this.#aborted;
   }
 
   /** Resolves once one more item would be within credit, or the half is over. */
@@ -494,7 +499,7 @@ export class InputHalf<T> implements InputWriter<T> {
       const parts: string[] = [];
       let bytes = 0;
       while (parts.length < most && bytes < FRAME_BYTES) {
-        const s = JSON.stringify(wireKeys(this.#queue[this.#head + parts.length])) ?? 'null';
+        const s = JSON.stringify(this.#queue[this.#head + parts.length]) ?? 'null';
         parts.push(s);
         bytes += s.length;
       }
@@ -538,6 +543,12 @@ function duplexOf(rpc: RpcClient, method: string): DuplexRpcClient {
 
 /** The call's items, its input half's errors typed, a dropped socket a DisconnectedError. */
 async function* duplexItems<T>(half: InputHalf<T>, raw: AsyncGenerator<PlexusStreamItem>): AsyncGenerator<PlexusStreamItem> {
+  if (half.aborted) {
+    // aborted before it started: no call, no socket
+    half.callEnded();
+    await raw.return(undefined);
+    throw half.abortReason;
+  }
   try {
     for await (const item of raw) {
       if (item.type === 'error') {
@@ -553,6 +564,10 @@ async function* duplexItems<T>(half: InputHalf<T>, raw: AsyncGenerator<PlexusStr
       if (half.disconnected) throw new DisconnectedError(half.disconnected);
     }
     throw e;
+  } finally {
+    // However the call ended — its answer, a refusal at open, a reader that
+    // let go — the input half sends no more and its source is returned.
+    half.callEnded();
   }
   if (half.aborted) throw half.abortReason;
 }

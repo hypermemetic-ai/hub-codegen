@@ -580,6 +580,7 @@ export class PlexusRpcClient implements RpcClient {
       }
     }
 
+    if (cancelled) return; // BIDIR-19: aborted before it started: no socket
     await this.connect();
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) throw new TransportError('Not connected');
     if (cancelled) return;
@@ -649,6 +650,7 @@ export class PlexusRpcClient implements RpcClient {
       }
     } finally {
       // Ended before its done / error: the server is still streaming.
+      input?.callEnded(); // BIDIR-19: nothing more is sent on a call that is over
       unsubscribe();
       this.subscriptions.delete(subscriptionId);
     }

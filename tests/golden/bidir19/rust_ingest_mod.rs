@@ -78,8 +78,8 @@ pub async fn items(client: &PlexusClient, input: impl Stream<Item = Item> + Send
 /// Requires `ingest.tokens` anywhere it is held.
 ///
 /// `input`: the input half (plexus-wire spec/10), sent as the call runs, only while the service's credit allows.
-pub async fn tokens(client: &PlexusClient, run: String, limit: i64, input: impl Stream<Item = String> + Send + 'static) -> Result<Pin<Box<dyn Stream<Item = Result<IngestEvent>> + Send>>> {
-    let stream = client.call_stream_with_input("ingest.tokens", json!({ "run": run, "limit": limit }), PlexusClient::json_input(input)).await?;
+pub async fn tokens(client: &PlexusClient, run: String, limit: i64, meta: std::collections::BTreeMap<String, String>, input: impl Stream<Item = String> + Send + 'static) -> Result<Pin<Box<dyn Stream<Item = Result<IngestEvent>> + Send>>> {
+    let stream = client.call_stream_with_input("ingest.tokens", json!({ "run": run, "limit": limit, "meta": meta }), PlexusClient::json_input(input)).await?;
 
     // Filter and transform stream items to typed data
     let typed_stream = stream.filter_map(|item| async move {

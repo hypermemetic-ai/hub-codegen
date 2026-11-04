@@ -137,6 +137,24 @@
             ],
             "tag": "RefPrimitive"
           }
+        },
+        {
+          "pdDefault": null,
+          "pdDeprecation": null,
+          "pdDescription": "Labels for the run",
+          "pdName": "meta",
+          "pdRequired": false,
+          "pdSource": null,
+          "pdType": {
+            "contents": {
+              "contents": [
+                "string",
+                null
+              ],
+              "tag": "RefPrimitive"
+            },
+            "tag": "RefMap"
+          }
         }
       ],
       "mdProgress": null,

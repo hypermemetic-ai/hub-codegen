@@ -97,8 +97,8 @@ fn ts_signatures() {
         "  openItems(options?: InputOptions): DuplexCall<Item, Promise<IngestEvent>>;",
         "  bytes(input: AsyncIterable<Uint8Array> | Iterable<Uint8Array>, options?: InputOptions): Promise<IngestEvent>;",
         "  openBytes(options?: InputOptions): DuplexCall<Uint8Array, Promise<IngestEvent>>;",
-        "  tokens(run: string, limit: number | undefined, input: AsyncIterable<string> | Iterable<string>, options?: InputOptions): MethodStream<'ingest.tokens', IngestEvent>;",
-        "  openTokens(run: string, limit?: number, options?: InputOptions): DuplexCall<string, MethodStream<'ingest.tokens', IngestEvent>>;",
+        "  tokens(run: string, limit: number | undefined, meta: Record<string, string> | undefined, input: AsyncIterable<string> | Iterable<string>, options?: InputOptions): MethodStream<'ingest.tokens', IngestEvent>;",
+        "  openTokens(run: string, limit?: number, meta?: Record<string, string>, options?: InputOptions): DuplexCall<string, MethodStream<'ingest.tokens', IngestEvent>>;",
         "    const stream = pullInput<Uint8Array>(this.rpc, 'ingest.bytes', {}, true, input, options);",
         "    const stream = pullInput<Item>(this.rpc, 'ingest.items', {}, false, input, options);",
     ] {
@@ -112,10 +112,14 @@ fn rust_signatures() {
     for line in [
         "pub async fn items(client: &PlexusClient, input: impl Stream<Item = Item> + Send + 'static) -> Result<IngestEvent> {",
         "pub async fn bytes(client: &PlexusClient, input: impl Stream<Item = ::bytes::Bytes> + Send + 'static) -> Result<IngestEvent> {",
-        "pub async fn tokens(client: &PlexusClient, run: String, limit: i64, input: impl Stream<Item = String> + Send + 'static) -> Result<Pin<Box<dyn Stream<Item = Result<IngestEvent>> + Send>>> {",
+        "pub async fn tokens(client: &PlexusClient, run: String, limit: i64, meta: std::collections::BTreeMap<String, String>, input: impl Stream<Item = String> + Send + 'static) -> Result<Pin<Box<dyn Stream<Item = Result<IngestEvent>> + Send>>> {",
     ] {
         assert!(m.contains(line), "missing: {line}\n{m}");
     }
+    // an item that will not serialize is a local error, never a `null` sent
+    let c = &rust(&fixture())["src/client.rs"];
+    assert!(c.contains("an input item will not serialize"), "{c}");
+    assert!(!c.contains("unwrap_or(serde_json::Value::Null)"), "{c}");
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -292,7 +296,7 @@ fn compiled() -> Option<(tempfile::TempDir, PathBuf)> {
     }
     let tests = pkg.join("input-tests");
     std::fs::create_dir_all(&tests).unwrap();
-    for f in ["types.test.ts", "live.test.ts"] {
+    for f in ["types.test.ts", "live.test.ts", "runtime.test.ts"] {
         std::fs::copy(h.join(f), tests.join(f)).unwrap();
     }
     std::os::unix::fs::symlink(h.join("node_modules"), pkg.join("node_modules")).unwrap();
@@ -301,6 +305,15 @@ fn compiled() -> Option<(tempfile::TempDir, PathBuf)> {
     assert!(ok, "tsc --strict rejected the generated package or its tests:\n{text}");
     std::fs::write(pkg.join("out/package.json"), r#"{ "type": "commonjs" }"#).unwrap();
     Some((tmp, pkg))
+}
+
+#[test]
+fn ts_input_half_runtime() {
+    let Some((_tmp, pkg)) = compiled() else { return };
+    let (ok, text) = run(Command::new("node").args(["--test", "--test-reporter=spec"]).arg(pkg.join("out/input-tests/runtime.test.js")).current_dir(&pkg));
+    println!("{text}");
+    assert!(ok, "node --test runtime.test.js failed:\n{text}");
+    assert!(text.contains("pass 5"), "5 runtime tests:\n{text}");
 }
 
 #[test]

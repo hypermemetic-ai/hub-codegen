@@ -24,7 +24,7 @@ const c = Ingest.createIngestClient(rpc);
 expectTypeOf(c.items([{ at: 1, pad: 'x' }])).toEqualTypeOf<Promise<Ingest.IngestEvent>>();
 async function* chunks(): AsyncGenerator<Uint8Array> { yield new Uint8Array(4); }
 expectTypeOf(c.bytes(chunks())).toEqualTypeOf<Promise<Ingest.IngestEvent>>();
-expectTypeOf(c.tokens('r1', undefined, ['a', 'b'], { pressureAt: 10 })).toEqualTypeOf<MethodStream<'ingest.tokens', Ingest.IngestEvent>>();
+expectTypeOf(c.tokens('r1', undefined, { team: 'a' }, ['a', 'b'], { pressureAt: 10 })).toEqualTypeOf<MethodStream<'ingest.tokens', Ingest.IngestEvent>>();
 // @ts-expect-error the input is required
 c.items();
 // @ts-expect-error an Input<Bytes> takes Uint8Array, not strings
@@ -32,7 +32,7 @@ c.bytes(['abc']);
 // @ts-expect-error an Item has `at` and `pad`
 c.items([{ at: 1 }]);
 // @ts-expect-error an optional param before the input is written, if only as undefined
-c.tokens('r1', ['a']);
+c.tokens('r1', undefined, ['a']);
 
 // push: open<Method>() → { input, output, onDisconnect }
 const b = c.openBytes({ pressureAt: 100, signal: new AbortController().signal });

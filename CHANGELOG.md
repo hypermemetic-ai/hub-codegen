@@ -14,7 +14,10 @@ NAMING-10's merge (0.5.1, the rename).
   `end()`); a disconnect is always `onDisconnect({ sent, acked, unsent })` and
   a `DisconnectedError` on the output, nothing resent; `past_credit`,
   `out_of_sequence`, `invalid_input`, `too_much_input` and `input_closed` are
-  typed errors; an `AbortSignal` unsubscribes. An `Input<Bytes>` item (the IR's
+  typed errors; an `AbortSignal` unsubscribes (before the call starts, no socket
+  is opened). However a call ends — refused at open, or let go by its reader —
+  its input sends no more, a pull source is returned, and a later write is kept
+  in `unsent()`. Items are sent as written, as params are. An `Input<Bytes>` item (the IR's
   `RefPrimitive string binary`) is a `Uint8Array`, one WebSocket binary
   message `[0x01][subscription u64 BE][seq u64 BE][payload]`. The runtime is
   `input.ts` and the transport's hooks, generated only for an IR with an

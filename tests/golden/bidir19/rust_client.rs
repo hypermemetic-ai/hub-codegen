@@ -150,18 +150,22 @@ pub enum InputItem {
     Binary(Vec<u8>),
 }
 
-/// What a method with an input half sends.
-pub type InputStream = Pin<Box<dyn Stream<Item = InputItem> + Send>>;
+/// What a method with an input half sends: an item, or why it could not be made one.
+pub type InputStream = Pin<Box<dyn Stream<Item = Result<InputItem>> + Send>>;
 
 impl PlexusClient {
     /// A stream of items as JSON input.
     pub fn json_input<T: serde::Serialize>(input: impl Stream<Item = T> + Send + 'static) -> InputStream {
-        Box::pin(input.map(|item| InputItem::Json(serde_json::to_value(&item).unwrap_or(serde_json::Value::Null))))
+        Box::pin(input.map(|item| {
+            serde_json::to_value(&item)
+                .map(InputItem::Json)
+                .map_err(|e| anyhow!("an input item will not serialize: {}", e))
+        }))
     }
 
     /// A stream of byte chunks as binary input, one frame a chunk.
     pub fn binary_input<B: AsRef<[u8]>>(input: impl Stream<Item = B> + Send + 'static) -> InputStream {
-        Box::pin(input.map(|chunk| InputItem::Binary(chunk.as_ref().to_vec())))
+        Box::pin(input.map(|chunk| Ok(InputItem::Binary(chunk.as_ref().to_vec()))))
     }
 
     /// Call a method with an input half: `input` is sent as the call runs,
@@ -236,7 +240,12 @@ impl PlexusClient {
                     item = input.next(), if feeding => {
                         let sub = subscription.expect("feeding needs the subscription");
                         let sent = match item {
-                            Some(InputItem::Json(item)) => {
+                            Some(Err(e)) => {
+                                // nothing is sent for it: the call ends here, said locally
+                                yield Err(e);
+                                break;
+                            }
+                            Some(Ok(InputItem::Json(item))) => {
                                 let frame = json!({
                                     "jsonrpc": "2.0",
                                     "method": format!("{}.input", SERVICE_NAMESPACE),
@@ -244,7 +253,7 @@ impl PlexusClient {
                                 });
                                 write.send(Message::Text(frame.to_string())).await
                             }
-                            Some(InputItem::Binary(payload)) => {
+                            Some(Ok(InputItem::Binary(payload))) => {
                                 let mut frame = Vec::with_capacity(17 + payload.len());
                                 frame.push(0x01);
                                 frame.extend_from_slice(&sub.to_be_bytes());

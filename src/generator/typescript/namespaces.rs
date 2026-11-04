@@ -376,8 +376,13 @@ fn generate_namespace(
             warnings,
         );
         // BIDIR-19: before the input, an optional param is `T | undefined`
-        // (a required parameter cannot follow an optional one).
-        let pull_params = if method.md_input.is_some() { before_input(&params) } else { params.clone() };
+        // (a required parameter cannot follow an optional one). Warnings were
+        // recorded above, so this rendering records none.
+        let pull_params = if method.md_input.is_some() {
+            render_params(&method.sent_params(), namespace, emit_deprecation, true, &method.md_full_path, &file_path, &mut Vec::new())
+        } else {
+            params.clone()
+        };
         let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Streaming methods return a MethodStream that carries their path
@@ -961,43 +966,53 @@ impl InputForm {
 /// BIDIR-19: a method's params before its input: an optional one is
 /// `T | undefined`, since a required parameter (the input) follows it.
 fn generate_params_before_input(params: &[ParamDef], namespace: &str) -> String {
-    before_input(&generate_params(params, namespace))
-}
-
-/// `name?: T` → `name: T | undefined`, in a rendered parameter list.
-fn before_input(params: &str) -> String {
-    if params.is_empty() {
-        return String::new();
-    }
-    params
-        .split(", ")
-        .map(|p| match p.split_once("?: ") {
-            Some((name, rest)) if !name.contains(' ') => match rest.find(" /* ") {
-                Some(at) => format!("{}: {} | undefined{}", name, &rest[..at], &rest[at..]),
-                None => format!("{}: {} | undefined", name, rest),
-            },
-            _ => p.to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+    render_params(params, namespace, false, true, "", "", &mut Vec::new())
 }
 
 fn generate_params(params: &[ParamDef], namespace: &str) -> String {
-    // Sort parameters: required first, then optional
-    // This is required by TypeScript syntax
+    render_params(params, namespace, false, false, "", "", &mut Vec::new())
+}
+
+/// The parameter list, required first then optional, each by name. An
+/// optional one is `name?: T`, or `name: T | undefined` when `before_input`
+/// (BIDIR-19); with `emit_deprecation`, a deprecated one carries its note
+/// and records its warning (IR-7).
+fn render_params(
+    params: &[ParamDef],
+    namespace: &str,
+    emit_deprecation: bool,
+    before_input: bool,
+    method_full_path: &str,
+    file_path: &str,
+    warnings: &mut Vec<DeprecationWarning>,
+) -> String {
     let idents = param_idents(params);
     let mut sorted_params = params.to_vec();
-    sorted_params.sort_by_key(|p| (
-        !p.pd_required,  // false (required) sorts before true (optional)
-        p.pd_name.clone() // tie-breaker: alphabetical
-    ));
+    sorted_params.sort_by_key(|p| (!p.pd_required, p.pd_name.clone()));
 
     sorted_params
         .iter()
         .map(|p| {
-            let optional = if p.pd_required { "" } else { "?" };
             let ts_type = p.pd_type.to_ts_in_namespace(namespace);
-            format!("{}{}: {}", idents[&p.pd_name], optional, ts_type)
+            let base = match (p.pd_required, before_input) {
+                (true, _) => format!("{}: {}", idents[&p.pd_name], ts_type),
+                (false, false) => format!("{}?: {}", idents[&p.pd_name], ts_type),
+                (false, true) => format!("{}: {} | undefined", idents[&p.pd_name], ts_type),
+            };
+            if emit_deprecation {
+                if let Some(info) = &p.pd_deprecation {
+                    warnings.push(DeprecationWarning {
+                        kind: "param".into(),
+                        name: format!("{}({})", method_full_path, p.pd_name),
+                        file: file_path.into(),
+                        message: info.message.clone(),
+                        since: info.since.clone(),
+                        removed_in: info.removed_in.clone(),
+                    });
+                    return format!("{} /* @deprecated {} */", base, deprecation::format_body(info));
+                }
+            }
+            base
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -1016,38 +1031,7 @@ fn generate_params_annotated(
     file_path: &str,
     warnings: &mut Vec<DeprecationWarning>,
 ) -> String {
-    // Sort parameters: required first, then optional (same as generate_params).
-    let idents = param_idents(params);
-    let mut sorted_params = params.to_vec();
-    sorted_params.sort_by_key(|p| (!p.pd_required, p.pd_name.clone()));
-
-    sorted_params
-        .iter()
-        .map(|p| {
-            let optional = if p.pd_required { "" } else { "?" };
-            let ts_type = p.pd_type.to_ts_in_namespace(namespace);
-            let base = format!("{}{}: {}", idents[&p.pd_name], optional, ts_type);
-            if emit_deprecation {
-                if let Some(info) = &p.pd_deprecation {
-                    warnings.push(DeprecationWarning {
-                        kind: "param".into(),
-                        name: format!("{}({})", method_full_path, p.pd_name),
-                        file: file_path.into(),
-                        message: info.message.clone(),
-                        since: info.since.clone(),
-                        removed_in: info.removed_in.clone(),
-                    });
-                    return format!(
-                        "{} /* @deprecated {} */",
-                        base,
-                        deprecation::format_body(info)
-                    );
-                }
-            }
-            base
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+    render_params(params, namespace, emit_deprecation, false, method_full_path, file_path, warnings)
 }
 
 /// Generate a JavaScript object literal from params for the RPC call

@@ -32,9 +32,9 @@ consumes: binary frames and base64 JSON reach it alike.
    * @requires `ingest.tokens` anywhere it is held
    * @param input the input half (plexus-wire spec/10): pulled only while the service's credit allows, batched into `input` frames
    */
-  tokens(run: string, limit: number | undefined, input: AsyncIterable<string> | Iterable<string>, options?: InputOptions): MethodStream<'ingest.tokens', IngestEvent>;
+  tokens(run: string, limit: number | undefined, meta: Record<string, string> | undefined, input: AsyncIterable<string> | Iterable<string>, options?: InputOptions): MethodStream<'ingest.tokens', IngestEvent>;
   /** The push form of `tokens`: write the input as it comes — never refused, never dropped — and read `output`. */
-  openTokens(run: string, limit?: number, options?: InputOptions): DuplexCall<string, MethodStream<'ingest.tokens', IngestEvent>>;
+  openTokens(run: string, limit?: number, meta?: Record<string, string>, options?: InputOptions): DuplexCall<string, MethodStream<'ingest.tokens', IngestEvent>>;
 }
 
 /** Typed client implementation for ingest plugin */
@@ -60,13 +60,13 @@ class IngestClientImpl implements IngestClient {
     return pushInput(this.rpc, 'ingest.items', {}, false, options, (stream) => collectOne<IngestEvent>(stream));
   }
 
-  tokens(run: string, limit: number | undefined, input: AsyncIterable<string> | Iterable<string>, options?: InputOptions): MethodStream<'ingest.tokens', IngestEvent> {
-    const stream = pullInput<string>(this.rpc, 'ingest.tokens', { run, limit }, false, input, options);
+  tokens(run: string, limit: number | undefined, meta: Record<string, string> | undefined, input: AsyncIterable<string> | Iterable<string>, options?: InputOptions): MethodStream<'ingest.tokens', IngestEvent> {
+    const stream = pullInput<string>(this.rpc, 'ingest.tokens', { run, limit, meta }, false, input, options);
     return new MethodStream<'ingest.tokens', IngestEvent>('ingest.tokens', stream);
   }
 
-  openTokens(run: string, limit?: number, options?: InputOptions): DuplexCall<string, MethodStream<'ingest.tokens', IngestEvent>> {
-    return pushInput(this.rpc, 'ingest.tokens', { run, limit }, false, options, (stream) => new MethodStream<'ingest.tokens', IngestEvent>('ingest.tokens', stream));
+  openTokens(run: string, limit?: number, meta?: Record<string, string>, options?: InputOptions): DuplexCall<string, MethodStream<'ingest.tokens', IngestEvent>> {
+    return pushInput(this.rpc, 'ingest.tokens', { run, limit, meta }, false, options, (stream) => new MethodStream<'ingest.tokens', IngestEvent>('ingest.tokens', stream));
   }
 }
 
