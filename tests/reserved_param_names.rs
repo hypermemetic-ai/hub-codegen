@@ -88,3 +88,16 @@ fn a_reserved_param_name_is_a_typescript_identifier_and_its_own_name_on_the_wire
         assert!(!client.contains(bad), "a reserved word as an identifier ({bad}):\n{client}");
     }
 }
+
+/// RETURNS-40 re-review #6: `arguments` and `eval` too (strict mode), and a
+/// suffixed name never takes a name another param already has: `default`
+/// beside `default_` is `default__`.
+#[test]
+fn strict_mode_words_and_a_suffix_that_does_not_collide() {
+    let m = method("set", vec![rpc_param("arguments"), rpc_param("eval"), optional("default"), optional("default_")]);
+    let ir = ir_with_methods(vec![m]);
+    let out = generate_typescript(&ir, &default_options()).unwrap();
+    let client = out.files.get("svc/client.ts").expect("svc/client.ts must exist");
+    assert!(client.contains("set(arguments_: string, eval_: string, default__?: string, default_?: string)"), "the signature:\n{client}");
+    assert!(client.contains("{ arguments: arguments_, eval: eval_, default: default__, default_ }"), "the wire params:\n{client}");
+}
