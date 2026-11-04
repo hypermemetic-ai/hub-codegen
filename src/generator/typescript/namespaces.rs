@@ -842,6 +842,7 @@ fn collect_cross_namespace_imports(methods: &[&MethodDef], current_namespace: &s
 fn generate_params(params: &[ParamDef], namespace: &str) -> String {
     // Sort parameters: required first, then optional
     // This is required by TypeScript syntax
+    let idents = param_idents(params);
     let mut sorted_params = params.to_vec();
     sorted_params.sort_by_key(|p| (
         !p.pd_required,  // false (required) sorts before true (optional)
@@ -853,7 +854,7 @@ fn generate_params(params: &[ParamDef], namespace: &str) -> String {
         .map(|p| {
             let optional = if p.pd_required { "" } else { "?" };
             let ts_type = p.pd_type.to_ts_in_namespace(namespace);
-            format!("{}{}: {}", param_ident(&p.pd_name), optional, ts_type)
+            format!("{}{}: {}", idents[&p.pd_name], optional, ts_type)
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -873,6 +874,7 @@ fn generate_params_annotated(
     warnings: &mut Vec<DeprecationWarning>,
 ) -> String {
     // Sort parameters: required first, then optional (same as generate_params).
+    let idents = param_idents(params);
     let mut sorted_params = params.to_vec();
     sorted_params.sort_by_key(|p| (!p.pd_required, p.pd_name.clone()));
 
@@ -881,7 +883,7 @@ fn generate_params_annotated(
         .map(|p| {
             let optional = if p.pd_required { "" } else { "?" };
             let ts_type = p.pd_type.to_ts_in_namespace(namespace);
-            let base = format!("{}{}: {}", param_ident(&p.pd_name), optional, ts_type);
+            let base = format!("{}{}: {}", idents[&p.pd_name], optional, ts_type);
             if emit_deprecation {
                 if let Some(info) = &p.pd_deprecation {
                     warnings.push(DeprecationWarning {
@@ -913,13 +915,14 @@ fn generate_params_object(params: &[ParamDef]) -> String {
         return "{}".to_string();
     }
 
+    let idents = param_idents(params);
     // Generate explicit mappings: { snake_case: camelCase }
     // This ensures RPC wire format uses snake_case as Plexus expects,
     // while TypeScript APIs remain idiomatic camelCase
     let fields: Vec<String> = params
         .iter()
         .map(|p| {
-            let camel_name = param_ident(&p.pd_name);  // TypeScript variable (camelCase)
+            let camel_name = idents[&p.pd_name].clone();  // TypeScript variable (camelCase)
             let snake_name = &p.pd_name;             // RPC wire format (snake_case)
 
             // Use shorthand when names are identical, explicit mapping otherwise
@@ -934,22 +937,45 @@ fn generate_params_object(params: &[ParamDef]) -> String {
     format!("{{ {} }}", fields.join(", "))
 }
 
-/// RETURNS-40 review #6: a param's TypeScript identifier — its name in
-/// camelCase, and `_` after a word TypeScript reserves (menger's
-/// `quota.set` takes `default`): `default_`, sent as `default` on the wire.
-fn param_ident(name: &str) -> String {
+/// RETURNS-40 review #6: each param's TypeScript identifier, by its wire
+/// name — its name in camelCase, `_` after a word TypeScript reserves
+/// (menger's `quota.set` takes `default`: `default_`, sent as `default`),
+/// strict mode's `arguments` and `eval` among them; and unique among the
+/// method's params: one whose identifier is its own wire name keeps it,
+/// any other is suffixed `_` until no other param has it (`default` beside
+/// `default_` is `default__`).
+fn param_idents(params: &[ParamDef]) -> std::collections::HashMap<String, String> {
     const RESERVED: &[&str] = &[
         "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "enum",
         "export", "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "new", "null",
         "return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with",
         "implements", "interface", "let", "package", "private", "protected", "public", "static", "yield", "await",
+        "arguments", "eval",
     ];
-    let camel = to_camel(name);
-    if RESERVED.contains(&camel.as_str()) {
-        format!("{camel}_")
-    } else {
-        camel
+    let base = |name: &str| {
+        let camel = to_camel(name);
+        if RESERVED.contains(&camel.as_str()) { format!("{camel}_") } else { camel }
+    };
+    let mut out = std::collections::HashMap::new();
+    let mut taken = std::collections::HashSet::new();
+    for p in params {
+        let b = base(&p.pd_name);
+        if b == p.pd_name && taken.insert(b.clone()) {
+            out.insert(p.pd_name.clone(), b);
+        }
     }
+    for p in params {
+        if out.contains_key(&p.pd_name) {
+            continue;
+        }
+        let mut ident = base(&p.pd_name);
+        while taken.contains(&ident) {
+            ident.push('_');
+        }
+        taken.insert(ident.clone());
+        out.insert(p.pd_name.clone(), ident);
+    }
+    out
 }
 
 /// Convert to PascalCase
