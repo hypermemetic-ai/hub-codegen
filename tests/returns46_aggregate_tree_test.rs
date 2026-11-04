@@ -153,7 +153,7 @@ fn ts_lifted_events_at_run_time() {
     let (ok, text) = run(Command::new("node").args(["--test", "--test-reporter=spec"]).arg(pkg.join("out/r46-tests/runtime.test.js")).current_dir(&pkg));
     println!("{text}");
     assert!(ok, "node --test runtime.test.js failed:\n{text}");
-    assert!(text.contains("pass 4"), "4 runtime tests:\n{text}");
+    assert!(text.contains("pass 5"), "5 runtime tests:\n{text}");
 }
 
 #[test]

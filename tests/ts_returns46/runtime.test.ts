@@ -1,8 +1,10 @@
 // RETURNS-46 · at run time (node --test): a call through a child accessor
 // yields the nested aggregate from `.events()`, and `watch(...)` over such
 // calls yields it too — the values the fixture's JSON fixes, the types
-// `types.test.ts` checks. A client made directly, and the root's own calls,
-// are as RETURNS-17 left them: `{ method: '<path>', event }`.
+// `types.test.ts` checks. Every call's `.events()` is its client's
+// aggregate: the root's own `{ method: 'count', event }`, exactly as Rust's
+// `TreeEvent` serialises it, so a watch over a root call and a child call
+// carries one shape; the path stays the watch item's `source`.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -56,17 +58,31 @@ test("a level's own client yields its own aggregate", async () => {
   const branch = createTreeBranchClient(rpc, (e: TreeBranchEvent) => e);
   const got = [...(await all(branch.grow(3).events())), ...(await all(branch.leaf.fall(2).events()))];
   assert.deepEqual(json(got), json(branchLines));
-  // made directly, with no lift: as RETURNS-17 left it, but its children lift into it
+  // made directly, with no lift: its own aggregate, and its children lift into it
   const direct = createTreeBranchClient(rpc);
   assert.deepEqual(json(await all(direct.leaf.fall(2).events())), json(branchLines.slice(3)));
-  assert.deepEqual(json(await all(direct.grow(1).events())).slice(0, 1), [JSON.stringify({ method: 'tree.branch.grow', event: { ok: { bud: 1 } } })]);
+  assert.deepEqual(json(await all(direct.grow(3).events())), json(branchLines.slice(0, 3)));
 });
 
-test('a client made directly, and the root, are unchanged', async () => {
+test("every call's events are its client's aggregate: the root's, a leaf made directly", async () => {
   const leaf = createTreeBranchLeafClient(rpc);
-  assert.deepEqual(json(await all(leaf.fall(2).events())), json(leafLines.map((l) => ({ method: 'tree.branch.leaf.fall', event: l.event }))));
+  assert.deepEqual(json(await all(leaf.fall(2).events())), json(leafLines));
   const tree = createTreeClient(rpc);
-  assert.deepEqual(json(await all(tree.count(2).events())), json([{ method: 'tree.count', event: { n: 1 } }, { method: 'tree.count', event: { n: 2 } }]));
+  assert.deepEqual(json(await all(tree.count(2).events())), json(treeLines.slice(1, 3)));
+});
+
+test('a watch over a root call and a child call carries one shape', async () => {
+  const tree = createTreeClient(rpc);
+  const items = await all(watch(tree.count(2), tree.branch.grow(3), tree.branch.leaf.fall(2)));
+  const bySource = new Map<string, string[]>();
+  for (const it of items) {
+    assert.ok('event' in it, JSON.stringify(it));
+    bySource.set(it.source, [...(bySource.get(it.source) ?? []), JSON.stringify(it.event)]);
+  }
+  // every event a line of aggregate.tree.jsonl; the path is the item's source
+  assert.deepEqual(bySource.get('tree.count'), json(treeLines.slice(1, 3)));
+  assert.deepEqual(bySource.get('tree.branch.grow'), json(treeLines.slice(3, 6)));
+  assert.deepEqual(bySource.get('tree.branch.leaf.fall'), json(treeLines.slice(6, 8)));
 });
 
 test('watch over lifted calls yields the nested aggregate', async () => {

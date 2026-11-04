@@ -9,7 +9,7 @@
 // assertion: `tsc` fails if the line it covers is accepted.
 
 import { expectTypeOf } from 'expect-type';
-import { Tree, watch, type Result, type RpcClient, type MethodEvent, type Tagged, type Merged } from '../index';
+import { Tree, TreeBranchLeaf, watch, type Result, type RpcClient, type MethodEvent, type Tagged, type Merged } from '../index';
 import type { TreeEvent } from '../tree/events';
 import type { TreeBranchEvent } from '../tree/branch/events';
 import type { TreeBranchLeafEvent } from '../tree/branch/leaf/events';
@@ -81,8 +81,12 @@ export function liftedTypes(rpc: RpcClient): void {
   const tree = Tree.createTreeClient(rpc);
   expectTypeOf(tree.branch.grow(1).events()).toEqualTypeOf<AsyncGenerator<TreeEvent, undefined>>();
   expectTypeOf(tree.branch.leaf.fall(1).events()).toEqualTypeOf<AsyncGenerator<TreeEvent, undefined>>();
-  // the root's own call, and a client made directly, as RETURNS-17 left them
+  // the root's own call: its client's aggregate too, not { method: '<path>' }
+  expectTypeOf(tree.count(1).events()).toEqualTypeOf<AsyncGenerator<TreeEvent, undefined>>();
+  // @ts-expect-error — the path form is gone from .events()
   expectTypeOf(tree.count(1).events()).toEqualTypeOf<AsyncGenerator<MethodEvent<'tree.count', Tick>, undefined>>();
+  // a client made directly: its own aggregate
+  expectTypeOf(TreeBranchLeaf.createTreeBranchLeafClient(rpc).fall(1).events()).toEqualTypeOf<AsyncGenerator<TreeBranchLeafEvent, undefined>>();
   // @ts-expect-error — through an accessor it is not the child's own event any more
   expectTypeOf(tree.branch.grow(1).events()).toEqualTypeOf<AsyncGenerator<MethodEvent<'tree.branch.grow', Bud>, undefined>>();
   // watch over lifted calls: each item the nested aggregate, tagged by its source
@@ -90,4 +94,7 @@ export function liftedTypes(rpc: RpcClient): void {
   expectTypeOf(merged).toEqualTypeOf<
     Merged<Tagged<'tree.branch.grow', TreeEvent> | Tagged<'tree.branch.leaf.fall', TreeEvent>>
   >();
+  // a root call and a child call: one shape
+  const mixed = watch(tree.count(1), tree.branch.grow(1));
+  expectTypeOf(mixed).toEqualTypeOf<Merged<Tagged<'tree.count', TreeEvent> | Tagged<'tree.branch.grow', TreeEvent>>>();
 }
