@@ -144,6 +144,7 @@ fn existing_output_unchanged() {
                     continue;
                 }
                 let now = files.get(*path).unwrap_or_else(|| panic!("{dir}/{path} is no longer generated"));
+                let now = &returns_line::before_returns46(&format!("{dir}/{path}"), now, &|p| p.strip_prefix(&format!("{dir}/")).is_some_and(|q| files.contains_key(q)));
                 let now = if *path == "index.ts" {
                     assert!(now.contains(WATCH_EXPORT), "{dir}/index.ts lacks the watch export");
                     now.replacen(WATCH_EXPORT, "", 1)
@@ -155,7 +156,11 @@ fn existing_output_unchanged() {
             }
             for path in files.keys() {
                 assert!(
-                    had.contains_key(path.as_str()) || path == "watch.ts" || returns_line::is_returns46_events(path),
+                    had.contains_key(path.as_str())
+                        || path == "watch.ts"
+                        || returns_line::is_returns46_events(&format!("{dir}/{path}"), &|p| p
+                            .strip_prefix(&format!("{dir}/"))
+                            .is_some_and(|q| files.contains_key(q))),
                     "{dir}/{path} is new; only watch.ts (and RETURNS-46's events.ts) may be"
                 );
             }

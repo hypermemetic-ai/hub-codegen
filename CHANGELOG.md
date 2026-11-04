@@ -11,7 +11,26 @@ NAMING-10's merge (0.5.1, the rename).
   (`Result<T, E>` for a method with an error type), one per static child
   carrying the child's aggregate, one per dynamic child carrying
   `{ name: string; event }` — the Rust aggregate's JSON. A dynamic child's
-  event is `unknown` from IR 3.0, which describes none of its methods.
+  event is `unknown`: IR 3.0 names a dynamic child but describes none of its
+  methods.
+- RETURNS-46, at run time: a call through a static child's accessor is
+  lifted into the parent's aggregate — `tree.branch.grow(3).events()`
+  yields `{ method: 'branch', event: { method: 'grow', event } }`, and
+  `watch(...)` over such calls yields each item's event so. `MethodStream`
+  gains a third type parameter `A` (default `MethodEvent<P, E>`) and an
+  optional `lift`; rpc.ts exports `Lifted` and `Up`, watch.ts
+  `LiftableSource`.
+
+### Changed
+
+- RETURNS-46: a namespace some activation reaches as a static child has a
+  generic client, `XClient<A = undefined>`, and
+  `createXClient<A>(rpc, lift?)`; its streaming methods return
+  `MethodStream<'p', T, Lifted<A, 'p', T>>`. A parent's accessor property is
+  `XClient<ParentEvent>` (was `XClient`), and `.events()` on a call through it
+  yields the parent's aggregate, not `{ method: '<path>', event }` — for that,
+  make the child's client directly (`createXClient(rpc)`). A client made
+  directly, and every call of a root namespace, is unchanged.
 
 ## 0.6.0 — 2026-11-02
 

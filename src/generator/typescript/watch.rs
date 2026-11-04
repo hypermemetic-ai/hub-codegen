@@ -64,9 +64,22 @@ export interface WatchFailure<P extends string> {
   readonly error: Error;
 }
 
+/**
+ * RETURNS-46: a method stream lifted into its client's aggregate `A` — a call
+ * made through a parent's child accessor. A merge reads its `.events()`, so
+ * its items are the aggregate, nested; a stream that is not lifted (`lift`
+ * undefined, `A` its own `{ method, event }`) is read as before.
+ */
+export interface LiftableSource<P extends string, E, A> extends MethodSource<P, E> {
+  readonly lift: ((event: E) => A) | undefined;
+  events(): AsyncIterable<A>;
+}
+
 /** The tagged item of one source. Distributes over a union of sources. */
 export type TaggedOf<S> =
   S extends readonly [infer P extends string, AsyncIterable<infer E>] ? Tagged<P, E>
+  : S extends LiftableSource<infer P, infer E, infer A>
+    ? ([A] extends [{ readonly method: P }] ? Tagged<P, E> : Tagged<P, A>)
   : S extends MethodSource<infer P, infer E> ? Tagged<P, E>
   : never;
 
@@ -180,6 +193,11 @@ function unpack(s: WatchSource<string, unknown>, position: number): [string, Asy
     const [path, stream] = s as readonly [unknown, unknown];
     if (typeof path === 'string' && isIterable(stream)) return [path, stream];
   } else if (isIterable(s) && typeof (s as MethodSource<string, unknown>).method === 'string') {
+    const lifted = s as LiftableSource<string, unknown, unknown>;
+    // RETURNS-46: a lifted stream is merged as its aggregate.
+    if (typeof lifted.lift === 'function' && typeof lifted.events === 'function') {
+      return [lifted.method, { [Symbol.asyncIterator]: () => lifted.events()[Symbol.asyncIterator]() }];
+    }
     return [(s as MethodSource<string, unknown>).method, s];
   }
   throw new TypeError(`watch: argument ${position + 1} is neither a MethodStream nor a [path, stream] pair`);

@@ -99,7 +99,9 @@ fn package() -> Option<(tempfile::TempDir, PathBuf, PathBuf)> {
     }
     let tests = pkg.join("r46-tests");
     std::fs::create_dir_all(&tests).unwrap();
-    std::fs::copy(root().join("tests/ts_returns46/types.test.ts"), tests.join("types.test.ts")).unwrap();
+    for f in ["types.test.ts", "runtime.test.ts"] {
+        std::fs::copy(root().join("tests/ts_returns46").join(f), tests.join(f)).unwrap();
+    }
     let mut lines = String::from(
         "// RETURNS-46 · the aggregate-tree fixture's JSON, each line typed as its level's aggregate.\n\
          import type { TreeEvent } from '../tree/events';\n\
@@ -127,7 +129,7 @@ fn package() -> Option<(tempfile::TempDir, PathBuf, PathBuf)> {
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "outDir": "out"
   },
   "include": ["*.ts", "tree/**/*.ts", "r46-tests/*.ts"]
 }"#;
@@ -137,7 +139,21 @@ fn package() -> Option<(tempfile::TempDir, PathBuf, PathBuf)> {
 }
 
 fn tsc(pkg: &Path, tsc: &Path) -> (bool, String) {
-    run(Command::new(tsc).args(["-p", "tsconfig.r46.json"]).current_dir(pkg))
+    run(Command::new(tsc).args(["-p", "tsconfig.r46.json", "--noEmit"]).current_dir(pkg))
+}
+
+/// RETURNS-46 · at run time: `.events()` through a child accessor, and
+/// `watch` over such calls, yield the nested aggregate (node --test).
+#[test]
+fn ts_lifted_events_at_run_time() {
+    let Some((_tmp, pkg, bin)) = package() else { return };
+    let (ok, text) = run(Command::new(&bin).args(["-p", "tsconfig.r46.json"]).current_dir(&pkg));
+    assert!(ok, "tsc:\n{text}");
+    std::fs::write(pkg.join("out/package.json"), r#"{ "type": "commonjs" }"#).unwrap();
+    let (ok, text) = run(Command::new("node").args(["--test", "--test-reporter=spec"]).arg(pkg.join("out/r46-tests/runtime.test.js")).current_dir(&pkg));
+    println!("{text}");
+    assert!(ok, "node --test runtime.test.js failed:\n{text}");
+    assert!(text.contains("pass 4"), "4 runtime tests:\n{text}");
 }
 
 #[test]

@@ -197,6 +197,7 @@ fn existing_output_unchanged() {
             continue;
         }
         let content = now.get(path).unwrap_or_else(|| panic!("{path} is no longer generated"));
+        let content = &returns_line::before_returns46(path, content, &|p| now.contains_key(p));
         let content = if file == "client.ts" && !path.contains("-rust/") {
             to_main_spelling(content)
         } else if name == "types.ts" {
@@ -211,7 +212,7 @@ fn existing_output_unchanged() {
         compared += 1;
     }
     for path in now.keys() {
-        assert!(before.contains_key(path) || returns_line::is_returns46_events(path), "{path} is new");
+        assert!(before.contains_key(path) || returns_line::is_returns46_events(path, &|p| now.contains_key(p)), "{path} is new");
     }
     assert!(compared > 90, "compared {compared} files");
 }

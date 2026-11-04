@@ -4,13 +4,14 @@
 import type { RpcClient } from '../rpc';
 import { MethodStream, collectOne } from '../rpc';
 import type { SpikeEvent, Status, TicketId } from './types';
+import type { TicketsEvent } from './events';
 import type { TicketsInputsClient } from '../tickets/inputs/client';
 import { createTicketsInputsClient } from '../tickets/inputs/client';
 
 /** Typed client interface for tickets plugin */
 export interface TicketsClient {
   /** The inputs namespace — `tickets.inputs.<method>`. */
-  readonly inputs: TicketsInputsClient;
+  readonly inputs: TicketsInputsClient<TicketsEvent>;
   /**
    * Read one ticket.
    * @server-derived auth
@@ -37,10 +38,10 @@ export interface TicketsClient {
 /** Typed client implementation for tickets plugin */
 class TicketsClientImpl implements TicketsClient {
   private rpc: RpcClient;
-  readonly inputs: TicketsInputsClient;
+  readonly inputs: TicketsInputsClient<TicketsEvent>;
   constructor(rpc: RpcClient) {
     this.rpc = rpc;
-    this.inputs = createTicketsInputsClient(rpc);
+    this.inputs = createTicketsInputsClient<TicketsEvent>(rpc, (event) => ({ method: 'inputs', event }));
   }
 
   get(id: TicketId): MethodStream<'tickets.get', SpikeEvent> {

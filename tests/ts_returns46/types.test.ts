@@ -9,7 +9,7 @@
 // assertion: `tsc` fails if the line it covers is accepted.
 
 import { expectTypeOf } from 'expect-type';
-import { Tree, type Result } from '../index';
+import { Tree, watch, type Result, type RpcClient, type MethodEvent, type Tagged, type Merged } from '../index';
 import type { TreeEvent } from '../tree/events';
 import type { TreeBranchEvent } from '../tree/branch/events';
 import type { TreeBranchLeafEvent } from '../tree/branch/leaf/events';
@@ -74,4 +74,20 @@ export function reduce(ev: TreeEvent): string {
       return never;
     }
   }
+}
+
+// ── at run time: a call through an accessor is the root's aggregate ─────────
+export function liftedTypes(rpc: RpcClient): void {
+  const tree = Tree.createTreeClient(rpc);
+  expectTypeOf(tree.branch.grow(1).events()).toEqualTypeOf<AsyncGenerator<TreeEvent, undefined>>();
+  expectTypeOf(tree.branch.leaf.fall(1).events()).toEqualTypeOf<AsyncGenerator<TreeEvent, undefined>>();
+  // the root's own call, and a client made directly, as RETURNS-17 left them
+  expectTypeOf(tree.count(1).events()).toEqualTypeOf<AsyncGenerator<MethodEvent<'tree.count', Tick>, undefined>>();
+  // @ts-expect-error — through an accessor it is not the child's own event any more
+  expectTypeOf(tree.branch.grow(1).events()).toEqualTypeOf<AsyncGenerator<MethodEvent<'tree.branch.grow', Bud>, undefined>>();
+  // watch over lifted calls: each item the nested aggregate, tagged by its source
+  const merged = watch(tree.branch.grow(1), tree.branch.leaf.fall(1));
+  expectTypeOf(merged).toEqualTypeOf<
+    Merged<Tagged<'tree.branch.grow', TreeEvent> | Tagged<'tree.branch.leaf.fall', TreeEvent>>
+  >();
 }

@@ -150,7 +150,8 @@ fn ts_leaves_injected_params_out_and_keeps_the_breadcrumbs() {
     assert!(tickets.contains("this.rpc.call('tickets.set_status', { id, status });"));
     assert!(tickets.contains("  get(id: TicketId): MethodStream<'tickets.get', SpikeEvent>;"));
     assert!(tickets.contains("this.rpc.call('tickets.get', { id });"));
-    assert!(inputs.contains("  answer(ticket: TicketId, value: Status): MethodStream<'tickets.inputs.answer', SpikeEvent>;"));
+    // RETURNS-46: a static child's stream lifts into its parent's aggregate
+    assert!(inputs.contains("  answer(ticket: TicketId, value: Status): MethodStream<'tickets.inputs.answer', SpikeEvent, Lifted<A, 'tickets.inputs.answer', SpikeEvent>>;"));
     assert!(inputs.contains("this.rpc.call('tickets.inputs.answer', { ticket, value });"));
     // the breadcrumbs stay
     for crumb in ["@server-derived auth", "@reads-header origin", "@requiresAuth — resolver: self.access.verify"] {
@@ -178,8 +179,9 @@ fn ts_a_static_child_is_a_typed_sub_client() {
     assert!(!tickets.contains("'tickets.inputs', {}"));
     assert!(tickets.contains("import type { TicketsInputsClient } from '../tickets/inputs/client';"));
     assert!(tickets.contains("import { createTicketsInputsClient } from '../tickets/inputs/client';"));
-    assert!(tickets.contains("  /** The inputs namespace — `tickets.inputs.<method>`. */\n  readonly inputs: TicketsInputsClient;"));
-    assert!(tickets.contains("    this.inputs = createTicketsInputsClient(rpc);"));
+    // RETURNS-46: the sub-client lifts into the parent's aggregate
+    assert!(tickets.contains("  /** The inputs namespace — `tickets.inputs.<method>`. */\n  readonly inputs: TicketsInputsClient<TicketsEvent>;"));
+    assert!(tickets.contains("    this.inputs = createTicketsInputsClient<TicketsEvent>(rpc, (event) => ({ method: 'inputs', event }));"));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -257,7 +259,7 @@ fn rust_with_injected_params_compiles() {
     let svc_ts = &ts.files["svc/client.ts"];
     assert!(svc_ts.contains("  whoami(): MethodStream<'svc.whoami', string>;"), "{svc_ts}");
     assert!(svc_ts.contains("  ping(text: string): Promise<string>;"));
-    assert!(svc_ts.contains("  readonly kids: SvcKidsClient;"));
+    assert!(svc_ts.contains("  readonly kids: SvcKidsClient<SvcEvent>;"), "{svc_ts}");
 
     let dir = std::env::temp_dir().join("plexus-rust-codegen-synapse-cc-2");
     let _ = std::fs::remove_dir_all(&dir);

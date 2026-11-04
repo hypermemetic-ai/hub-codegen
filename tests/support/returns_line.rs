@@ -10,9 +10,13 @@
 //   "lowercase"`, which spelled `status_changed` as `statuschanged`.
 //
 // - RETURNS-46: every namespace's aggregate, `{Ns}Event`, in a new
-//   `<ns>/events.ts`, which `<ns>/index.ts` re-exports. The new files are
-//   not in the records ([`is_returns46_events`]) and the export line is
-//   taken back out; tests/returns46_aggregate_tree_test.rs holds them.
+//   `<ns>/events.ts` beside its `client.ts`, which `<ns>/index.ts`
+//   re-exports. The new files are not in the records
+//   ([`is_returns46_events`]); [`before_returns46`] takes the export line
+//   back out of a namespace's `index.ts`, and the lifting out of a client
+//   in a static-child relation (generic over the aggregate it lifts into);
+//   tests/returns46_aggregate_tree_test.rs and the synapse_cc_2 goldens
+//   hold the new form.
 //
 // The output is spelled back as the records had it before it is hashed;
 // anything else that moved still fails the hash. Each change has its own
@@ -24,15 +28,127 @@ const SMOKE_BEFORE: &str = "const WS_URL = process.env.PLEXUS_URL ?? \"ws://loca
 
 const EVENTS_EXPORT: &str = "export * from './events';\n";
 
-/// RETURNS-46: a namespace's `events.ts`, the aggregate, new since the records.
+/// RETURNS-46: a namespace's `events.ts` — beside a generated namespace's
+/// `client.ts` in `files` — new since the records.
 #[allow(dead_code)]
-pub fn is_returns46_events(path: &str) -> bool {
-    path.ends_with("/events.ts")
+pub fn is_returns46_events(path: &str, files: &dyn Fn(&str) -> bool) -> bool {
+    match path.strip_suffix("/events.ts") {
+        Some(dir) => files(&format!("{dir}/client.ts")),
+        None => false,
+    }
+}
+
+/// RETURNS-46's output, as the records had it: a namespace's `index.ts`
+/// (one beside a generated `events.ts`) without the line exporting it, and a
+/// namespace `client.ts` without the lifting. Every other file as it is.
+#[allow(dead_code)]
+pub fn before_returns46(path: &str, s: &str, files: &dyn Fn(&str) -> bool) -> String {
+    let dir = path.rsplit_once('/').map(|(d, _)| d);
+    if path.ends_with("/index.ts") && dir.is_some_and(|d| files(&format!("{d}/events.ts"))) {
+        return s.replacen(EVENTS_EXPORT, "", 1);
+    }
+    if path.ends_with("/client.ts") && !path.contains("-rust/") {
+        return unlift_client(s);
+    }
+    s.to_string()
+}
+
+/// The lifting RETURNS-46 writes into a client in a static-child relation,
+/// taken out line by line; a client with none is returned as it is.
+fn unlift_client(s: &str) -> String {
+    let generic = |l: &str, open: &str| -> Option<String> {
+        // `XClient<anything>` → `XClient` at the first `open`
+        let i = l.find(open)?;
+        let start = i + open.len();
+        let mut depth = 1;
+        for (j, c) in l[start..].char_indices() {
+            match c {
+                '<' => depth += 1,
+                '>' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(format!("{}{}", &l[..i + open.len() - 1], &l[start + j + 1..]));
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    };
+    let mut out: Vec<String> = Vec::new();
+    let lines: Vec<&str> = s.split('\n').collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let l = lines[i];
+        i += 1;
+        let t = l.trim_start();
+        if (t.starts_with("import type {") && t.ends_with("} from './events';"))
+            || (t.starts_with("import type { Lifted") && t.ends_with("rpc';"))
+            || t.starts_with("private readonly __lift:")
+            || t == "this.__lift = lift;"
+            || t == "const lift = this.__lift;"
+        {
+            continue;
+        }
+        if t.starts_with("private __liftUp(") {
+            i += 3; // its body, its `}` and the blank line after it
+            continue;
+        }
+        let mut l = l.to_string();
+        if let Some(rest) = l.strip_prefix("export interface ").map(str::to_string) {
+            if let Some(name) = rest.strip_suffix("<A = undefined> {") {
+                l = format!("export interface {name} {{");
+            }
+        }
+        if l.contains("ClientImpl<A = undefined> implements ") {
+            l = l.replacen("<A = undefined>", "", 1);
+            l = l.replacen("Client<A> {", "Client {", 1);
+        }
+        if l.trim_start().starts_with("readonly ") && l.contains("Client<") {
+            if let Some(m) = generic(&l, "Client<") {
+                l = m;
+            }
+        }
+        if l.contains(" = create") && l.contains("Client<") && l.contains("(rpc, ") {
+            let head = &l[..l.find("Client<").unwrap() + "Client".len()];
+            l = format!("{head}(rpc);");
+        }
+        if let Some(p) = l.find(", Lifted<A, '") {
+            // `MethodStream<'p', T, Lifted<A, 'p', T>>` → `MethodStream<'p', T>`
+            if let Some(end) = generic(&l[p + 2..], "Lifted<") {
+                l = format!("{}{}", &l[..p], &end["Lifted".len()..]);
+            }
+            if let Some(q) = l.find("', stream, lift && (") {
+                l = format!("{}', stream);", &l[..q]);
+            }
+        }
+        if l.starts_with("  constructor(rpc: RpcClient, lift?: ") {
+            // a client with no children of its own had the one-line form
+            let body_alone = lines.get(i).map(|n| n.trim()) == Some("this.rpc = rpc;")
+                && lines.get(i + 1).map(|n| n.trim()) == Some("this.__lift = lift;")
+                && lines.get(i + 2).map(|n| n.trim()) == Some("}");
+            if body_alone {
+                out.push("  constructor(rpc: RpcClient) { this.rpc = rpc; }".to_string());
+                i += 3;
+                continue;
+            }
+            l = "  constructor(rpc: RpcClient) {".to_string();
+        }
+        if l.starts_with("export function create") && l.contains("Client<A = undefined>(rpc: RpcClient, lift?: ") {
+            let name = &l["export function create".len()..l.find("Client<A").unwrap()];
+            l = format!("export function create{name}Client(rpc: RpcClient): {name}Client {{");
+        }
+        if l.trim_start().starts_with("return new ") && l.ends_with("ClientImpl<A>(rpc, lift);") {
+            l = l.replacen("ClientImpl<A>(rpc, lift);", "ClientImpl(rpc);", 1);
+        }
+        out.push(l);
+    }
+    out.join("\n")
 }
 
 /// Today's output, as the records before RETURNS-36 had it.
 pub fn before_returns_line(s: &str) -> String {
-    let s = s.replace(SMOKE_NOW, SMOKE_BEFORE).replacen(EVENTS_EXPORT, "", 1);
+    let s = s.replace(SMOKE_NOW, SMOKE_BEFORE);
     let lines: Vec<&str> = s.split('\n').collect();
     let mut out: Vec<String> = Vec::with_capacity(lines.len());
     let mut in_tagged_enum = false;
