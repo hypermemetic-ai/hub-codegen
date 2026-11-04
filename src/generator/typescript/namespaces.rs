@@ -853,7 +853,7 @@ fn generate_params(params: &[ParamDef], namespace: &str) -> String {
         .map(|p| {
             let optional = if p.pd_required { "" } else { "?" };
             let ts_type = p.pd_type.to_ts_in_namespace(namespace);
-            format!("{}{}: {}", to_camel(&p.pd_name), optional, ts_type)
+            format!("{}{}: {}", param_ident(&p.pd_name), optional, ts_type)
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -881,7 +881,7 @@ fn generate_params_annotated(
         .map(|p| {
             let optional = if p.pd_required { "" } else { "?" };
             let ts_type = p.pd_type.to_ts_in_namespace(namespace);
-            let base = format!("{}{}: {}", to_camel(&p.pd_name), optional, ts_type);
+            let base = format!("{}{}: {}", param_ident(&p.pd_name), optional, ts_type);
             if emit_deprecation {
                 if let Some(info) = &p.pd_deprecation {
                     warnings.push(DeprecationWarning {
@@ -919,7 +919,7 @@ fn generate_params_object(params: &[ParamDef]) -> String {
     let fields: Vec<String> = params
         .iter()
         .map(|p| {
-            let camel_name = to_camel(&p.pd_name);  // TypeScript variable (camelCase)
+            let camel_name = param_ident(&p.pd_name);  // TypeScript variable (camelCase)
             let snake_name = &p.pd_name;             // RPC wire format (snake_case)
 
             // Use shorthand when names are identical, explicit mapping otherwise
@@ -932,6 +932,24 @@ fn generate_params_object(params: &[ParamDef]) -> String {
         .collect();
 
     format!("{{ {} }}", fields.join(", "))
+}
+
+/// RETURNS-40 review #6: a param's TypeScript identifier — its name in
+/// camelCase, and `_` after a word TypeScript reserves (menger's
+/// `quota.set` takes `default`): `default_`, sent as `default` on the wire.
+fn param_ident(name: &str) -> String {
+    const RESERVED: &[&str] = &[
+        "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "enum",
+        "export", "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "new", "null",
+        "return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with",
+        "implements", "interface", "let", "package", "private", "protected", "public", "static", "yield", "await",
+    ];
+    let camel = to_camel(name);
+    if RESERVED.contains(&camel.as_str()) {
+        format!("{camel}_")
+    } else {
+        camel
+    }
 }
 
 /// Convert to PascalCase
