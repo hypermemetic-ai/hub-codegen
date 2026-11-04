@@ -66,8 +66,9 @@ export async function typeTests(rpc: RpcClient): Promise<void> {
   watch(['alpha.a', 42]);
   // @ts-expect-error — a path is a string
   watch([1, alpha.a()]);
-  // RETURNS-17: a generated stream is a MethodStream — it brings its path
-  expectTypeOf(watch(alpha.a())).toEqualTypeOf<Merged<Tagged<'alpha.a', A>>>();
+  // RETURNS-17: a generated stream is a MethodStream — it brings its path;
+  // RETURNS-46: its event is its client's aggregate (the path is `source`)
+  expectTypeOf(watch(alpha.a())).toEqualTypeOf<Merged<Tagged<'alpha.a', Alpha.AlphaAggregate>>>();
   async function* bare(): AsyncGenerator<A> {}
   // @ts-expect-error — a bare generator has no path to tag it with
   watch(bare());

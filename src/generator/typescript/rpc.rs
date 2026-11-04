@@ -269,14 +269,10 @@ export interface MethodEvent<P extends string, E> {
 }
 
 /**
- * RETURNS-46: what `.events()` yields for a stream lifted into an aggregate
- * `A` — `A` itself — or, when `A` is `undefined` (a call on a client made
- * directly, not through a parent's child accessor), the stream's own
- * `{ method, event }`.
+ * RETURNS-46: the aggregate a generated client's `.events()` yield: `A`, the
+ * aggregate of the client a parent's accessor lifts into, or this level's
+ * own `E` when `A` is `undefined` (a client made directly).
  */
-export type Lifted<A, P extends string, E> = [A] extends [undefined] ? MethodEvent<P, E> : A;
-
-/** RETURNS-46: the aggregate a child accessor lifts into: `A`, or this level's own `E` when `A` is `undefined`. */
 export type Up<A, E> = [A] extends [undefined] ? E : A;
 
 /** What `.withProgress()` yields: an item, or a progress report, in arrival order. */
@@ -294,10 +290,13 @@ export type WithProgress<E> = { readonly item: E } | { readonly progress: Progre
  * It is read once: by `for await` / `next()`, or by one of `.events()` /
  * `.withProgress()`. Breaking out (or `return()`) unsubscribes the call.
  *
- * RETURNS-46: a call made through a parent's child accessor carries a
- * `lift` into the parent's aggregate `A`: its `.events()` (and `watch` over
- * it) yield the nested aggregate — `{ method: 'branch', event: { method:
- * 'grow', event } }` — where a call made directly yields `{ method, event }`.
+ * RETURNS-46: a generated method's stream carries a `lift` into its
+ * client's aggregate `A`: `.events()` (and `watch` over it) yield
+ * `{ method: 'grow', event }` — the activation's `{Ns}Event`, as Rust
+ * serialises it — or, through a parent's accessor, the parent's, nested:
+ * `{ method: 'branch', event: { method: 'grow', event } }`. The path is the
+ * stream's `method`, and a watch item's `source`. A stream made by hand,
+ * with no lift, tags each event `{ method: '<path>', event }`.
  */
 export class MethodStream<P extends string, E, A = MethodEvent<P, E>> implements AsyncIterableIterator<E> {
   /** The method's path, as a literal type. */
@@ -348,8 +347,8 @@ export class MethodStream<P extends string, E, A = MethodEvent<P, E>> implements
   }
 
   /**
-   * Each event tagged with this stream's method: `{ method: 'tickets.watch', event }` —
-   * or, through a child accessor, lifted into the parent's aggregate (RETURNS-46).
+   * Each event as its client's aggregate (RETURNS-46): `{ method: 'watch', event }`,
+   * nested through a parent's accessor. With no lift, `{ method: 'tickets.watch', event }`.
    */
   events(): AsyncGenerator<A, undefined> {
     const items = decodeItems<E>(this.method, this.#take('.events()'));

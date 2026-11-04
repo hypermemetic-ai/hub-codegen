@@ -29,7 +29,8 @@ pub fn generate_namespaces(
     // the pre-ticket non-exported ClientImpl for byte-identical output.
     let dynamic_child_target_namespaces = collect_dynamic_child_target_namespaces(ir);
     // RETURNS-46: the namespaces some activation reaches as a static child —
-    // their clients take a lift into the parent's aggregate.
+    // their clients are generic over the aggregate they lift into, whether
+    // or not they stream.
     let static_child_targets: BTreeSet<String> =
         ir.ir_methods.values().filter_map(|m| static_child_namespace(m, ir)).collect();
 
@@ -70,10 +71,7 @@ pub fn generate_namespaces(
         }
 
         let export_impl = dynamic_child_target_namespaces.contains(&namespace);
-        let lift = Lifting {
-            target: static_child_targets.contains(&namespace),
-            generated: &generated,
-        };
+        let lift = Lifting { target: static_child_targets.contains(&namespace), generated: &generated };
         let content = generate_namespace(&namespace, &methods, ir, export_impl, emit_deprecation, warnings, &lift);
         // Convert dotted namespace to directory path
         let path = namespace.replace('.', "/");
@@ -146,13 +144,17 @@ fn generate_namespace_index(namespace: &str, has_types: bool) -> String {
     )
 }
 
-/// RETURNS-46: how a namespace's client takes part in lifting events up the
-/// tree. A namespace some activation reaches as a static child (`target`)
-/// is generic over the aggregate it lifts into (`TreeBranchClient<A =
-/// undefined>`); a namespace with static children hands each a lift into its
-/// own aggregate — or, when it is a target itself, into its parent's.
+/// RETURNS-46: a namespace's client that streams, has static children, or
+/// is one is generic over the aggregate it lifts into
+/// (`TreeBranchClient<A = undefined>`, `undefined`: its own): each call's
+/// `.events()` is that aggregate — `{ method: '<wire name>', event }` for a
+/// client made directly, nested for one a parent's accessor made — and each
+/// static child is handed a lift into it. One that does none of these is
+/// generated as it was.
 pub(super) struct Lifting<'a> {
+    /// Some activation reaches this namespace as a static child.
     pub target: bool,
+    #[allow(dead_code)]
     pub generated: &'a BTreeSet<String>,
 }
 
@@ -312,15 +314,17 @@ fn generate_namespace(
     }
 
     // RETURNS-46: lifting — this namespace's aggregate, and the helper types.
-    let target = lifting.target;
     let agg = super::events::aggregate_name(ir, namespace);
-    let lifts = target || !static_children.is_empty();
-    if lifts {
+    // A client that streams or has static children lifts; one that is a
+    // static child takes a lift. Either is generic over its aggregate; one
+    // that is neither is as it was.
+    let lifts = !static_children.is_empty() || flat_methods.iter().any(|m| m.is_streaming());
+    let target = lifting.target || lifts;
+    if target {
         lines.push(format!("import type {{ {agg} }} from './events';"));
-        if target {
-            let helpers = if static_children.is_empty() { "Lifted" } else { "Lifted, Up" };
-            lines.push(format!("import type {{ {helpers} }} from '{to_root}rpc';"));
-        }
+    }
+    if lifts {
+        lines.push(format!("import type {{ Up }} from '{to_root}rpc';"));
     }
 
     // SYNAPSE-CC-2: each static child's client interface (a type) and its
@@ -424,7 +428,7 @@ fn generate_namespace(
         // (RETURNS-17); non-streaming return Promise
         let full_return = if method.is_streaming() && target {
             let p = &method.md_full_path;
-            format!("MethodStream<'{p}', {return_type}, Lifted<A, '{p}', {return_type}>>")
+            format!("MethodStream<'{p}', {return_type}, Up<A, {agg}>>")
         } else if method.is_streaming() {
             format!("MethodStream<'{}', {}>", method.md_full_path, return_type)
         } else {
@@ -560,7 +564,7 @@ fn generate_namespace(
         lines.push("  }".to_string());
     }
     lines.push("".to_string());
-    if target && !static_children.is_empty() {
+    if lifts {
         lines.push(format!("  private __liftUp(event: {agg}): Up<A, {agg}> {{"));
         lines.push(format!("    return (this.__lift ? this.__lift(event) : event) as Up<A, {agg}>;"));
         lines.push("  }".to_string());
@@ -590,14 +594,12 @@ fn generate_namespace(
             }
         }
         if method.is_streaming() && target {
-            // RETURNS-46: lifted when a parent made this client.
-            let lifted = format!("Lifted<A, '{full_path}', {return_type}>");
-            let stream_type = format!("MethodStream<'{full_path}', {return_type}, {lifted}>");
+            // RETURNS-46: its events are this client's aggregate.
+            let stream_type = format!("MethodStream<'{full_path}', {return_type}, Up<A, {agg}>>");
             lines.push(format!("  {}({}): {} {{", method_name, params_signature, stream_type));
             lines.push(format!("    const stream = this.rpc.call('{}', {});", full_path, params_object));
-            lines.push("    const lift = this.__lift;".to_string());
             lines.push(format!(
-                "    return new {stream_type}('{full_path}', stream, lift && ((event: {return_type}) => lift({{ method: '{}', event }} as unknown as {agg}) as unknown as {lifted}));",
+                "    return new {stream_type}('{full_path}', stream, (event: {return_type}) => this.__liftUp({{ method: '{}', event }} as unknown as {agg}));",
                 method.md_name
             ));
             lines.push("  }".to_string());

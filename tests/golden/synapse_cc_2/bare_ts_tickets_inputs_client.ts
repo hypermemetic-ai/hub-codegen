@@ -4,19 +4,21 @@
 import type { RpcClient } from '../../rpc';
 import { MethodStream, collectOne } from '../../rpc';
 import type { SpikeEvent, Status, TicketId } from '../../tickets/types';
+import type { TicketsInputsEvent } from './events';
+import type { Up } from '../../rpc';
 
 /** Typed client interface for tickets.inputs plugin */
-export interface TicketsInputsClient {
+export interface TicketsInputsClient<A = undefined> {
   /**
    * Answer an input.
    * @requires `inputs.answer` anywhere it is held
    */
-  answer(ticket: TicketId, value: Status): MethodStream<'tickets.inputs.answer', SpikeEvent>;
+  answer(ticket: TicketId, value: Status): MethodStream<'tickets.inputs.answer', SpikeEvent, Up<A, TicketsInputsEvent>>;
   /**
    * A ticket's inputs.
    * @requires `inputs.list` anywhere it is held
    */
-  list(ticket: TicketId): MethodStream<'tickets.inputs.list', SpikeEvent>;
+  list(ticket: TicketId): MethodStream<'tickets.inputs.list', SpikeEvent, Up<A, TicketsInputsEvent>>;
   /**
    * Get plugin or method schema. Pass {"method": "name"} for a specific method.
    * @requires `inputs.schema` anywhere it is held
@@ -25,18 +27,26 @@ export interface TicketsInputsClient {
 }
 
 /** Typed client implementation for tickets.inputs plugin */
-class TicketsInputsClientImpl implements TicketsInputsClient {
+class TicketsInputsClientImpl<A = undefined> implements TicketsInputsClient<A> {
   private rpc: RpcClient;
-  constructor(rpc: RpcClient) { this.rpc = rpc; }
-
-  answer(ticket: TicketId, value: Status): MethodStream<'tickets.inputs.answer', SpikeEvent> {
-    const stream = this.rpc.call('tickets.inputs.answer', { ticket, value });
-    return new MethodStream<'tickets.inputs.answer', SpikeEvent>('tickets.inputs.answer', stream);
+  private readonly __lift: ((event: TicketsInputsEvent) => A) | undefined;
+  constructor(rpc: RpcClient, lift?: (event: TicketsInputsEvent) => A) {
+    this.rpc = rpc;
+    this.__lift = lift;
   }
 
-  list(ticket: TicketId): MethodStream<'tickets.inputs.list', SpikeEvent> {
+  private __liftUp(event: TicketsInputsEvent): Up<A, TicketsInputsEvent> {
+    return (this.__lift ? this.__lift(event) : event) as Up<A, TicketsInputsEvent>;
+  }
+
+  answer(ticket: TicketId, value: Status): MethodStream<'tickets.inputs.answer', SpikeEvent, Up<A, TicketsInputsEvent>> {
+    const stream = this.rpc.call('tickets.inputs.answer', { ticket, value });
+    return new MethodStream<'tickets.inputs.answer', SpikeEvent, Up<A, TicketsInputsEvent>>('tickets.inputs.answer', stream, (event: SpikeEvent) => this.__liftUp({ method: 'answer', event } as unknown as TicketsInputsEvent));
+  }
+
+  list(ticket: TicketId): MethodStream<'tickets.inputs.list', SpikeEvent, Up<A, TicketsInputsEvent>> {
     const stream = this.rpc.call('tickets.inputs.list', { ticket });
-    return new MethodStream<'tickets.inputs.list', SpikeEvent>('tickets.inputs.list', stream);
+    return new MethodStream<'tickets.inputs.list', SpikeEvent, Up<A, TicketsInputsEvent>>('tickets.inputs.list', stream, (event: SpikeEvent) => this.__liftUp({ method: 'list', event } as unknown as TicketsInputsEvent));
   }
 
   async schema(): Promise<unknown> {
@@ -46,8 +56,8 @@ class TicketsInputsClientImpl implements TicketsInputsClient {
 }
 
 /** Create a typed tickets.inputs client from an RPC client */
-export function createTicketsInputsClient(rpc: RpcClient): TicketsInputsClient {
-  return new TicketsInputsClientImpl(rpc);
+export function createTicketsInputsClient<A = undefined>(rpc: RpcClient, lift?: (event: TicketsInputsEvent) => A): TicketsInputsClient<A> {
+  return new TicketsInputsClientImpl<A>(rpc, lift);
 }
 
 /** What each tickets.inputs method needs (AUTH-9): its grant, and the param that locates what it acts on (`null`: allowed wherever the grant is held). The gate decides, server-side. */

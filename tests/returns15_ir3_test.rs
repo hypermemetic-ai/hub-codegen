@@ -162,7 +162,7 @@ fn conformance_ir3_generates_by_cardinality() {
     let files = ts(&ir);
     let client = &files["conformance/client.ts"];
     for (name, item) in [("count", "Tick"), ("load", "Loaded"), ("scan", "Row"), ("warm", "Warmed")] {
-        assert!(client.contains(&format!("MethodStream<'conformance.{name}', {item}>")), "{name}:\n{client}");
+        assert!(client.contains(&format!("MethodStream<'conformance.{name}', {item}, Up<A, ConformanceEvent>>")), "{name}:\n{client}");
     }
     for (sig, item) in [("lookup(id: string)", "Thing"), ("ping()", "Pong")] {
         assert!(client.contains(&format!("  {sig}: Promise<{item}>;")), "{sig}:\n{client}");
@@ -291,7 +291,7 @@ fn a_method_generates_the_same_from_ir2_and_ir3() {
         };
         let (a, b) = (strip(ts(&two)), strip(ts(&three)));
         assert_eq!(a, b, "streaming {streaming}");
-        assert!(a["kiln/client.ts"].contains(if streaming { "MethodStream<'kiln.fire', string>" } else { "Promise<string>" }));
+        assert!(a["kiln/client.ts"].contains(if streaming { "MethodStream<'kiln.fire', string, Up<A, KilnEvent>>" } else { "Promise<string>" }));
         let (a, b) = (generate_rust(&two).unwrap().files, generate_rust(&three).unwrap().files);
         assert_eq!(a["src/kiln/mod.rs"], b["src/kiln/mod.rs"], "streaming {streaming}");
     }
@@ -388,7 +388,7 @@ fn ir21_forms_generate() {
     assert!(client.contains("  source(id: string): Promise<Source>;"), "{client}");
     assert!(client.contains("@requiresAuth — resolver: self.access.verify"), "{client}");
     assert!(client.contains("  temps(): Promise<Record<string, number>>;"), "{client}");
-    assert!(client.contains("  watch(since?: number | null): MethodStream<'kiln.watch', Answer>;"), "{client}");
+    assert!(client.contains("  watch(since?: number | null): MethodStream<'kiln.watch', Answer, Up<A, KilnEvent>>;"), "{client}");
 
     let rust = generate_rust(&ir).expect("rust").files;
     let module = &rust["src/kiln/mod.rs"];

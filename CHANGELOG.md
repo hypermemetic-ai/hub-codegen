@@ -13,24 +13,30 @@ NAMING-10's merge (0.5.1, the rename).
   `{ name: string; event }` — the Rust aggregate's JSON. A dynamic child's
   event is `unknown`: IR 3.0 names a dynamic child but describes none of its
   methods.
-- RETURNS-46, at run time: a call through a static child's accessor is
-  lifted into the parent's aggregate — `tree.branch.grow(3).events()`
-  yields `{ method: 'branch', event: { method: 'grow', event } }`, and
-  `watch(...)` over such calls yields each item's event so. `MethodStream`
-  gains a third type parameter `A` (default `MethodEvent<P, E>`) and an
-  optional `lift`; rpc.ts exports `Lifted` and `Up`, watch.ts
-  `LiftableSource`.
+- RETURNS-46, at run time: every generated call's `.events()` yields its
+  client's aggregate, as Rust's `{Ns}Event` serialises it — a root call
+  `{ method: 'count', event }`, a call through a static child's accessor
+  nested, `{ method: 'branch', event: { method: 'grow', event } }` — and so
+  does `watch(...)` over generated streams: one shape whatever the level.
+  `MethodStream` gains a third type parameter `A` (default
+  `MethodEvent<P, E>`, what a stream made by hand with no lift still yields)
+  and an optional `lift`; rpc.ts exports `Up`, watch.ts `LiftableSource`.
 
 ### Changed
 
-- RETURNS-46: a namespace some activation reaches as a static child has a
-  generic client, `XClient<A = undefined>`, and
-  `createXClient<A>(rpc, lift?)`; its streaming methods return
-  `MethodStream<'p', T, Lifted<A, 'p', T>>`. A parent's accessor property is
-  `XClient<ParentEvent>` (was `XClient`), and `.events()` on a call through it
-  yields the parent's aggregate, not `{ method: '<path>', event }` — for that,
-  make the child's client directly (`createXClient(rpc)`). A client made
-  directly, and every call of a root namespace, is unchanged.
+- RETURNS-46, **what moved**: a generated stream's `.events()` was
+  `{ method: '<path>', event }` (`MethodEvent<'tickets.watch', E>`); it is the
+  client's aggregate, `{ method: 'watch', event }` (`TicketsEvent`), or the
+  parent's through an accessor. A `watch` over generated streams (not
+  `[path, stream]` pairs, which are unchanged) yields
+  `{ source: '<path>', event: <aggregate> }` where it yielded the item: the
+  path is the item's `source`, and the stream's own `.method`. menger and
+  plexus-ui have no TypeScript reading `.events()`.
+- RETURNS-46: a namespace client that streams, has static children or is
+  one is `XClient<A = undefined>`, with `createXClient<A>(rpc, lift?)`; its
+  streaming methods return `MethodStream<'p', T, Up<A, XEvent>>`, and a
+  static child's property is `YClient<Up<A, XEvent>>` (was `YClient`). A
+  client that does none of these is unchanged.
 
 ## 0.6.0 — 2026-11-02
 

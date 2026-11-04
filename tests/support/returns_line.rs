@@ -14,7 +14,7 @@
 //   re-exports. The new files are not in the records
 //   ([`is_returns46_events`]); [`before_returns46`] takes the export line
 //   back out of a namespace's `index.ts`, and the lifting out of a client
-//   in a static-child relation (generic over the aggregate it lifts into);
+//   (generic over the aggregate its events lift into);
 //   tests/returns46_aggregate_tree_test.rs and the synapse_cc_2 goldens
 //   hold the new form.
 //
@@ -83,7 +83,7 @@ fn unlift_client(s: &str) -> String {
         i += 1;
         let t = l.trim_start();
         if (t.starts_with("import type {") && t.ends_with("} from './events';"))
-            || (t.starts_with("import type { Lifted") && t.ends_with("rpc';"))
+            || (t == format!("import type {{ Up }} from '{}rpc';", t.split("from '").nth(1).map(|r| &r[..r.len() - "rpc';".len()]).unwrap_or("")))
             || t.starts_with("private readonly __lift:")
             || t == "this.__lift = lift;"
             || t == "const lift = this.__lift;"
@@ -113,12 +113,14 @@ fn unlift_client(s: &str) -> String {
             let head = &l[..l.find("Client<").unwrap() + "Client".len()];
             l = format!("{head}(rpc);");
         }
-        if let Some(p) = l.find(", Lifted<A, '") {
-            // `MethodStream<'p', T, Lifted<A, 'p', T>>` → `MethodStream<'p', T>`
-            if let Some(end) = generic(&l[p + 2..], "Lifted<") {
-                l = format!("{}{}", &l[..p], &end["Lifted".len()..]);
+        if l.contains("MethodStream<'") {
+            if let Some(p) = l.find(", Up<A, ") {
+                // `MethodStream<'p', T, Up<A, XEvent>>` → `MethodStream<'p', T>`
+                if let Some(end) = generic(&l[p + 2..], "Up<") {
+                    l = format!("{}{}", &l[..p], &end["Up".len()..]);
+                }
             }
-            if let Some(q) = l.find("', stream, lift && (") {
+            if let Some(q) = l.find("', stream, (event: ") {
                 l = format!("{}', stream);", &l[..q]);
             }
         }

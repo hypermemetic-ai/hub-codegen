@@ -102,9 +102,10 @@ fn generated_streaming_methods_return_method_stream() {
     let files = ts(&fixture("returns17_ir"), TransportEnv::Browser);
     let alpha = &files["alpha/client.ts"];
     assert!(alpha.contains("import { MethodStream, collectOne } from '../rpc';"), "{alpha}");
-    assert!(alpha.contains("  a(): MethodStream<'alpha.a', AlphaEvent>;"), "{alpha}");
-    assert!(alpha.contains("  a(): MethodStream<'alpha.a', AlphaEvent> {"), "{alpha}");
-    assert!(alpha.contains("    return new MethodStream<'alpha.a', AlphaEvent>('alpha.a', stream);"), "{alpha}");
+    // RETURNS-46: its events are the client's aggregate (`AlphaAggregate`: alpha has an `AlphaEvent`)
+    assert!(alpha.contains("  a(): MethodStream<'alpha.a', AlphaEvent, Up<A, AlphaAggregate>>;"), "{alpha}");
+    assert!(alpha.contains("  a(): MethodStream<'alpha.a', AlphaEvent, Up<A, AlphaAggregate>> {"), "{alpha}");
+    assert!(alpha.contains("    return new MethodStream<'alpha.a', AlphaEvent, Up<A, AlphaAggregate>>('alpha.a', stream, (event: AlphaEvent) => this.__liftUp({ method: 'a', event } as unknown as AlphaAggregate));"), "{alpha}");
     // a one-item method is what it was
     assert!(alpha.contains("  get(id: string): Promise<AlphaEvent>;"), "{alpha}");
     assert!(alpha.contains("    return collectOne<AlphaEvent>(stream);"), "{alpha}");
@@ -220,8 +221,11 @@ fn existing_output_unchanged() {
 /// The mapping is not vacuous: it changes what RETURNS-17 changed, and only that.
 #[test]
 fn mapping_back_is_exact() {
-    let client = &ts(&fixture("returns17_ir"), TransportEnv::Browser)["alpha/client.ts"];
-    let main = to_main_spelling(client);
+    let files = ts(&fixture("returns17_ir"), TransportEnv::Browser);
+    // RETURNS-46's lifting out first, then RETURNS-17's spelling
+    let client = returns_line::before_returns46("x/alpha/client.ts", &files["alpha/client.ts"], &|_| false);
+    assert!(!client.contains("Up<") && !client.contains("__lift"), "{client}");
+    let main = to_main_spelling(&client);
     assert!(main.contains("  a(): AsyncGenerator<AlphaEvent>;"), "{main}");
     assert!(main.contains("  async *a(): AsyncGenerator<AlphaEvent> {"), "{main}");
     assert!(main.contains("    yield* extractData<AlphaEvent>(stream);"), "{main}");
