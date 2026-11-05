@@ -115,7 +115,7 @@ test('a generated stream is a MethodStream that knows its path, and yields its i
   assert.equal(svc.unsubs().length, 0, 'it ended at the server: nothing to unsubscribe');
 });
 
-test('.events() tags each event with the method', async () => {
+test(".events() yields the client's aggregate, tagged with the method's wire name (RETURNS-46)", async () => {
   const { svc, beta } = setup();
   const got: unknown[] = [];
   const reading = (async () => { for await (const ev of beta.b().events()) got.push(ev); })();
@@ -123,7 +123,7 @@ test('.events() tags each event with the method', async () => {
   svc.data('beta.b', { text: 'x' });
   svc.done('beta.b');
   await reading;
-  assert.deepEqual(got, [{ method: 'beta.b', event: { text: 'x' } }]);
+  assert.deepEqual(got, [{ method: 'b', event: { text: 'x' } }]);
 });
 
 test('.withProgress() yields items and progress in arrival order', async () => {
@@ -226,7 +226,8 @@ test('watch over generated streams: no paths written; close unsubscribes each, p
   const first = s.next();
   await until(() => svc.calls().length === 2, 'two subscriptions');
   svc.data('beta.b', { text: 'b1' });
-  assert.deepEqual((await first).value, { source: 'beta.b', event: { text: 'b1' } });
+  // RETURNS-46: the event is the client's aggregate; the path is the source
+  assert.deepEqual((await first).value, { source: 'beta.b', event: { method: 'b', event: { text: 'b1' } } });
   const parked = s.next();
   await tick(20);
   await s.close();

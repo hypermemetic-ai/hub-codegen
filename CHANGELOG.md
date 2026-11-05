@@ -25,6 +25,42 @@ NAMING-10's merge (0.5.1, the rename).
   `impl Stream<Item = T> + Send + 'static` (`::bytes::Bytes` for bytes), sent
   by the base client under credit. An IR without one generates byte-identical
   output. `MethodDef.md_input`, `TypeRef::is_binary`, `IR::has_input`.
+- RETURNS-46: every namespace gets its aggregate, `{Ns}Event` (`{Ns}Aggregate`
+  when the namespace has a type of that name), in `<ns>/events.ts`, which
+  `<ns>/index.ts` re-exports: one member per method, `{ method; event: I }`
+  (`Result<T, E>` for a method with an error type), one per static child
+  carrying the child's aggregate, one per dynamic child carrying
+  `{ name: string; event }` — the Rust aggregate's JSON. A dynamic child's
+  event is `unknown`: IR 3.0 names a dynamic child but describes none of its
+  methods.
+- RETURNS-46, at run time: every generated call's `.events()` yields its
+  client's aggregate, as Rust's `{Ns}Event` serialises it — a root call
+  `{ method: 'count', event }`, a call through a static child's accessor
+  nested, `{ method: 'branch', event: { method: 'grow', event } }` — and so
+  does `watch(...)` over generated streams: one shape whatever the level.
+  `MethodStream` gains a third type parameter `A` (default
+  `MethodEvent<P, E>`, what a stream made by hand with no lift still yields)
+  and an optional `lift`; rpc.ts exports `Up`, watch.ts `LiftableSource`.
+
+- RETURNS-46 over BIDIR-19: a streaming method with an input half lifts
+  like any other — its pull form's and its push form's `output` are
+  `MethodStream<'p', T, Up<A, XEvent>>`.
+
+### Changed
+
+- RETURNS-46, **what moved**: a generated stream's `.events()` was
+  `{ method: '<path>', event }` (`MethodEvent<'tickets.watch', E>`); it is the
+  client's aggregate, `{ method: 'watch', event }` (`TicketsEvent`), or the
+  parent's through an accessor. A `watch` over generated streams (not
+  `[path, stream]` pairs, which are unchanged) yields
+  `{ source: '<path>', event: <aggregate> }` where it yielded the item: the
+  path is the item's `source`, and the stream's own `.method`. menger and
+  plexus-ui have no TypeScript reading `.events()`.
+- RETURNS-46: a namespace client that streams, has static children or is
+  one is `XClient<A = undefined>`, with `createXClient<A>(rpc, lift?)`; its
+  streaming methods return `MethodStream<'p', T, Up<A, XEvent>>`, and a
+  static child's property is `YClient<Up<A, XEvent>>` (was `YClient`). A
+  client that does none of these is unchanged.
 
 ## 0.6.0 — 2026-11-02
 

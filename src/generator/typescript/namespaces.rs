@@ -28,6 +28,11 @@ pub fn generate_namespaces(
     // `childClient:`. Namespaces not referenced as dynamic-child targets keep
     // the pre-ticket non-exported ClientImpl for byte-identical output.
     let dynamic_child_target_namespaces = collect_dynamic_child_target_namespaces(ir);
+    // RETURNS-46: the namespaces some activation reaches as a static child —
+    // their clients are generic over the aggregate they lift into, whether
+    // or not they stream.
+    let static_child_targets: BTreeSet<String> =
+        ir.ir_methods.values().filter_map(|m| static_child_namespace(m, ir)).collect();
 
     // Group methods by namespace
     let mut methods_by_ns: HashMap<String, Vec<&MethodDef>> = HashMap::new();
@@ -41,6 +46,15 @@ pub fn generate_namespaces(
     // Sort namespaces for deterministic warning order.
     let mut sorted: Vec<(String, Vec<&MethodDef>)> = methods_by_ns.into_iter().collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // RETURNS-46: the namespaces this run writes — a child's aggregate is
+    // imported from its `events.ts` only when it is one of them.
+    let generated: BTreeSet<String> = sorted
+        .iter()
+        .map(|(ns, _)| ns)
+        .filter(|ns| !ns.is_empty() && filter.is_none_or(|f| ns_matches_filter(ns, f)))
+        .cloned()
+        .collect();
 
     // Generate interface and implementation for each namespace
     for (namespace, methods) in sorted {
@@ -57,10 +71,12 @@ pub fn generate_namespaces(
         }
 
         let export_impl = dynamic_child_target_namespaces.contains(&namespace);
-        let content = generate_namespace(&namespace, &methods, ir, export_impl, emit_deprecation, warnings);
+        let lift = Lifting { target: static_child_targets.contains(&namespace), generated: &generated };
+        let content = generate_namespace(&namespace, &methods, ir, export_impl, emit_deprecation, warnings, &lift);
         // Convert dotted namespace to directory path
         let path = namespace.replace('.', "/");
         files.insert(format!("{}/client.ts", path), content);
+        files.insert(format!("{}/events.ts", path), super::events::generate_events(&namespace, &methods, ir, &generated));
 
         // Check if this namespace has any types
         let has_types = ir.ir_types.values().any(|td| td.td_namespace == namespace);
@@ -119,11 +135,27 @@ fn generate_namespace_index(namespace: &str, has_types: bool) -> String {
         ""
     };
 
+    // RETURNS-46: the namespace's aggregate, `{Ns}Event`, from events.ts.
     format!(
         "// Auto-generated namespace module for {}\n\
-         {}export * from './client';\n",
+         {}export * from './client';\n\
+         export * from './events';\n",
         namespace, types_export
     )
+}
+
+/// RETURNS-46: a namespace's client that streams, has static children, or
+/// is one is generic over the aggregate it lifts into
+/// (`TreeBranchClient<A = undefined>`, `undefined`: its own): each call's
+/// `.events()` is that aggregate — `{ method: '<wire name>', event }` for a
+/// client made directly, nested for one a parent's accessor made — and each
+/// static child is handed a lift into it. One that does none of these is
+/// generated as it was.
+pub(super) struct Lifting<'a> {
+    /// Some activation reaches this namespace as a static child.
+    pub target: bool,
+    #[allow(dead_code)]
+    pub generated: &'a BTreeSet<String>,
 }
 
 fn generate_namespace(
@@ -133,6 +165,7 @@ fn generate_namespace(
     export_impl: bool,
     emit_deprecation: bool,
     warnings: &mut Vec<DeprecationWarning>,
+    lifting: &Lifting<'_>,
 ) -> String {
     let interface_name = to_pascal(namespace);
     let namespace_path = namespace.replace('.', "/");
@@ -286,6 +319,20 @@ fn generate_namespace(
         ));
     }
 
+    // RETURNS-46: lifting — this namespace's aggregate, and the helper types.
+    let agg = super::events::aggregate_name(ir, namespace);
+    // A client that streams or has static children lifts; one that is a
+    // static child takes a lift. Either is generic over its aggregate; one
+    // that is neither is as it was.
+    let lifts = !static_children.is_empty() || flat_methods.iter().any(|m| m.is_streaming());
+    let target = lifting.target || lifts;
+    if target {
+        lines.push(format!("import type {{ {agg} }} from './events';"));
+    }
+    if lifts {
+        lines.push(format!("import type {{ Up }} from '{to_root}rpc';"));
+    }
+
     // SYNAPSE-CC-2: each static child's client interface (a type) and its
     // factory (a value, called in the constructor).
     for method in &static_children {
@@ -314,7 +361,13 @@ fn generate_namespace(
             lines.push(line);
         }
     }
-    lines.push(format!("export interface {}Client {{", interface_name));
+    if target {
+        lines.push(format!("export interface {}Client<A = undefined> {{", interface_name));
+    } else {
+        lines.push(format!("export interface {}Client {{", interface_name));
+    }
+    // RETURNS-46: the aggregate a static child's client lifts into.
+    let child_lift = if target { format!("Up<A, {agg}>") } else { agg.clone() };
 
     // IR-9: DynamicChild properties appear as readonly typed handles
     for method in &dynamic_children {
@@ -360,7 +413,7 @@ fn generate_namespace(
         let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
         let long_lines = grant_surface::ts_long_description_lines(method);
         grant_surface::push_ts_jsdoc(&mut lines, desc_opt, &long_lines, &req_lines);
-        lines.push(format!("  readonly {}: {}Client;", to_camel(&method.md_name), to_pascal(&child_ns)));
+        lines.push(format!("  readonly {}: {}Client<{child_lift}>;", to_camel(&method.md_name), to_pascal(&child_ns)));
     }
 
     for method in &flat_methods {
@@ -387,7 +440,10 @@ fn generate_namespace(
 
         // Streaming methods return a MethodStream that carries their path
         // (RETURNS-17); non-streaming return Promise
-        let full_return = if method.is_streaming() {
+        let full_return = if method.is_streaming() && target {
+            let p = &method.md_full_path;
+            format!("MethodStream<'{p}', {return_type}, Up<A, {agg}>>")
+        } else if method.is_streaming() {
             format!("MethodStream<'{}', {}>", method.md_full_path, return_type)
         } else {
             format!("Promise<{}>", return_type)
@@ -450,8 +506,16 @@ fn generate_namespace(
     // Namespaces not referenced as dynamic-child targets keep the pre-ticket
     // non-exported form, preserving byte-identical output for pre-IR schemas.
     let impl_prefix = if export_impl { "export " } else { "" };
-    lines.push(format!("{}class {}ClientImpl implements {}Client {{", impl_prefix, interface_name, interface_name));
+    if target {
+        lines.push(format!("{}class {}ClientImpl<A = undefined> implements {}Client<A> {{", impl_prefix, interface_name, interface_name));
+    } else {
+        lines.push(format!("{}class {}ClientImpl implements {}Client {{", impl_prefix, interface_name, interface_name));
+    }
     lines.push("  private rpc: RpcClient;".to_string());
+    if target {
+        // RETURNS-46: into the parent's aggregate, when a parent made it.
+        lines.push(format!("  private readonly __lift: ((event: {agg}) => A) | undefined;"));
+    }
 
     // IR-9: DynamicChild gate fields must be initialized in the constructor
     // using makeDynamicChild. We declare them as readonly class members.
@@ -462,17 +526,23 @@ fn generate_namespace(
     }
     for method in &static_children {
         let child_ns = static_child_namespace(method, ir).expect("classified as a static child");
-        lines.push(format!("  readonly {}: {}Client;", to_camel(&method.md_name), to_pascal(&child_ns)));
+        lines.push(format!("  readonly {}: {}Client<{child_lift}>;", to_camel(&method.md_name), to_pascal(&child_ns)));
     }
 
     // IR-9: Use the compact one-line constructor form when there are no
     // DynamicChild gates — this preserves byte-identical pre-IR output.
     // Gates (and static children) need a multi-line body to initialize them.
-    if dynamic_children.is_empty() && static_children.is_empty() {
+    if dynamic_children.is_empty() && static_children.is_empty() && !target {
         lines.push("  constructor(rpc: RpcClient) { this.rpc = rpc; }".to_string());
     } else {
-        lines.push("  constructor(rpc: RpcClient) {".to_string());
-        lines.push("    this.rpc = rpc;".to_string());
+        if target {
+            lines.push(format!("  constructor(rpc: RpcClient, lift?: (event: {agg}) => A) {{"));
+            lines.push("    this.rpc = rpc;".to_string());
+            lines.push("    this.__lift = lift;".to_string());
+        } else {
+            lines.push("  constructor(rpc: RpcClient) {".to_string());
+            lines.push("    this.rpc = rpc;".to_string());
+        }
         for method in &dynamic_children {
             let method_name = to_camel(&method.md_name);
             let handle_type = dynamic_child_handle_type(method, ir);
@@ -500,11 +570,29 @@ fn generate_namespace(
         }
         for method in &static_children {
             let child_ns = static_child_namespace(method, ir).expect("classified as a static child");
-            lines.push(format!("    this.{} = create{}Client(rpc);", to_camel(&method.md_name), to_pascal(&child_ns)));
+            // RETURNS-46: the child's events, wrapped in this level's member,
+            // then lifted as this client's are.
+            let seg = &method.md_name;
+            let wrap = if target {
+                format!("(event) => this.__liftUp({{ method: '{seg}', event }})")
+            } else {
+                format!("(event) => ({{ method: '{seg}', event }})")
+            };
+            lines.push(format!(
+                "    this.{} = create{}Client<{child_lift}>(rpc, {wrap});",
+                to_camel(&method.md_name),
+                to_pascal(&child_ns)
+            ));
         }
         lines.push("  }".to_string());
     }
     lines.push("".to_string());
+    if lifts {
+        lines.push(format!("  private __liftUp(event: {agg}): Up<A, {agg}> {{"));
+        lines.push(format!("    return (this.__lift ? this.__lift(event) : event) as Up<A, {agg}>;"));
+        lines.push("  }".to_string());
+        lines.push("".to_string());
+    }
 
     for (i, method) in flat_methods.iter().enumerate() {
         let method_name = to_camel(&method.md_name);
@@ -532,14 +620,24 @@ fn generate_namespace(
                 }
             }
         }
+        // RETURNS-46: a streaming method's events are this client's aggregate,
+        // its input half or none (BIDIR-19).
+        let lift_arg = format!(
+            "(event: {return_type}) => this.__liftUp({{ method: '{}', event }} as unknown as {agg})",
+            method.md_name
+        );
         if let Some(input) = InputForm::of(method, namespace) {
             // BIDIR-19: the pull form, and the push form beside it.
-            let full_return = if method.is_streaming() {
+            let full_return = if method.is_streaming() && target {
+                format!("MethodStream<'{full_path}', {return_type}, Up<A, {agg}>>")
+            } else if method.is_streaming() {
                 format!("MethodStream<'{}', {}>", full_path, return_type)
             } else {
                 format!("Promise<{}>", return_type)
             };
-            let decode = if method.is_streaming() {
+            let decode = if method.is_streaming() && target {
+                format!("new {}('{}', stream, {})", full_return, full_path, lift_arg)
+            } else if method.is_streaming() {
                 format!("new {}('{}', stream)", full_return, full_path)
             } else {
                 format!("collectOne<{}>(stream)", return_type)
@@ -557,6 +655,13 @@ fn generate_namespace(
                 "    return pushInput(this.rpc, '{}', {}, {}, {}, (stream) => {});",
                 full_path, params_object, input.binary, input.options, decode
             ));
+            lines.push("  }".to_string());
+        } else if method.is_streaming() && target {
+            // RETURNS-46: its events are this client's aggregate.
+            let stream_type = format!("MethodStream<'{full_path}', {return_type}, Up<A, {agg}>>");
+            lines.push(format!("  {}({}): {} {{", method_name, params_signature, stream_type));
+            lines.push(format!("    const stream = this.rpc.call('{}', {});", full_path, params_object));
+            lines.push(format!("    return new {stream_type}('{full_path}', stream, {lift_arg});"));
             lines.push("  }".to_string());
         } else if method.is_streaming() {
             let stream_type = format!("MethodStream<'{}', {}>", full_path, return_type);
@@ -580,8 +685,16 @@ fn generate_namespace(
 
     // Generate factory function
     lines.push(format!("/** Create a typed {} client from an RPC client */", namespace));
-    lines.push(format!("export function create{}Client(rpc: RpcClient): {}Client {{", interface_name, interface_name));
-    lines.push(format!("  return new {}ClientImpl(rpc);", interface_name));
+    if target {
+        lines.push(format!(
+            "export function create{i}Client<A = undefined>(rpc: RpcClient, lift?: (event: {agg}) => A): {i}Client<A> {{",
+            i = interface_name
+        ));
+        lines.push(format!("  return new {}ClientImpl<A>(rpc, lift);", interface_name));
+    } else {
+        lines.push(format!("export function create{}Client(rpc: RpcClient): {}Client {{", interface_name, interface_name));
+        lines.push(format!("  return new {}ClientImpl(rpc);", interface_name));
+    }
     lines.push("}".to_string());
 
     // R-4: typed per-method credential-requirement metadata. Emitted only
@@ -690,7 +803,7 @@ fn render_request_jsdoc_fallback(namespace: &str, ir: &IR) -> Vec<String> {
 
 /// SYNAPSE-CC-2: the namespace a static child accessor opens — its full
 /// path (`tickets.inputs`) — when the IR holds that namespace's methods.
-fn static_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
+pub(super) fn static_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
     if !matches!(method.md_role, MethodRole::StaticChild) {
         return None;
     }
@@ -730,7 +843,7 @@ fn dynamic_child_target_type(method: &MethodDef, ir: &IR) -> String {
 ///
 /// Returns `None` when the return type is not a `RefNamed` or the child
 /// namespace can't be determined.
-fn dynamic_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
+pub(super) fn dynamic_child_namespace(method: &MethodDef, ir: &IR) -> Option<String> {
     let inner = unwrap_return_type(&method.md_returns);
     if let TypeRef::RefNamed(qn) = inner {
         let full = qn.full_name();
@@ -1106,7 +1219,7 @@ fn param_idents(params: &[ParamDef]) -> std::collections::HashMap<String, String
 }
 
 /// Convert to PascalCase
-fn to_pascal(s: &str) -> String {
+pub(super) fn to_pascal(s: &str) -> String {
     let mut result = String::new();
     let mut capitalize = true;
     for c in s.chars() {

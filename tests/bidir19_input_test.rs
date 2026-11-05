@@ -97,8 +97,9 @@ fn ts_signatures() {
         "  openItems(options?: InputOptions): DuplexCall<Item, Promise<IngestEvent>>;",
         "  bytes(input: AsyncIterable<Uint8Array> | Iterable<Uint8Array>, options?: InputOptions): Promise<IngestEvent>;",
         "  openBytes(options?: InputOptions): DuplexCall<Uint8Array, Promise<IngestEvent>>;",
-        "  tokens(run: string, limit: number | undefined, meta: Record<string, string> | undefined, input: AsyncIterable<string> | Iterable<string>, options?: InputOptions): MethodStream<'ingest.tokens', IngestEvent>;",
-        "  openTokens(run: string, limit?: number, meta?: Record<string, string>, options?: InputOptions): DuplexCall<string, MethodStream<'ingest.tokens', IngestEvent>>;",
+        // RETURNS-46: a streaming method's events are its client's aggregate, input half or not
+        "  tokens(run: string, limit: number | undefined, meta: Record<string, string> | undefined, input: AsyncIterable<string> | Iterable<string>, options?: InputOptions): MethodStream<'ingest.tokens', IngestEvent, Up<A, IngestAggregate>>;",
+        "  openTokens(run: string, limit?: number, meta?: Record<string, string>, options?: InputOptions): DuplexCall<string, MethodStream<'ingest.tokens', IngestEvent, Up<A, IngestAggregate>>>;",
         "    const stream = pullInput<Uint8Array>(this.rpc, 'ingest.bytes', {}, true, input, options);",
         "    const stream = pullInput<Item>(this.rpc, 'ingest.items', {}, false, input, options);",
     ] {
@@ -211,7 +212,8 @@ fn methods_without_input_are_unchanged_beside_one_with_it() {
             }
             let new: Vec<&String> = a.keys().filter(|p| !b.contains_key(*p)).collect();
             for p in &new {
-                assert!(["input.ts", "feed/client.ts", "feed/index.ts"].contains(&p.as_str()), "{fx}: {p} is new");
+                // RETURNS-46: the new namespace's aggregate comes with it
+                assert!(["input.ts", "feed/client.ts", "feed/index.ts", "feed/events.ts"].contains(&p.as_str()), "{fx}: {p} is new");
             }
         }
         let (b, a) = (rust(&before), rust(&after));

@@ -255,6 +255,13 @@ export interface MethodEvent<P extends string, E> {
   readonly event: E;
 }
 
+/**
+ * RETURNS-46: the aggregate a generated client's `.events()` yield: `A`, the
+ * aggregate of the client a parent's accessor lifts into, or this level's
+ * own `E` when `A` is `undefined` (a client made directly).
+ */
+export type Up<A, E> = [A] extends [undefined] ? E : A;
+
 /** What `.withProgress()` yields: an item, or a progress report, in arrival order. */
 export type WithProgress<E> = { readonly item: E } | { readonly progress: Progress };
 
@@ -269,15 +276,26 @@ export type WithProgress<E> = { readonly item: E } | { readonly progress: Progre
  *
  * It is read once: by `for await` / `next()`, or by one of `.events()` /
  * `.withProgress()`. Breaking out (or `return()`) unsubscribes the call.
+ *
+ * RETURNS-46: a generated method's stream carries a `lift` into its
+ * client's aggregate `A`: `.events()` (and `watch` over it) yield
+ * `{ method: 'grow', event }` — the activation's `{Ns}Event`, as Rust
+ * serialises it — or, through a parent's accessor, the parent's, nested:
+ * `{ method: 'branch', event: { method: 'grow', event } }`. The path is the
+ * stream's `method`, and a watch item's `source`. A stream made by hand,
+ * with no lift, tags each event `{ method: '<path>', event }`.
  */
-export class MethodStream<P extends string, E> implements AsyncIterableIterator<E> {
+export class MethodStream<P extends string, E, A = MethodEvent<P, E>> implements AsyncIterableIterator<E> {
   /** The method's path, as a literal type. */
   readonly method: P;
+  /** RETURNS-46: the event into its client's aggregate; `undefined` for a client made directly. */
+  readonly lift: ((event: E) => A) | undefined;
   #raw: AsyncGenerator<PlexusStreamItem> | undefined;
   #items: AsyncGenerator<E, undefined> | undefined;
 
-  constructor(method: P, stream: AsyncGenerator<PlexusStreamItem>) {
+  constructor(method: P, stream: AsyncGenerator<PlexusStreamItem>, lift?: (event: E) => A) {
     this.method = method;
+    this.lift = lift;
     this.#raw = stream;
   }
 
@@ -295,7 +313,7 @@ export class MethodStream<P extends string, E> implements AsyncIterableIterator<
     return this.#items;
   }
 
-  [Symbol.asyncIterator](): MethodStream<P, E> {
+  [Symbol.asyncIterator](): MethodStream<P, E, A> {
     return this;
   }
 
@@ -315,9 +333,15 @@ export class MethodStream<P extends string, E> implements AsyncIterableIterator<
     return this.#iterator().throw(e);
   }
 
-  /** Each event tagged with this stream's method: `{ method: 'tickets.watch', event }`. */
-  events(): AsyncGenerator<MethodEvent<P, E>, undefined> {
-    return tagEvents<P, E>(this.method, decodeItems<E>(this.method, this.#take('.events()')));
+  /**
+   * Each event as its client's aggregate (RETURNS-46): `{ method: 'watch', event }`,
+   * nested through a parent's accessor. With no lift, `{ method: 'tickets.watch', event }`.
+   */
+  events(): AsyncGenerator<A, undefined> {
+    const items = decodeItems<E>(this.method, this.#take('.events()'));
+    const lift = this.lift;
+    if (lift) return liftEvents<E, A>(lift, items);
+    return tagEvents<P, E>(this.method, items) as unknown as AsyncGenerator<A, undefined>;
   }
 
   /** Items and the wire's progress reports, in arrival order. */
@@ -341,6 +365,11 @@ async function* decodeItems<E>(method: string, stream: AsyncGenerator<PlexusStre
         break;
     }
   }
+  return undefined;
+}
+
+async function* liftEvents<E, A>(lift: (event: E) => A, items: AsyncGenerator<E, undefined>): AsyncGenerator<A, undefined> {
+  for await (const event of items) yield lift(event);
   return undefined;
 }
 

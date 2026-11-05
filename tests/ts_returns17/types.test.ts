@@ -24,14 +24,16 @@ export async function typeTests(rpc: RpcClient): Promise<void> {
 
   // ── a generated stream carries its path ─────────────────────────────────
   const a = alpha.a();
-  expectTypeOf(a).toEqualTypeOf<MethodStream<'alpha.a', A>>();
+  // RETURNS-46: its events are its client's aggregate
+  expectTypeOf(a).toEqualTypeOf<MethodStream<'alpha.a', A, Alpha.AlphaAggregate>>();
   expectTypeOf(a.method).toEqualTypeOf<'alpha.a'>();
   // @ts-expect-error — the path is a literal, never widened to string
   expectTypeOf(a).toEqualTypeOf<MethodStream<string, A>>();
   // @ts-expect-error — and the event is the method's own
   expectTypeOf(a).toEqualTypeOf<MethodStream<'alpha.a', A | B>>();
   for await (const ev of a) expectTypeOf(ev).toEqualTypeOf<A>();
-  for await (const ev of beta.b().events()) expectTypeOf(ev).toEqualTypeOf<MethodEvent<'beta.b', B>>();
+  // RETURNS-46: `.events()` is the client's aggregate, `{ method: 'b', event }`; the path is `.method`
+  for await (const ev of beta.b().events()) expectTypeOf(ev).toEqualTypeOf<Beta.BetaAggregate>();
   for await (const f of gamma.c().withProgress()) {
     expectTypeOf(f).toEqualTypeOf<WithProgress<C>>();
     if ('progress' in f) expectTypeOf(f.progress).toEqualTypeOf<Progress>();
@@ -41,14 +43,17 @@ export async function typeTests(rpc: RpcClient): Promise<void> {
   expectTypeOf(alpha.get('x')).toEqualTypeOf<Promise<A>>();
 
   // ── watch: no paths written ─────────────────────────────────────────────
+  // RETURNS-46: each item's event its client's aggregate; the path is `source`
   const s = watch(alpha.a(), beta.b(), gamma.c());
-  expectTypeOf(s).toEqualTypeOf<Merged<Tagged<'alpha.a', A> | Tagged<'beta.b', B> | Tagged<'gamma.c', C>>>();
+  expectTypeOf(s).toEqualTypeOf<
+    Merged<Tagged<'alpha.a', Alpha.AlphaAggregate> | Tagged<'beta.b', Beta.BetaAggregate> | Tagged<'gamma.c', Gamma.GammaAggregate>>
+  >();
   // @ts-expect-error — never widened to the union under any source
   expectTypeOf(s).toEqualTypeOf<Merged<Tagged<string, A | B | C>>>();
   // mixed with a pair
   async function* plain(): AsyncGenerator<{ readonly env: string }> {}
   expectTypeOf(watch(alpha.a(), ['deployments.watch', plain()])).toEqualTypeOf<
-    Merged<Tagged<'alpha.a', A> | Tagged<'deployments.watch', { readonly env: string }>>
+    Merged<Tagged<'alpha.a', Alpha.AlphaAggregate> | Tagged<'deployments.watch', { readonly env: string }>>
   >();
 }
 

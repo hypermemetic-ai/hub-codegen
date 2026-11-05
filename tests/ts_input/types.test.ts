@@ -24,7 +24,7 @@ const c = Ingest.createIngestClient(rpc);
 expectTypeOf(c.items([{ at: 1, pad: 'x' }])).toEqualTypeOf<Promise<Ingest.IngestEvent>>();
 async function* chunks(): AsyncGenerator<Uint8Array> { yield new Uint8Array(4); }
 expectTypeOf(c.bytes(chunks())).toEqualTypeOf<Promise<Ingest.IngestEvent>>();
-expectTypeOf(c.tokens('r1', undefined, { team: 'a' }, ['a', 'b'], { pressureAt: 10 })).toEqualTypeOf<MethodStream<'ingest.tokens', Ingest.IngestEvent>>();
+expectTypeOf(c.tokens('r1', undefined, { team: 'a' }, ['a', 'b'], { pressureAt: 10 })).toEqualTypeOf<MethodStream<'ingest.tokens', Ingest.IngestEvent, Ingest.IngestAggregate>>(); // RETURNS-46: its events the client's aggregate
 // @ts-expect-error the input is required
 c.items();
 // @ts-expect-error an Input<Bytes> takes Uint8Array, not strings
@@ -46,7 +46,7 @@ b.input.write(new Uint8Array(640));
 b.input.write('x');
 b.onDisconnect((d) => { expectTypeOf(d).toEqualTypeOf<DisconnectInfo>(); expectTypeOf(d.unsent).toEqualTypeOf<number>(); });
 expectTypeOf(c.openItems().input.write).parameter(0).toEqualTypeOf<Ingest.Item>();
-expectTypeOf(c.openTokens('r1').output).toEqualTypeOf<MethodStream<'ingest.tokens', Ingest.IngestEvent>>();
+expectTypeOf(c.openTokens('r1').output).toEqualTypeOf<MethodStream<'ingest.tokens', Ingest.IngestEvent, Ingest.IngestAggregate>>();
 // @ts-expect-error a push call has no input argument
 c.openItems([{ at: 1, pad: 'x' }]);
 // @ts-expect-error `run` is required
