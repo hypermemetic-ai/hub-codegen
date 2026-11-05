@@ -99,6 +99,18 @@ impl<'de> Deserialize<'de> for IR {
 }
 
 impl IR {
+    /// BIDIR-19: some method has an input half — the runtime that sends one
+    /// is generated only then, so an IR without one is generated
+    /// byte-identical.
+    pub fn has_input(&self) -> bool {
+        self.ir_methods.values().any(|m| m.md_input.is_some())
+    }
+
+    /// BIDIR-19: some method's input items are bytes (`Input<Bytes>`).
+    pub fn has_binary_input(&self) -> bool {
+        self.ir_methods.values().any(|m| m.md_input.as_ref().is_some_and(TypeRef::is_binary))
+    }
+
     /// RETURNS-36 review #6: IR 3.0 writes every method's `mdCardinality`
     /// (RETURNS-13: read from the schema, never inferred), so a 3.0 method
     /// without it is refused, naming the method — never read as `One`. An
@@ -760,6 +772,15 @@ pub struct MethodDef {
     /// AUTH-9). Wire key `mdLongDescription`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub md_long_description: Option<String>,
+
+    /// The item type of the method's input half (BIDIR-19; plexus-wire
+    /// spec/10, `Input<T>` in Rust): the stream a caller sends beside the
+    /// params, under the callee's credit. `None` for a method without one,
+    /// which generates byte-identical output. Wire key `mdInput` (IR 2.1 /
+    /// 3.0, SYNAPSE-CC-8). An `Input<Bytes>` item is
+    /// `RefPrimitive("string", Some("binary"))` ([`TypeRef::is_binary`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub md_input: Option<TypeRef>,
 }
 
 /// Method role classification.
@@ -976,6 +997,14 @@ impl TypeRef {
             TypeRef::RefTuple(items) => items.iter().collect(),
             _ => Vec::new(),
         }
+    }
+
+    /// BIDIR-19: an item of bytes — `Input<Bytes>`, whose schema plexus-core
+    /// marks `{"type":"string","contentEncoding":"base64","x-plexus-binary":true}`
+    /// (plexus-wire spec/10) and the IR carries as the string primitive of
+    /// format `binary`. Sent as one WebSocket binary frame an item.
+    pub fn is_binary(&self) -> bool {
+        matches!(self, TypeRef::RefPrimitive(p, Some(f)) if p == "string" && f == "binary")
     }
 
     /// Check if this is an unknown type (schema gap that should warn)

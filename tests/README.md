@@ -7,7 +7,7 @@ cargo test --test cache_invalidation_test -- --nocapture
 scripts/test-cache.sh [--verbose] [--scenario a|b|c|all]   # the two cache suites below
 ```
 
-No test needs a running service. A few compile what they generate:
+No test needs a running service, but for `bidir19_input_test`'s live run, which starts one when it is there. A few compile what they generate:
 `rust_codegen_smoke_test` and `ir9_dynamic_child_test` run `cargo check` on a
 generated Rust client, and `ir9_dynamic_child_test` runs `tsc` when it is on
 `PATH`.
@@ -33,6 +33,7 @@ generated Rust client, and `ir9_dynamic_child_test` runs `tsc` when it is on
 | `returns17_method_stream_test.rs` | a streaming method returns `MethodStream<'ns.m', E>`; a failed call throws a typed `RemoteCallError` (RETURNS-17) |
 | `returns23_deterministic_output_test.rs` | the output is deterministic: namespaces, warnings and file lists in a fixed order (RETURNS-23) |
 | `returns38_watch_test.rs` | `watch(a, b, c)` in the generated TS client (RETURNS-38) |
+| `bidir19_input_test.rs` | a method with an input half (`mdInput`): TS and Rust goldens in `golden/bidir19/`, every method without input byte-identical, `tsc --strict` with `ts_input/types.test.ts`, and `ts_input/live.test.ts` against a real service with `Input<Item>` / `Input<Bytes>` methods (`$BIDIR_FIXTURE_SERVER`; skipped without it unless `SERVICE_CODEGEN_REQUIRE_BIDIR=1`) (BIDIR-19) |
 | `tickets37_service_types_test.rs` | a type the protocol root declares is generated where it is used most and imported elsewhere (TICKETS-37) |
 | `json_keys.rs` | the JSON shared with synapse-cc reads the old keys and writes the new (NAMING-10) |
 | `naming_gate.rs` | `scripts/naming-gate.sh`: every name says service (NAMING-10) |

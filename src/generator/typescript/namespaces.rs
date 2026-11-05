@@ -277,6 +277,12 @@ fn generate_namespace(
         ));
     }
 
+    // BIDIR-19: the input half's runtime, for a namespace with a method that has one.
+    if flat_methods.iter().any(|m| m.md_input.is_some()) {
+        lines.push(format!("import {{ pullInput, pushInput }} from '{}input';", to_root));
+        lines.push(format!("import type {{ DuplexCall, InputOptions }} from '{}input';", to_root));
+    }
+
     if !type_import_str.is_empty() {
         lines.push(type_import_str);
     }
@@ -422,6 +428,14 @@ fn generate_namespace(
             &file_path,
             warnings,
         );
+        // BIDIR-19: before the input, an optional param is `T | undefined`
+        // (a required parameter cannot follow an optional one). Warnings were
+        // recorded above, so this rendering records none.
+        let pull_params = if method.md_input.is_some() {
+            render_params(&method.sent_params(), namespace, emit_deprecation, true, &method.md_full_path, &file_path, &mut Vec::new())
+        } else {
+            params.clone()
+        };
         let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Streaming methods return a MethodStream that carries their path
@@ -463,6 +477,15 @@ fn generate_namespace(
         req_lines.extend(grant_surface::ts_jsdoc(method));
         let desc_opt = method.md_description.as_deref().filter(|s| !s.trim().is_empty());
         let long_lines = grant_surface::ts_long_description_lines(method);
+        if let Some(input) = InputForm::of(method, namespace) {
+            // BIDIR-19: the pull form, and the push form beside it.
+            req_lines.extend(input.jsdoc());
+            grant_surface::push_ts_jsdoc(&mut lines, desc_opt, &long_lines, &req_lines);
+            lines.push(format!("  {}({}): {};", method_name, input.pull_params(&pull_params), full_return));
+            lines.push(format!("  /** The push form of `{}`: write the input as it comes — never refused, never dropped — and read `output`. */", method_name));
+            lines.push(format!("  {}({}): {};", input.open_name(&method_name, &flat_methods), input.push_params(&params), input.duplex_type(&full_return)));
+            continue;
+        }
         grant_surface::push_ts_jsdoc(&mut lines, desc_opt, &long_lines, &req_lines);
         lines.push(format!("  {}({}): {};", method_name, params, full_return));
     }
@@ -578,7 +601,11 @@ fn generate_namespace(
         // (warnings were already recorded at interface emission to avoid
         // double-counting).
         let sent = method.sent_params();
-        let params_signature = generate_params(&sent, namespace);
+        let params_signature = if method.md_input.is_some() {
+            generate_params_before_input(&sent, namespace)
+        } else {
+            generate_params(&sent, namespace)
+        };
         let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Build params object for RPC call (SYNAPSE-CC-2: the sent ones only)
@@ -593,15 +620,48 @@ fn generate_namespace(
                 }
             }
         }
-        if method.is_streaming() && target {
+        // RETURNS-46: a streaming method's events are this client's aggregate,
+        // its input half or none (BIDIR-19).
+        let lift_arg = format!(
+            "(event: {return_type}) => this.__liftUp({{ method: '{}', event }} as unknown as {agg})",
+            method.md_name
+        );
+        if let Some(input) = InputForm::of(method, namespace) {
+            // BIDIR-19: the pull form, and the push form beside it.
+            let full_return = if method.is_streaming() && target {
+                format!("MethodStream<'{full_path}', {return_type}, Up<A, {agg}>>")
+            } else if method.is_streaming() {
+                format!("MethodStream<'{}', {}>", full_path, return_type)
+            } else {
+                format!("Promise<{}>", return_type)
+            };
+            let decode = if method.is_streaming() && target {
+                format!("new {}('{}', stream, {})", full_return, full_path, lift_arg)
+            } else if method.is_streaming() {
+                format!("new {}('{}', stream)", full_return, full_path)
+            } else {
+                format!("collectOne<{}>(stream)", return_type)
+            };
+            lines.push(format!("  {}({}): {} {{", method_name, input.pull_params(&params_signature), full_return));
+            lines.push(format!(
+                "    const stream = pullInput<{}>(this.rpc, '{}', {}, {}, {}, {});",
+                input.item, full_path, params_object, input.binary, input.ident, input.options
+            ));
+            lines.push(format!("    return {};", decode));
+            lines.push("  }".to_string());
+            lines.push("".to_string());
+            lines.push(format!("  {}({}): {} {{", input.open_name(&method_name, &flat_methods), input.push_params(&generate_params(&sent, namespace)), input.duplex_type(&full_return)));
+            lines.push(format!(
+                "    return pushInput(this.rpc, '{}', {}, {}, {}, (stream) => {});",
+                full_path, params_object, input.binary, input.options, decode
+            ));
+            lines.push("  }".to_string());
+        } else if method.is_streaming() && target {
             // RETURNS-46: its events are this client's aggregate.
             let stream_type = format!("MethodStream<'{full_path}', {return_type}, Up<A, {agg}>>");
             lines.push(format!("  {}({}): {} {{", method_name, params_signature, stream_type));
             lines.push(format!("    const stream = this.rpc.call('{}', {});", full_path, params_object));
-            lines.push(format!(
-                "    return new {stream_type}('{full_path}', stream, (event: {return_type}) => this.__liftUp({{ method: '{}', event }} as unknown as {agg}));",
-                method.md_name
-            ));
+            lines.push(format!("    return new {stream_type}('{full_path}', stream, {lift_arg});"));
             lines.push("  }".to_string());
         } else if method.is_streaming() {
             let stream_type = format!("MethodStream<'{}', {}>", full_path, return_type);
@@ -887,6 +947,10 @@ fn collect_type_imports(methods: &[&MethodDef], namespace: &str) -> Vec<String> 
         for param in &method.sent_params() {
             collect_from_type_ref(&param.pd_type, &mut imports, namespace);
         }
+        // BIDIR-19: the input half's item type
+        if let Some(input) = &method.md_input {
+            collect_from_type_ref(input, &mut imports, namespace);
+        }
     }
 
     imports
@@ -934,6 +998,10 @@ fn collect_cross_namespace_imports(methods: &[&MethodDef], current_namespace: &s
         for param in &method.sent_params() {
             collect_from_type_ref(&param.pd_type, &mut imports, current_namespace);
         }
+        // BIDIR-19: the input half's item type
+        if let Some(input) = &method.md_input {
+            collect_from_type_ref(input, &mut imports, current_namespace);
+        }
     }
 
     // Deduplicate and sort type names within each namespace
@@ -945,22 +1013,119 @@ fn collect_cross_namespace_imports(methods: &[&MethodDef], current_namespace: &s
     imports
 }
 
+/// BIDIR-19: a method with an input half, as the generated client writes it:
+/// the pull form takes the input last (`AsyncIterable<T> | Iterable<T>`),
+/// then its options; the push form (`open<Method>`) its params and options.
+struct InputForm {
+    /// The item's TypeScript type: `Uint8Array` for bytes.
+    item: String,
+    /// `true` for bytes: one binary frame an item.
+    binary: bool,
+    /// The input's parameter name: `input`, unless a param has it.
+    ident: String,
+    /// The options' parameter name: `options`, unless a param has it.
+    options: String,
+}
+
+impl InputForm {
+    fn of(method: &MethodDef, namespace: &str) -> Option<InputForm> {
+        let input = method.md_input.as_ref()?;
+        let binary = input.is_binary();
+        let item = if binary { "Uint8Array".to_string() } else { input.to_ts_in_namespace(namespace) };
+        let taken: BTreeSet<String> = param_idents(&method.sent_params()).into_values().collect();
+        let free = |base: &str| {
+            let mut ident = base.to_string();
+            while taken.contains(&ident) {
+                ident.push('_');
+            }
+            ident
+        };
+        Some(InputForm { item, binary, ident: free("input"), options: free("options") })
+    }
+
+    fn pull_params(&self, params: &str) -> String {
+        let tail = format!("{}: AsyncIterable<{item}> | Iterable<{item}>, {}?: InputOptions", self.ident, self.options, item = self.item);
+        if params.is_empty() { tail } else { format!("{params}, {tail}") }
+    }
+
+    fn push_params(&self, params: &str) -> String {
+        let tail = format!("{}?: InputOptions", self.options);
+        if params.is_empty() { tail } else { format!("{params}, {tail}") }
+    }
+
+    fn duplex_type(&self, output: &str) -> String {
+        format!("DuplexCall<{}, {}>", self.item, output)
+    }
+
+    /// `open<Method>`, or `open<Method>Input` when the namespace has a method of that name.
+    fn open_name(&self, method_name: &str, methods: &[&MethodDef]) -> String {
+        let name = format!("open{}", to_pascal(method_name));
+        if methods.iter().any(|m| to_camel(&m.md_name) == name) { format!("{name}Input") } else { name }
+    }
+
+    fn jsdoc(&self) -> Vec<String> {
+        let how = if self.binary {
+            "each item one binary frame"
+        } else {
+            "batched into `input` frames"
+        };
+        vec![format!(
+            "@param {} the input half (plexus-wire spec/10): pulled only while the service's credit allows, {}",
+            self.ident, how
+        )]
+    }
+}
+
+/// BIDIR-19: a method's params before its input: an optional one is
+/// `T | undefined`, since a required parameter (the input) follows it.
+fn generate_params_before_input(params: &[ParamDef], namespace: &str) -> String {
+    render_params(params, namespace, false, true, "", "", &mut Vec::new())
+}
+
 fn generate_params(params: &[ParamDef], namespace: &str) -> String {
-    // Sort parameters: required first, then optional
-    // This is required by TypeScript syntax
+    render_params(params, namespace, false, false, "", "", &mut Vec::new())
+}
+
+/// The parameter list, required first then optional, each by name. An
+/// optional one is `name?: T`, or `name: T | undefined` when `before_input`
+/// (BIDIR-19); with `emit_deprecation`, a deprecated one carries its note
+/// and records its warning (IR-7).
+fn render_params(
+    params: &[ParamDef],
+    namespace: &str,
+    emit_deprecation: bool,
+    before_input: bool,
+    method_full_path: &str,
+    file_path: &str,
+    warnings: &mut Vec<DeprecationWarning>,
+) -> String {
     let idents = param_idents(params);
     let mut sorted_params = params.to_vec();
-    sorted_params.sort_by_key(|p| (
-        !p.pd_required,  // false (required) sorts before true (optional)
-        p.pd_name.clone() // tie-breaker: alphabetical
-    ));
+    sorted_params.sort_by_key(|p| (!p.pd_required, p.pd_name.clone()));
 
     sorted_params
         .iter()
         .map(|p| {
-            let optional = if p.pd_required { "" } else { "?" };
             let ts_type = p.pd_type.to_ts_in_namespace(namespace);
-            format!("{}{}: {}", idents[&p.pd_name], optional, ts_type)
+            let base = match (p.pd_required, before_input) {
+                (true, _) => format!("{}: {}", idents[&p.pd_name], ts_type),
+                (false, false) => format!("{}?: {}", idents[&p.pd_name], ts_type),
+                (false, true) => format!("{}: {} | undefined", idents[&p.pd_name], ts_type),
+            };
+            if emit_deprecation {
+                if let Some(info) = &p.pd_deprecation {
+                    warnings.push(DeprecationWarning {
+                        kind: "param".into(),
+                        name: format!("{}({})", method_full_path, p.pd_name),
+                        file: file_path.into(),
+                        message: info.message.clone(),
+                        since: info.since.clone(),
+                        removed_in: info.removed_in.clone(),
+                    });
+                    return format!("{} /* @deprecated {} */", base, deprecation::format_body(info));
+                }
+            }
+            base
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -979,38 +1144,7 @@ fn generate_params_annotated(
     file_path: &str,
     warnings: &mut Vec<DeprecationWarning>,
 ) -> String {
-    // Sort parameters: required first, then optional (same as generate_params).
-    let idents = param_idents(params);
-    let mut sorted_params = params.to_vec();
-    sorted_params.sort_by_key(|p| (!p.pd_required, p.pd_name.clone()));
-
-    sorted_params
-        .iter()
-        .map(|p| {
-            let optional = if p.pd_required { "" } else { "?" };
-            let ts_type = p.pd_type.to_ts_in_namespace(namespace);
-            let base = format!("{}{}: {}", idents[&p.pd_name], optional, ts_type);
-            if emit_deprecation {
-                if let Some(info) = &p.pd_deprecation {
-                    warnings.push(DeprecationWarning {
-                        kind: "param".into(),
-                        name: format!("{}({})", method_full_path, p.pd_name),
-                        file: file_path.into(),
-                        message: info.message.clone(),
-                        since: info.since.clone(),
-                        removed_in: info.removed_in.clone(),
-                    });
-                    return format!(
-                        "{} /* @deprecated {} */",
-                        base,
-                        deprecation::format_body(info)
-                    );
-                }
-            }
-            base
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+    render_params(params, namespace, emit_deprecation, false, method_full_path, file_path, warnings)
 }
 
 /// Generate a JavaScript object literal from params for the RPC call

@@ -21,6 +21,8 @@ pub fn generate_transport(env: TransportEnv, ir: &IR) -> String {
         .replace("__METHOD_AUTH_INTERFACE__", credential_surface::ts_metadata_interface())
         .replace("__METHOD_AUTH__", &render_method_auth_registry(ir))
         .replace("__CONNECTION_SITE_HINT__", &render_connection_site_hint(ir));
+    // BIDIR-19: the input half's hooks, only for an IR that has one.
+    let template = super::input::patch_transport(template, ir);
     if env == TransportEnv::Browser {
         template.lines()
             .filter(|l| *l != "import WebSocket from 'ws';")
@@ -729,7 +731,7 @@ mod tests {
             md_deprecation: None,
             md_requires_credential: requires,
             md_auth_posture: if public { Some(AuthPosture::Required) } else { None },
-            md_public: public, md_grant: None, md_target: None, md_long_description: None,
+            md_public: public, md_grant: None, md_target: None, md_long_description: None, md_input: None,
         }
     }
 

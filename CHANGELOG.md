@@ -5,6 +5,26 @@ NAMING-10's merge (0.5.1, the rename).
 
 ## Unreleased
 
+- BIDIR-19: a method with an input half (`mdInput`, plexus-wire spec/10) is
+  generated. TypeScript: the pull form takes the input last
+  (`AsyncIterable<T> | Iterable<T>`, pulled only while the service's credit
+  is unspent) and `open<Method>()` answers `{ input, output, onDisconnect }`,
+  whose `input.write()` always queues — never refused, never dropped
+  (`buffered`, `onPressure` past `pressureAt`, `unsent()`, `unacked()`,
+  `end()`); a disconnect is always `onDisconnect({ sent, acked, unsent })` and
+  a `DisconnectedError` on the output, nothing resent; `past_credit`,
+  `out_of_sequence`, `invalid_input`, `too_much_input` and `input_closed` are
+  typed errors; an `AbortSignal` unsubscribes (before the call starts, no socket
+  is opened). However a call ends — refused at open, or let go by its reader —
+  its input sends no more, a pull source is returned, and a later write is kept
+  in `unsent()`. Items are sent as written, as params are. An `Input<Bytes>` item (the IR's
+  `RefPrimitive string binary`) is a `Uint8Array`, one WebSocket binary
+  message `[0x01][subscription u64 BE][seq u64 BE][payload]`. The runtime is
+  `input.ts` and the transport's hooks, generated only for an IR with an
+  input half. Rust: the input is the last argument,
+  `impl Stream<Item = T> + Send + 'static` (`::bytes::Bytes` for bytes), sent
+  by the base client under credit. An IR without one generates byte-identical
+  output. `MethodDef.md_input`, `TypeRef::is_binary`, `IR::has_input`.
 - RETURNS-46: every namespace gets its aggregate, `{Ns}Event` (`{Ns}Aggregate`
   when the namespace has a type of that name), in `<ns>/events.ts`, which
   `<ns>/index.ts` re-exports: one member per method, `{ method; event: I }`
@@ -21,6 +41,10 @@ NAMING-10's merge (0.5.1, the rename).
   `MethodStream` gains a third type parameter `A` (default
   `MethodEvent<P, E>`, what a stream made by hand with no lift still yields)
   and an optional `lift`; rpc.ts exports `Up`, watch.ts `LiftableSource`.
+
+- RETURNS-46 over BIDIR-19: a streaming method with an input half lifts
+  like any other — its pull form's and its push form's `output` are
+  `MethodStream<'p', T, Up<A, XEvent>>`.
 
 ### Changed
 
