@@ -11,7 +11,7 @@ use crate::generator::TransportEnv;
 /// generated files — NOT the IR hash. This ensures the package version only
 /// changes when generated code changes, not when IR metadata (timestamps,
 /// unrelated plugin additions) changes.
-pub fn generate_package_json(transport: TransportEnv, has_bidir: bool, version_hash: &str) -> String {
+pub fn generate_package_json(transport: TransportEnv, version_hash: &str) -> String {
 
     // Conditionally include deps based on transport
     let dependencies = match transport {
@@ -20,16 +20,8 @@ pub fn generate_package_json(transport: TransportEnv, has_bidir: bool, version_h
         TransportEnv::None => r#"    "@plexus/rpc-client": "workspace:*""#,
     };
 
-    // Include bidir test script if bidir methods exist
-    let scripts = if has_bidir {
-        r#""test": "bun test",
-    "test:bidir": "bun test test/bidir-smoke.test.ts",
-    "test:all": "bun test",
-    "typecheck": "bun x tsc --noEmit""#
-    } else {
-        r#""test": "bun test",
-    "typecheck": "bun x tsc --noEmit""#
-    };
+    let scripts = r#""test": "bun test",
+    "typecheck": "bun x tsc --noEmit""#;
 
     let dev_dependencies = match transport {
         TransportEnv::Browser => r#"    "bun-types": "^1.0.0",

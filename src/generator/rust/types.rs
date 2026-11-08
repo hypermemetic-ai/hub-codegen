@@ -91,6 +91,72 @@ pub enum PlexusStreamItem {
     },
 }
 
+/// ASK-1: a proposal's token — opaque to every client, sent back as
+/// `confirm` to go ahead.
+pub type ConfirmToken = String;
+
+/// ASK-1: a value a proposal needs — a parameter the method already
+/// declares; its value goes under `name` in the answer call.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NeedsInputField {
+    /// The parameter's name
+    pub name: String,
+    /// The values it may take, when the method names them
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<serde_json::Value>>,
+    /// The value it takes when the caller gives none
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<serde_json::Value>,
+    /// What it is for
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub help: Option<String>,
+}
+
+/// ASK-1: the proposal (`needs_input`) a method that asks answers with in
+/// place of acting: nothing was done. Call the method again with the same
+/// params, each field's value under its name, and `confirm: Some(token)`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename = "needs_input")]
+pub struct NeedsInput {
+    /// What the call would do, in a line
+    pub summary: String,
+    /// What it would change, one entry each
+    #[serde(default)]
+    pub effects: Vec<serde_json::Value>,
+    /// The values it needs; none for a plain confirmation
+    #[serde(default)]
+    pub fields: Vec<NeedsInputField>,
+    /// Sent back as `confirm` to go ahead
+    pub token: ConfirmToken,
+    /// When the token stops being taken (RFC 3339)
+    pub expires: String,
+}
+
+/// ASK-1: what a method that asks yields — its item, or the proposal it
+/// finished with in place of acting.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum Asking<T> {
+    /// The proposal: nothing was done; `token` confirms it.
+    NeedsInput(NeedsInput),
+    /// The method's own item.
+    Item(T),
+}
+
+impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Asking<T> {
+    /// A `{"type": "needs_input", …}` content is the proposal; any other is
+    /// the method's item.
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        let v = serde_json::Value::deserialize(d)?;
+        if v.get("type").and_then(|t| t.as_str()) == Some("needs_input") {
+            serde_json::from_value(v).map(Asking::NeedsInput).map_err(D::Error::custom)
+        } else {
+            serde_json::from_value(v).map(Asking::Item).map_err(D::Error::custom)
+        }
+    }
+}
+
 /// Error type for Plexus operations
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
@@ -396,6 +462,9 @@ fn type_ref_to_rust(tr: &TypeRef) -> String {
 
 /// Convert primitive type to Rust
 fn primitive_to_rust(prim: &str, format: Option<&str>) -> String {
+    if prim == "string" && format == Some(crate::ir::CONFIRM_TOKEN_FORMAT) {
+        return "ConfirmToken".to_string(); // ASK-1: the standard type
+    }
     match (prim, format) {
         ("string", Some("uuid")) => "String".to_string(), // Could use uuid::Uuid with feature flag
         ("string", _) => "String".to_string(),

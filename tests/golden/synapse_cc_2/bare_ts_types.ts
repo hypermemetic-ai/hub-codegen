@@ -7,8 +7,7 @@
 
 // === Core Transport Types ===
 // These types define the wire format for all plexus streaming responses.
-// Field names are the wire's (plexus-wire spec/03): snake_case, but for the
-// request item's, which plexus-core sends in camelCase (POLYGLOT-12).
+// Field names are the wire's (plexus-wire spec/03): snake_case.
 
 /** Metadata applied by the caller when wrapping activation responses */
 export interface StreamMetadata {
@@ -72,123 +71,59 @@ export interface PlexusStreamItemDone {
   metadata: StreamMetadata;
 }
 
-/** Server-to-client request for bidirectional communication */
-export interface PlexusStreamItemRequest {
-  type: 'request';
-  /** Unique identifier for correlating response */
-  requestId: string;
-  /** Serialized request data */
-  requestData: StandardRequest;
-  /** Maximum time to wait for response (milliseconds) */
-  timeoutMs: number;
-}
-
 /** Universal stream item - all activations emit this type */
 export type PlexusStreamItem =
   | PlexusStreamItemData
   | PlexusStreamItemProgress
   | PlexusStreamItemError
-  | PlexusStreamItemDone
-  | PlexusStreamItemRequest;
+  | PlexusStreamItemDone;
 
 export function isPlexusStreamItemData(e: PlexusStreamItem): e is PlexusStreamItemData { return e.type === 'data'; }
 export function isPlexusStreamItemProgress(e: PlexusStreamItem): e is PlexusStreamItemProgress { return e.type === 'progress'; }
 export function isPlexusStreamItemError(e: PlexusStreamItem): e is PlexusStreamItemError { return e.type === 'error'; }
 export function isPlexusStreamItemDone(e: PlexusStreamItem): e is PlexusStreamItemDone { return e.type === 'done'; }
-export function isPlexusStreamItemRequest(e: PlexusStreamItem): e is PlexusStreamItemRequest { return e.type === 'request'; }
 
-// === Bidirectional Communication Types ===
+// === ASK-1: a method that asks ===
+//
+// A method that needs its caller's yes, or a value only planning can name,
+// finishes its call with a proposal — a `data` item whose content is a
+// NeedsInput, then `done` — and has done nothing. The caller calls the same
+// method again with the same params, each field's value under its own
+// parameter name, and `confirm` set to the proposal's token.
 
-/** Confirmation request (yes/no) */
-export interface StandardRequestConfirm {
-  type: 'confirm';
-  /** Message to display to user */
-  message: string;
-  /** Default value if user doesn't respond */
-  default?: boolean;
+/** A proposal's token: opaque to every client, sent back as `confirm`. */
+export type ConfirmToken = string;
+
+/** A value the proposal needs: a parameter the method already declares. */
+export interface NeedsInputField {
+  /** The parameter's name; its value goes under it in the answer call */
+  name: string;
+  /** The values it may take, when the method names them */
+  options?: unknown[];
+  /** The value it takes when the caller gives none */
+  default?: unknown;
+  /** What it is for */
+  help?: string;
 }
 
-/** Text prompt request */
-export interface StandardRequestPrompt {
-  type: 'prompt';
-  /** Message to display to user */
-  message: string;
-  /** Default value */
-  default?: string;
-  /** Placeholder text */
-  placeholder?: string;
+/** The proposal a method that asks answers with in place of acting (`needs_input`). */
+export interface NeedsInput {
+  type: 'needs_input';
+  /** What the call would do, in a line */
+  summary: string;
+  /** What it would change, one entry each */
+  effects: unknown[];
+  /** The values it needs; none for a plain confirmation */
+  fields: NeedsInputField[];
+  /** Sent back as `confirm` to go ahead */
+  token: ConfirmToken;
+  /** When the token stops being taken (RFC 3339) */
+  expires: string;
 }
 
-/** Selection request (single or multiple choice) */
-export interface StandardRequestSelect {
-  type: 'select';
-  /** Message to display to user */
-  message: string;
-  /** Available options */
-  options: SelectOption[];
-  /** Allow multiple selections */
-  multiSelect?: boolean;
-}
-
-/** Standard request types for common UI patterns */
-export type StandardRequest =
-  | StandardRequestConfirm
-  | StandardRequestPrompt
-  | StandardRequestSelect;
-
-export function isStandardRequestConfirm(e: StandardRequest): e is StandardRequestConfirm { return e.type === 'confirm'; }
-export function isStandardRequestPrompt(e: StandardRequest): e is StandardRequestPrompt { return e.type === 'prompt'; }
-export function isStandardRequestSelect(e: StandardRequest): e is StandardRequestSelect { return e.type === 'select'; }
-
-/** Option in a select menu */
-export interface SelectOption {
-  /** Value returned when selected */
-  value: string;
-  /** Display label */
-  label: string;
-  /** Optional description */
-  description?: string;
-}
-
-/** Response to confirmation request */
-export interface StandardResponseConfirmed {
-  type: 'confirmed';
-  value: boolean;
-}
-
-/** Response to prompt request */
-export interface StandardResponseText {
-  type: 'text';
-  value: string;
-}
-
-/** Response to select request */
-export interface StandardResponseSelected {
-  type: 'selected';
-  values: string[];
-}
-
-/** User cancelled the request */
-export interface StandardResponseCancelled {
-  type: 'cancelled';
-}
-
-/** Standard response types for bidirectional requests */
-export type StandardResponse =
-  | StandardResponseConfirmed
-  | StandardResponseText
-  | StandardResponseSelected
-  | StandardResponseCancelled;
-
-export function isStandardResponseConfirmed(e: StandardResponse): e is StandardResponseConfirmed { return e.type === 'confirmed'; }
-export function isStandardResponseText(e: StandardResponse): e is StandardResponseText { return e.type === 'text'; }
-export function isStandardResponseSelected(e: StandardResponse): e is StandardResponseSelected { return e.type === 'selected'; }
-export function isStandardResponseCancelled(e: StandardResponse): e is StandardResponseCancelled { return e.type === 'cancelled'; }
-
-/** Respond to a bidirectional request */
-export interface PlexusResponse {
-  requestId: string;
-  response: StandardResponse;
+/** The item is a proposal: nothing was done, and `token` confirms it. */
+export function isNeedsInput(e: unknown): e is NeedsInput {
+  return typeof e === 'object' && e !== null && (e as { type?: unknown }).type === 'needs_input';
 }
 
 /** Error thrown when a PlexusStreamItemError is received */

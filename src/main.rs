@@ -242,7 +242,6 @@ fn main() -> Result<()> {
                 {
                     let pkg_path = args.output.join("package.json");
                     if !pkg_path.exists() {
-                        let has_bidir = service_codegen::generator::typescript::tests::has_bidir_methods(&ir);
                         // Version hash from code files only (exclude package.json and metadata sidecar)
                         let code_files: std::collections::HashMap<_, _> = result.files.iter()
                             .filter(|(k, _)| k.as_str() != "package.json" && k.as_str() != ".codegen-metadata.json")
@@ -251,7 +250,6 @@ fn main() -> Result<()> {
                         let version_hash = service_codegen::hash::compute_plugin_hash(&code_files);
                         let pkg_content = service_codegen::generator::typescript::package::generate_package_json(
                             options.transport,
-                            has_bidir,
                             &version_hash,
                         );
                         std::fs::write(&pkg_path, &pkg_content)?;

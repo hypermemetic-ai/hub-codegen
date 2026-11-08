@@ -21,6 +21,8 @@
 mod common_naming;
 #[path = "support/returns_line.rs"]
 mod returns_line;
+#[path = "support/ask_line.rs"]
+mod ask_line;
 
 use service_codegen::generator::{GenerationOptions, TransportEnv};
 use service_codegen::{generate_rust, generate_typescript, IR};
@@ -120,9 +122,9 @@ fn transport_declares_transport_error() {
         // the kit lifts transport.ts alone: no new import
         let imports: Vec<&str> = tr.lines().filter(|l| l.starts_with("import ")).collect();
         let expected: Vec<&str> = if t == TransportEnv::Ws {
-            vec!["import WebSocket from 'ws';", "import type {", "import type { RpcClient } from './rpc';", "import { currentCallScope } from './watch';"]
+            vec!["import WebSocket from 'ws';", "import type { PlexusStreamItem } from './types';", "import type { RpcClient } from './rpc';", "import { currentCallScope } from './watch';"]
         } else {
-            vec!["import type {", "import type { RpcClient } from './rpc';", "import { currentCallScope } from './watch';"]
+            vec!["import type { PlexusStreamItem } from './types';", "import type { RpcClient } from './rpc';", "import { currentCallScope } from './watch';"]
         };
         assert_eq!(imports, expected, "{t:?}");
     }
@@ -199,6 +201,7 @@ fn existing_output_unchanged() {
         }
         let content = now.get(path).unwrap_or_else(|| panic!("{path} is no longer generated"));
         let content = &returns_line::before_returns46(path, content, &|p| now.contains_key(p));
+        let content = &ask_line::before_ask1(path, content);
         let content = if file == "client.ts" && !path.contains("-rust/") {
             to_main_spelling(content)
         } else if name == "types.ts" {

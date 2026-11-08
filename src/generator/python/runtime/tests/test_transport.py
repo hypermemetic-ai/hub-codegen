@@ -19,7 +19,7 @@ from runtime.errors import (
     TooManyCalls,
     Unauthenticated,
 )
-from runtime.transport import Service, Page, Progress, Request, Requirement
+from runtime.transport import Service, Page, Progress, NeedsInput, NeedsInputField, Requirement
 
 from .mock_service import DONE, MockService, data, error_item
 
@@ -194,35 +194,38 @@ async def test_page_and_progress_not_yielded(mock: MockService) -> None:
         assert second.page == Page(next=None, remaining=0, first=1)
 
 
-REQUEST = {"type": "request", "requestId": "r1", "requestData": {"type": "confirm", "message": "ok?"}, "timeoutMs": 5000}
+PROPOSAL = {"type": "needs_input", "summary": "archive KILN-2 (1 not done)", "effects": [{"archive": "KILN-2"}],
+            "fields": [{"name": "children", "options": ["reparent", "delete"], "default": "reparent"}],
+            "token": "v1.1794100000.abc", "expires": "2026-11-07T12:00:00Z"}
 
 
-async def test_request_hook_and_default_cancel(mock: MockService) -> None:
-    asked: list[Request] = []
-
-    async def hook(req: Request) -> Any:
-        asked.append(req)
-        return {"type": "confirmed", "value": True}
-
-    e1 = mock.expect_call("m.ask").reply([REQUEST])
-    async with Service(mock.url, backend="menger", on_request=hook) as service:
-        stream = service.call("m.ask", {}, decode=dict)
-        task = asyncio.create_task(stream.collect())
-        frames = await mock.wait_for_frame("menger.respond")
-        assert frames[0]["params"] == {"request_id": "r1", "response_data": {"type": "confirmed", "value": True}}
-        assert frames[0]["jsonrpc"] == "2.0" and isinstance(frames[0]["id"], int)
-        assert asked[0].request_id == "r1" and asked[0].data == {"type": "confirm", "message": "ok?"}
-        assert asked[0].timeout_ms == 5000 and asked[0].method == "m.ask"
-        await e1.push(data({"n": 1}), DONE)
-        assert await task == [{"n": 1}]
-
-    e2 = mock.expect_call("m.ask").reply([REQUEST])
+async def test_needs_input_is_yielded_and_nothing_is_answered(mock: MockService) -> None:
+    """ASK-1: a proposal is a data item yielded as a NeedsInput, never decoded as the method's item; the
+    answer is the same method again with `confirm` — and an old server's `request` item is no question."""
+    e1 = mock.expect_call("tickets.archive").reply([data(PROPOSAL), DONE])
     async with Service(mock.url, backend="menger") as service:
-        task = asyncio.create_task(service.call("m.ask", {}, decode=dict).collect())
-        frames = await mock.wait_for_frame("menger.respond", count=2)
-        assert frames[1]["params"] == {"request_id": "r1", "response_data": {"type": "cancelled"}}
-        await e2.push(DONE)
-        assert await task == []
+        # a method that asks yields its decoder's item or a NeedsInput (the decoder never sees a proposal)
+        got: list[Any] = await service.call("tickets.archive", {"filter": "label stale"},
+                                            decode=lambda c: ("item", c)).collect()
+        assert got == [NeedsInput(summary="archive KILN-2 (1 not done)", effects=[{"archive": "KILN-2"}],
+                                  fields=[NeedsInputField(name="children", options=["reparent", "delete"],
+                                                          default="reparent")],
+                                  token="v1.1794100000.abc", expires="2026-11-07T12:00:00Z")]
+        assert NeedsInput.of({"type": "archived", "id": "KILN-2"}) is None
+        e2 = mock.expect_call("tickets.archive").reply([data({"type": "archived", "id": "KILN-2"}), DONE])
+        token = got[0].token
+        done = await service.call("tickets.archive", {"filter": "label stale", "children": "reparent",
+                                                      "confirm": token}, decode=dict).collect()
+        assert done == [{"type": "archived", "id": "KILN-2"}]
+        assert e2.frame is not None and e2.frame["params"]["params"] == {"filter": "label stale", "children": "reparent",
+                                                                         "confirm": token}
+        assert e1.frame is not None and e1.frame["params"]["params"] == {"filter": "label stale"}
+
+    old = {"type": "request", "requestId": "r1", "requestData": {"type": "confirm", "message": "ok?"}, "timeoutMs": 5000}
+    mock.expect_call("m.ask").reply([old, data({"n": 1}), DONE])
+    async with Service(mock.url, backend="menger") as service:
+        assert await service.call("m.ask", {}, decode=dict).collect() == [{"n": 1}]
+    assert mock.frames("menger.respond") == []
 
 
 async def test_cancel_sends_unsubscribe(mock: MockService) -> None:

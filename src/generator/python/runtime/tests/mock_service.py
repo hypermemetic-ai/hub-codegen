@@ -4,7 +4,7 @@ PYTHON-4's generated-client tests and PYTHON-7's input tests.
 A ``websockets`` server on ``127.0.0.1:0`` that speaks today's wire:
 ``<backend>.call {method, params}`` answered with a subscription id, then
 ``{"method": "<backend>.call", "params": {"subscription": id, "result": item}}``
-notifications, ``<backend>.call_unsub [id]`` and ``<backend>.respond``
+notifications, and ``<backend>.call_unsub [id]``
 acknowledged. Every frame a client sends is kept in ``recorded``; every
 upgrade's headers in ``upgrade_headers``.
 

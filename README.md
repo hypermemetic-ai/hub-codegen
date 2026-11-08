@@ -72,16 +72,16 @@ TypeScript:
 
 ```
 generated/
-├── types.ts            # protocol types: PlexusStreamItem, StandardRequest/Response, errors
+├── types.ts            # protocol types: PlexusStreamItem, NeedsInput and ConfirmToken, errors
 ├── rpc.ts              # RpcClient interface and stream helpers
-├── transport.ts        # PlexusRpcClient — WebSocket transport, credentials, bidirectional requests
+├── transport.ts        # PlexusRpcClient — WebSocket transport, credentials
 ├── index.ts            # re-exports, one `export * as <Namespace>` per namespace
 ├── package.json, tsconfig.json, .codegen-metadata.json
 ├── <namespace>/        # nested namespaces nest as directories
 │   ├── types.ts
 │   ├── client.ts       # create<Namespace>Client(rpc)
 │   └── index.ts
-└── test/smoke.test.ts  # bun test; plus bidir-smoke.test.ts when the backend has `interactive`
+└── test/smoke.test.ts  # bun test
 ```
 
 A method's parameters are the ones the caller sends. A parameter the server
@@ -119,43 +119,41 @@ default), or `all`.
 ## Using a generated TypeScript client
 
 ```typescript
-import { createClient, Greeter, type StandardRequest, type StandardResponse } from './generated';
+import { createClient, Greeter } from './generated';
 
 const rpc = createClient({ backend: 'starter', url: process.env.PLEXUS_URL! });
 await rpc.connect();
 const greeter = Greeter.createGreeterClient(rpc);
 ```
 
-### Bidirectional requests
+### A method that asks
 
-During a streaming call the server may send a `request` stream item
-(`PlexusStreamItemRequest`: `requestId`, `requestData: StandardRequest`,
-`timeoutMs`) and wait for the client's answer. The transport passes
-`requestData` to the `onBidirectionalRequest` handler from its config (or
-`setBidirectionalHandler`) and sends what it returns to `<backend>.respond`.
-No handler, a handler that throws or returns `undefined`, or no answer within
-`timeoutMs` sends `{ type: 'cancelled' }`.
+A method whose IR says `mdAsks` (ASK-1: `#[method(asks)]`) may finish its
+call with a proposal in place of acting — an item `{ type: 'needs_input',
+summary, effects, fields, token, expires }`, then `done` — having done
+nothing. Its client takes an optional last parameter `confirm?:
+ConfirmToken`, and its item is `T | NeedsInput`; call it again with the same
+params, each field's value under its parameter's name, and the token:
 
 ```typescript
-const rpc = createClient({
-  backend: 'starter',
-  url: process.env.PLEXUS_URL!,
-  onBidirectionalRequest: async (req: StandardRequest): Promise<StandardResponse | undefined> => {
-    switch (req.type) {
-      case 'confirm': return { type: 'confirmed', value: await askYesNo(req.message, req.default) };
-      case 'prompt':  return { type: 'text', value: await ask(req.message, req.default) };
-      case 'select':  return { type: 'selected', values: await choose(req.message, req.options, req.multiSelect) };
-    }
-  },
-});
+import { isNeedsInput } from './generated';
+
+const tickets = Tickets.createTicketsClient(rpc);
+for await (const ev of tickets.archive('label stale')) {
+  if (isNeedsInput(ev)) {
+    if (await askYesNo(ev.summary)) for await (const done of tickets.archive('label stale', ev.token)) show(done);
+  } else show(ev);
+}
 ```
 
-| request | fields | response |
-| -- | -- | -- |
-| `confirm` | `message`, `default?` | `{ type: 'confirmed', value: boolean }` |
-| `prompt` | `message`, `default?`, `placeholder?` | `{ type: 'text', value: string }` |
-| `select` | `message`, `options: { value, label, description? }[]`, `multiSelect?` | `{ type: 'selected', values: string[] }` |
-| any | | `{ type: 'cancelled' }` |
+`ConfirmToken` (a string), `NeedsInputField` (`name`, `options?`,
+`default?`, `help?`), `NeedsInput` and `isNeedsInput` are in the package's
+`types.ts`, once. In Rust the item is `Asking<T>` — `Item(T)` or
+`NeedsInput(NeedsInput)` — and `confirm` an `Option<ConfirmToken>`; the
+Python runtime yields a `NeedsInput` dataclass in place of the decoded item.
+A server never asks its caller mid-call: the bidirectional `request` item,
+`<backend>.respond` and `onBidirectionalRequest` are gone (ASK-1). An older
+IR's `bidirectional` reads as not asking.
 
 ## Development
 

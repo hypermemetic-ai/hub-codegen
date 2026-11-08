@@ -361,7 +361,7 @@ async function* decodeItems<E>(method: string, stream: AsyncGenerator<PlexusStre
       case 'done':
         return undefined;
       default:
-        // progress: dropped (.withProgress() keeps it); request: the transport answers it
+        // progress: dropped (.withProgress() keeps it)
         break;
     }
   }

@@ -1,12 +1,10 @@
 //! POLYGLOT-12 · the TS transport's item types name the wire's fields as the
 //! wire does (plexus-wire spec/03): `content_type`, `metadata.plexus_hash` —
-//! snake_case, but for the `request` item's (`requestId`, `requestData`,
-//! `timeoutMs`), which plexus-core sends in camelCase. Under every
-//! transport, with grants in the IR or without. Its other half — the
-//! `call_unsub` the transport never sent — landed with RETURNS-38; the kit's
-//! `client.unsubscribes` holds it (plexus-wire), and a request item that
-//! arrives before its call's subscription id is answered, not yielded
-//! (`tests/ts_returns17/runtime.test.ts`).
+//! snake_case. Under every transport, with grants in the IR or without. Its
+//! other half — the `call_unsub` the transport never sent — landed with
+//! RETURNS-38; the kit's `client.unsubscribes` holds it (plexus-wire). The
+//! camelCase `request` item went with bidir (ASK-1): an old server's is
+//! neither answered nor yielded (`tests/ts_returns17/runtime.test.ts`).
 
 use service_codegen::generator::{GenerationOptions, TransportEnv};
 use service_codegen::{generate_typescript, IR};
@@ -29,21 +27,26 @@ fn item_types_use_wire_names() {
             assert!(types.contains("  plexus_hash: string;"), "{fx} {transport:?}");
             assert!(types.contains("  content_type: string;"), "{fx} {transport:?}");
             assert!(!types.contains("plexusHash") && !types.contains("contentType"), "{fx} {transport:?}");
-            // the request item is plexus-core's camelCase, as the wire sends it
-            for f in ["  requestId: string;", "  requestData: StandardRequest;", "  timeoutMs: number;"] {
-                assert!(types.contains(f), "{fx} {transport:?}: {f}");
+            // ASK-1: no request item, and no camelCase left
+            for f in ["requestId", "requestData", "timeoutMs", "PlexusStreamItemRequest", "StandardRequest", "StandardResponse"] {
+                assert!(!types.contains(f), "{fx} {transport:?}: {f}");
             }
         }
     }
 }
 
 #[test]
-fn a_request_item_before_the_subscription_id_is_answered() {
-    let files = generate_typescript(&fixture("returns17_ir"), &GenerationOptions { transport: TransportEnv::Browser, ..GenerationOptions::default() })
-        .expect("generate")
-        .files;
-    let t = &files["transport.ts"];
-    assert!(t.contains("if (msg.type === 'request') { this.handleBidirectionalRequest(msg as PlexusStreamItemRequest); continue; }"), "{t}");
+fn a_request_item_is_never_answered() {
+    // ASK-1: no server asks its caller mid-call; the transport has no `respond`.
+    for transport in [TransportEnv::Ws, TransportEnv::Browser] {
+        let files = generate_typescript(&fixture("returns17_ir"), &GenerationOptions { transport, ..GenerationOptions::default() })
+            .expect("generate")
+            .files;
+        let t = &files["transport.ts"];
+        for gone in ["'request'", ".respond", "Bidirectional", "StandardRe"] {
+            assert!(!t.contains(gone), "{transport:?}: {gone}");
+        }
+    }
 }
 
 #[test]

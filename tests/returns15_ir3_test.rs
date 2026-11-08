@@ -311,17 +311,18 @@ fn a_method_writes_its_cardinality() {
 // ─────────────────────────────────────────────────────────────
 
 #[test]
-fn only_ir_2_0_2_1_and_3_0_are_read() {
-    for v in ["2.0", "2.1", "3.0"] {
+fn only_ir_2_0_through_4_0_are_read() {
+    // 3.1 and 4.0: ASK-1's IR (`mdAsks`, no bidir), its number not yet chosen.
+    for v in ["2.0", "2.1", "3.0", "3.1", "4.0"] {
         check_ir_version(v).unwrap_or_else(|e| panic!("{v}: {e}"));
         let ir = one_method_ir(v, fire(serde_json::json!({ "mdCardinality": "one" })));
         generate_typescript(&ir, &GenerationOptions::default()).unwrap_or_else(|e| panic!("{v}: {e}"));
         generate_rust(&ir).unwrap_or_else(|e| panic!("{v}: {e}"));
     }
-    for v in ["1.0", "2.2", "3.1", "4.0", ""] {
+    for v in ["1.0", "2.2", "3.2", "5.0", ""] {
         let msg = check_ir_version(v).expect_err(v).to_string();
         assert!(msg.contains(&format!("IR {v} is not supported")), "{msg}");
-        assert!(msg.contains("reads IR 2.0, 2.1 and 3.0"), "{msg}");
+        assert!(msg.contains("reads IR 2.0, 2.1, 3.0, 3.1 and 4.0"), "{msg}");
         let ir = one_method_ir(v, fire(serde_json::json!({})));
         assert_eq!(generate_typescript(&ir, &GenerationOptions::default()).err().map(|e| e.to_string()), Some(msg.clone()));
         assert_eq!(generate_rust(&ir).err().map(|e| e.to_string()), Some(msg));

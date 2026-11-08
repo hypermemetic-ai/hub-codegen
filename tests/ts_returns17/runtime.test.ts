@@ -246,21 +246,19 @@ test('a RemoteCallError built directly is one; a plain PlexusError is not', () =
   assert.ok(!(new TransportError('x') instanceof RemoteCallError));
 });
 
-test('POLYGLOT-12: a request item that arrives before the subscription id is answered, never yielded', async () => {
+test('ASK-1: an old server\'s request item, before the subscription id or after, is neither answered nor yielded', async () => {
   const svc = new MockService();
   currentService = svc;
-  const rpc = new PlexusRpcClient({
-    backend: BACKEND, url: 'ws://mock', preflight: false,
-    onBidirectionalRequest: async () => ({ type: 'confirmed', value: true }),
-  });
+  const rpc = new PlexusRpcClient({ backend: BACKEND, url: 'ws://mock', preflight: false });
   const alpha = Alpha.createAlphaClient(rpc);
   svc.early.push({ type: 'request', requestId: 'r-1', requestData: { type: 'confirm', message: 'go?' }, timeoutMs: 3000 });
   const got: unknown[] = [];
   const reading = (async () => { for await (const ev of alpha.a()) got.push(ev); })();
-  await until(() => svc.respond().length === 1, 'the answer to the request');
-  assert.deepEqual(svc.respond()[0].params, { request_id: 'r-1', response_data: { type: 'confirmed', value: true } });
+  await until(() => svc.calls().length === 1, 'the call');
+  svc.emit('alpha.a', { type: 'request', requestId: 'r-2', requestData: { type: 'confirm', message: 'go?' }, timeoutMs: 3000 });
   svc.data('alpha.a', { n: 1 });
   svc.done('alpha.a');
   await reading;
-  assert.deepEqual(got, [{ n: 1 }], 'the request is not an item');
+  assert.deepEqual(got, [{ n: 1 }], 'a request is not an item');
+  assert.deepEqual(svc.respond(), [], 'nothing answers it: bidir is gone');
 });

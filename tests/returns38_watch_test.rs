@@ -22,6 +22,8 @@
 mod common_naming;
 #[path = "support/returns_line.rs"]
 mod returns_line;
+#[path = "support/ask_line.rs"]
+mod ask_line;
 
 use service_codegen::generator::{GenerationOptions, TransportEnv};
 use service_codegen::{generate_rust, generate_typescript, IR};
@@ -145,6 +147,7 @@ fn existing_output_unchanged() {
                 }
                 let now = files.get(*path).unwrap_or_else(|| panic!("{dir}/{path} is no longer generated"));
                 let now = &returns_line::before_returns46(&format!("{dir}/{path}"), now, &|p| p.strip_prefix(&format!("{dir}/")).is_some_and(|q| files.contains_key(q)));
+                let now = &ask_line::before_ask1(&format!("{dir}/{path}"), now);
                 let now = if *path == "index.ts" {
                     assert!(now.contains(WATCH_EXPORT), "{dir}/index.ts lacks the watch export");
                     now.replacen(WATCH_EXPORT, "", 1)

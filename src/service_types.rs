@@ -54,9 +54,6 @@ fn homes(ir: &IR) -> BTreeMap<String, String> {
         for p in m.sent_params() {
             count(ir, &mut refs, &m.md_namespace, &p.pd_type);
         }
-        if let Some(b) = &m.md_bidir_type {
-            count(ir, &mut refs, &m.md_namespace, b);
-        }
     }
     for td in ir.ir_types.values().filter(|td| !td.td_namespace.is_empty()) {
         for tr in kind_refs(&td.td_kind) {
@@ -99,9 +96,6 @@ fn move_home(ir: &mut IR, homes: &BTreeMap<String, String>) {
         rewrite(&mut m.md_returns);
         for p in &mut m.md_params {
             rewrite(&mut p.pd_type);
-        }
-        if let Some(b) = &mut m.md_bidir_type {
-            rewrite(b);
         }
     }
     for td in ir.ir_types.values_mut() {

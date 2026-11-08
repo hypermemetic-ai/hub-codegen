@@ -38,7 +38,7 @@ fn post_ir_fixture() -> IR {
             md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_bidir_type: None,
+            md_asks: false,
             md_role: Default::default(),
             md_deprecation: Some(DeprecationInfo {
                 since: "0.5".to_string(),
@@ -61,7 +61,7 @@ fn post_ir_fixture() -> IR {
             md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_bidir_type: None,
+            md_asks: false,
             md_role: Default::default(),
             md_deprecation: None,
             md_requires_credential: None,

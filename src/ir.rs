@@ -117,7 +117,9 @@ impl IR {
     /// IR 2.x derives it from `mdStreaming` ([`MethodDef::normalize_wire`]);
     /// an IR of any other version is left to [`check_ir_version`].
     pub fn check_cardinality(v: &serde_json::Value) -> Result<(), String> {
-        if v.get("irVersion").and_then(|x| x.as_str()) != Some("3.0") {
+        // 3.0 and after (ASK-1's 3.1 / 4.0) say it; 2.x derives it.
+        let Some(version) = v.get("irVersion").and_then(|x| x.as_str()) else { return Ok(()) };
+        if !SUPPORTED_IR_VERSIONS.contains(&version) || version.starts_with("2.") {
             return Ok(());
         }
         let Some(methods) = v.get("irMethods").and_then(|m| m.as_object()) else { return Ok(()) };
@@ -131,7 +133,7 @@ impl IR {
         }
         missing.sort();
         Err(format!(
-            "IR 3.0 says every method's mdCardinality; {} has none: {}",
+            "IR {version} says every method's mdCardinality; {} has none: {}",
             if missing.len() == 1 { "this method" } else { "these methods" },
             missing.join(", ")
         ))
@@ -616,9 +618,11 @@ impl Cardinality {
 }
 
 /// The IR versions this service-codegen reads: 2.0 (synapse ≤ 3.16), 2.1
-/// (synapse 3.17) and 3.0 (synapse after RETURNS-36). Every generator calls
-/// this first.
-pub const SUPPORTED_IR_VERSIONS: [&str; 3] = ["2.0", "2.1", "3.0"];
+/// (synapse 3.17), 3.0 (synapse after RETURNS-36), and the one ASK-1's
+/// synapse writes — `mdAsks`, no bidir — which ASK-2 / ASK-3 have yet to
+/// number, so both of its candidates, 3.1 and 4.0, are read. Every
+/// generator calls this first.
+pub const SUPPORTED_IR_VERSIONS: [&str; 5] = ["2.0", "2.1", "3.0", "3.1", "4.0"];
 
 /// Refuse an IR this service-codegen cannot read, naming what it reads.
 pub fn check_ir_version(version: &str) -> anyhow::Result<()> {
@@ -626,7 +630,7 @@ pub fn check_ir_version(version: &str) -> anyhow::Result<()> {
         return Ok(());
     }
     anyhow::bail!(
-        "IR {version} is not supported; service-codegen {} reads IR 2.0, 2.1 and 3.0 (synapse 3.16 through the one that writes 3.0)",
+        "IR {version} is not supported; service-codegen {} reads IR 2.0, 2.1, 3.0, 3.1 and 4.0 (synapse 3.16 through ASK-1's)",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -665,24 +669,17 @@ pub struct MethodDef {
     /// no progress, and always in an IR 2.x.
     #[serde(default)]
     pub md_progress: Option<TypeRef>,
-    /// Bidirectional channel type parameter T.
+    /// The method may answer with a proposal instead of acting (ASK-1):
+    /// its call finishes with a `needs_input` item, and the caller calls it
+    /// again with `confirm` set to the proposal's token. Every generator
+    /// gives such a method an optional `confirm: ConfirmToken` parameter
+    /// ([`MethodDef::sent_params`]) and `NeedsInput` in its output.
     ///
-    /// When a method uses `BidirChannel<StandardRequest<T>, StandardResponse<T>>` or
-    /// `Arc<StandardBidirChannel>` (the T=Value default), this field describes T.
-    ///
-    /// - `None`  → the method is not bidirectional, OR it uses the default
-    ///             `T = serde_json::Value` (i.e., `StandardBidirChannel`)
-    /// - `Some(TypeRef::RefAny)` → bidirectional with T=Value (explicit marker)
-    /// - `Some(TypeRef::RefNamed(...))` → bidirectional with a specific T type
-    ///
-    /// # Schema field
-    ///
-    /// The synapse IR builder populates this from the `"bidirType"` field in the
-    /// method schema JSON (emitted when `bidirectional: true` in `MethodSchema`
-    /// with a non-Value `request_type`).  When the schema only has
-    /// `bidirectional: true` but no `bidir_type` field, `None` is emitted.
-    #[serde(default)]
-    pub md_bidir_type: Option<TypeRef>,
+    /// Wire key `mdAsks` (`asks` read too). An older IR has none and may say
+    /// `mdBidirType` / `bidirectional` (a server asking its caller mid-call,
+    /// which ASK-1 retired): that is read as not asking, and dropped.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub md_asks: bool,
 
     /// Method role classification (IR-9).
     ///
@@ -842,7 +839,30 @@ pub struct ParamDef {
     pub pd_source: Option<serde_json::Value>,
 }
 
+/// ASK-1: the parameter a method that asks takes its proposal's token in.
+pub const CONFIRM_PARAM: &str = "confirm";
+
+/// ASK-1: the format that marks the standard `ConfirmToken` (a string) —
+/// what every generator writes as `ConfirmToken`.
+pub const CONFIRM_TOKEN_FORMAT: &str = "confirm-token";
+
 impl ParamDef {
+    /// ASK-1: `confirm`, the optional parameter of every method that asks:
+    /// the token of the proposal (`needs_input`) the call confirms.
+    pub fn confirm(description: Option<String>) -> ParamDef {
+        ParamDef {
+            pd_name: CONFIRM_PARAM.to_string(),
+            pd_type: TypeRef::confirm_token(),
+            pd_description: description.or_else(|| {
+                Some("The token of a proposal (`needs_input`) this call confirms: sent with the same params and each field's value".to_string())
+            }),
+            pd_required: false,
+            pd_default: None,
+            pd_deprecation: None,
+            pd_source: None,
+        }
+    }
+
     /// SYNAPSE-CC-2: the server fills this parameter from the connection
     /// (`pdSource.from` is `auth`, `derived`, `header`, `cookie`, `query` —
     /// anything but `rpc`), so no client sends it: it is left out of every
@@ -898,12 +918,21 @@ impl MethodDef {
     ///   true, else `"one"`; `mdStreaming` itself is dropped. An IR 3.0
     ///   method without it never gets here: [`IR::check_cardinality`]
     ///   refuses the IR first;
+    /// - `mdBidirType` and the other bidir keys of an IR before ASK-1 are
+    ///   dropped: such a method does not ask; `asks` is read as `mdAsks`;
     /// - `mdInjected` (IR 2.1 / 3.0, SYNAPSE-CC-8: a param the server
     ///   supplies, out of `mdParams`): each is appended to `mdParams` with its
     ///   `pdSource`, so the generators leave it out of what is sent and
     ///   document it, as they do an IR 2.0's injected param.
     pub fn normalize_wire(v: &mut serde_json::Value) {
         let Some(o) = v.as_object_mut() else { return };
+        // ASK-1: bidir is gone; an older IR's says nothing about asking.
+        for k in ["mdBidirType", "mdBidirResponseType", "mdBidirResponseSchema", "bidirectional", "mdBidirectional"] {
+            o.remove(k);
+        }
+        if let Some(asks) = o.remove("asks") {
+            o.entry("mdAsks").or_insert(asks);
+        }
         let streaming = o.remove("mdStreaming").and_then(|s| s.as_bool()).unwrap_or(false);
         if !o.contains_key("mdCardinality") {
             o.insert("mdCardinality".into(), serde_json::json!(if streaming { "many" } else { "one" }));
@@ -932,8 +961,23 @@ impl MethodDef {
     /// SYNAPSE-CC-2: the parameters a client sends — `md_params` without
     /// the injected ones ([`ParamDef::is_injected`]), in IR order. For an IR
     /// without `pdSource` this is `md_params` itself.
+    ///
+    /// ASK-1: a method that asks ([`MethodDef::md_asks`]) sends `confirm`
+    /// too, last of all, optional, of the standard type `ConfirmToken`
+    /// ([`ParamDef::confirm`]); a `confirm` the IR lists itself is replaced
+    /// by it, its description kept.
     pub fn sent_params(&self) -> Vec<ParamDef> {
-        self.md_params.iter().filter(|p| !p.is_injected()).cloned().collect()
+        let mut sent: Vec<ParamDef> = self
+            .md_params
+            .iter()
+            .filter(|p| !p.is_injected() && !(self.md_asks && p.pd_name == CONFIRM_PARAM))
+            .cloned()
+            .collect();
+        if self.md_asks {
+            let listed = self.md_params.iter().find(|p| p.pd_name == CONFIRM_PARAM);
+            sent.push(ParamDef::confirm(listed.and_then(|p| p.pd_description.clone())));
+        }
+        sent
     }
 
     /// REQ-9 / SYNAPSE-CC-2: one breadcrumb per injected parameter, in IR
@@ -979,6 +1023,17 @@ impl TypeRef {
                 items.iter().map(|t| t.to_ts_in_namespace(current_namespace)).collect::<Vec<_>>().join(", ")
             ),
         }
+    }
+
+    /// ASK-1: the standard `ConfirmToken`, a string every generator names
+    /// so ([`CONFIRM_TOKEN_FORMAT`]).
+    pub fn confirm_token() -> TypeRef {
+        TypeRef::RefPrimitive("string".to_string(), Some(CONFIRM_TOKEN_FORMAT.to_string()))
+    }
+
+    /// ASK-1: this is the standard `ConfirmToken`.
+    pub fn is_confirm_token(&self) -> bool {
+        matches!(self, TypeRef::RefPrimitive(p, Some(f)) if p == "string" && f == CONFIRM_TOKEN_FORMAT)
     }
 
     /// Get the namespace from a RefNamed, if qualified
@@ -1028,6 +1083,7 @@ impl TypeRef {
 fn primitive_to_ts(prim: &str, format: Option<&str>) -> String {
     match (prim, format) {
         ("string", Some("uuid")) => "string".to_string(), // UUID as string
+        ("string", Some(CONFIRM_TOKEN_FORMAT)) => "ConfirmToken".to_string(), // ASK-1: the standard type
         ("string", _) => "string".to_string(),
         ("integer", _) | ("number", _) => "number".to_string(),
         ("boolean", _) => "boolean".to_string(),
@@ -1178,79 +1234,50 @@ mod tests {
         assert!(!TypeRef::RefArray(Box::new(TypeRef::RefAny)).contains_unknown());
     }
 
-    /// Test that `md_bidir_type` is correctly deserialized from IR JSON.
-    ///
-    /// Verifies three cases:
-    /// 1. Field absent       → `None` (legacy IR / non-bidir method)
-    /// 2. `null`             → `None` (explicit null from synapse)
-    /// 3. `{"tag":"RefAny"}` → `Some(TypeRef::RefAny)` (T=Value bidir)
-    /// 4. `{"tag":"RefNamed",...}` → `Some(TypeRef::RefNamed(...))` (specific T)
+    /// ASK-1: `mdAsks` (or `asks`) marks a method that asks; an older IR's
+    /// bidir keys read as not asking; an asking method sends `confirm`, the
+    /// standard `ConfirmToken`, last, optional, in place of any the IR lists.
     #[test]
-    fn test_method_def_bidir_type_deserialization() {
-        // 1. Field absent → None (backward compatibility)
-        let json_no_field = r#"{
-            "mdName": "wizard",
-            "mdFullPath": "interactive.wizard",
-            "mdNamespace": "interactive",
-            "mdStreaming": true,
-            "mdParams": [],
-            "mdReturns": {"tag": "RefAny"}
-        }"#;
-        let method: MethodDef = serde_json::from_str(json_no_field).unwrap();
-        assert!(method.md_bidir_type.is_none(), "absent field should default to None");
+    fn test_method_def_asks() {
+        let base = |extra: &str| {
+            format!(
+                r#"{{"mdName": "archive", "mdFullPath": "tickets.archive", "mdNamespace": "tickets",
+                    "mdStreaming": true, "mdReturns": {{"tag": "RefAny"}},
+                    "mdParams": [{{"pdName": "filter", "pdType": {{"tag": "RefPrimitive", "contents": ["string", null]}}, "pdRequired": true}}]{extra}}}"#
+            )
+        };
+        let plain: MethodDef = serde_json::from_str(&base("")).unwrap();
+        assert!(!plain.md_asks);
+        assert_eq!(plain.sent_params().len(), 1);
 
-        // 2. Explicit null → None
-        let json_null = r#"{
-            "mdName": "wizard",
-            "mdFullPath": "interactive.wizard",
-            "mdNamespace": "interactive",
-            "mdStreaming": true,
-            "mdParams": [],
-            "mdReturns": {"tag": "RefAny"},
-            "mdBidirType": null
-        }"#;
-        let method: MethodDef = serde_json::from_str(json_null).unwrap();
-        assert!(method.md_bidir_type.is_none(), "null should deserialize to None");
+        // An IR before ASK-1: bidirectional is not asking, and nothing of it stays.
+        let old: MethodDef = serde_json::from_str(&base(
+            r#", "mdBidirType": {"tag": "RefAny"}, "mdBidirResponseType": null, "mdBidirResponseSchema": null, "bidirectional": true"#,
+        ))
+        .unwrap();
+        assert!(!old.md_asks);
+        assert_eq!(old.sent_params().len(), 1);
+        let back = serde_json::to_value(&old).unwrap();
+        assert!(back.get("mdBidirType").is_none() && back.get("mdAsks").is_none(), "{back}");
 
-        // 3. RefAny → Some(TypeRef::RefAny)  (standard bidirectional, T=Value)
-        let json_ref_any = r#"{
-            "mdName": "wizard",
-            "mdFullPath": "interactive.wizard",
-            "mdNamespace": "interactive",
-            "mdStreaming": true,
-            "mdParams": [],
-            "mdReturns": {"tag": "RefAny"},
-            "mdBidirType": {"tag": "RefAny"}
-        }"#;
-        let method: MethodDef = serde_json::from_str(json_ref_any).unwrap();
-        assert!(
-            matches!(method.md_bidir_type, Some(TypeRef::RefAny)),
-            "RefAny tag should deserialize to Some(RefAny)"
-        );
-
-        // 4. RefNamed → Some(TypeRef::RefNamed(...))  (typed bidirectional)
-        let json_ref_named = r#"{
-            "mdName": "wizard",
-            "mdFullPath": "interactive.wizard",
-            "mdNamespace": "interactive",
-            "mdStreaming": true,
-            "mdParams": [],
-            "mdReturns": {"tag": "RefAny"},
-            "mdBidirType": {
-                "tag": "RefNamed",
-                "contents": {
-                    "qnNamespace": "interactive",
-                    "qnLocalName": "WizardRequest"
-                }
-            }
-        }"#;
-        let method: MethodDef = serde_json::from_str(json_ref_named).unwrap();
-        if let Some(TypeRef::RefNamed(qn)) = method.md_bidir_type {
-            assert_eq!(qn.qn_namespace, "interactive");
-            assert_eq!(qn.qn_local_name, "WizardRequest");
-        } else {
-            panic!("Expected Some(RefNamed(...)) for typed bidirectional");
+        for extra in [r#", "mdAsks": true"#, r#", "asks": true"#] {
+            let asks: MethodDef = serde_json::from_str(&base(extra)).unwrap();
+            assert!(asks.md_asks, "{extra}");
+            let sent = asks.sent_params();
+            assert_eq!(sent.iter().map(|p| p.pd_name.as_str()).collect::<Vec<_>>(), ["filter", "confirm"]);
+            assert!(!sent[1].pd_required && sent[1].pd_type.is_confirm_token());
+            assert_eq!(sent[1].pd_type.to_ts(), "ConfirmToken");
         }
+
+        // A `confirm` the IR lists is the standard one, its description kept.
+        let listed: MethodDef = serde_json::from_str(&base(
+            r#", "mdAsks": true, "mdParams": [{"pdName": "confirm", "pdType": {"tag": "RefNamed", "contents": {"qnNamespace": "tickets", "qnLocalName": "ConfirmToken"}}, "pdDescription": "the token", "pdRequired": false}]"#,
+        ))
+        .unwrap();
+        let sent = listed.sent_params();
+        assert_eq!(sent.len(), 1);
+        assert!(sent[0].pd_type.is_confirm_token());
+        assert_eq!(sent[0].pd_description.as_deref(), Some("the token"));
     }
 
     /// IR-9: `md_role` must default to `Rpc` when the field is absent,
