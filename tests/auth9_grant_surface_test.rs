@@ -75,7 +75,6 @@ fn method(
         md_cardinality: Cardinality::from_streaming(streaming), md_error: None, md_progress: None,
         md_params: params,
         md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-        md_asks: false,
         md_role: Default::default(),
         md_deprecation: None,
         md_requires_credential: None,

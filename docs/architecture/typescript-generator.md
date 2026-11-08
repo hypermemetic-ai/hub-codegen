@@ -15,7 +15,7 @@ When `--generate all` (default), the following files are produced:
 
 | File | Purpose | Static/Dynamic |
 |------|---------|----------------|
-| `types.ts` | Core protocol types (PlexusStreamItem, guards, NeedsInput and ConfirmToken) | Static |
+| `types.ts` | Core protocol types (PlexusStreamItem, guards, errors) | Static |
 | `rpc.ts` | RpcClient interface + helpers (`extractData`, `collectOne`) | Static |
 | `transport.ts` | WebSocket/browser transport implementation | Static (variant per `--transport`) |
 | `tsconfig.json` | TypeScript compiler config | Static (variant per `--transport`) |
@@ -41,7 +41,6 @@ Entirely static (identical across all IR). Contains:
 
 - **`PlexusStreamItem`** discriminated union: `data | progress | error | done`
 - Type guards (`isPlexusStreamItemData`, etc.)
-- **`ConfirmToken`**, **`NeedsInputField`**, **`NeedsInput`**, **`isNeedsInput`** (ASK-1): the proposal a method that asks may answer with; such a method takes `confirm?: ConfirmToken` and yields `T | NeedsInput`
 - **`PlexusError`** class: exception with `code`, `recoverable`, `metadata`
 
 ### `rpc.ts` — Layer 1: RPC Helpers

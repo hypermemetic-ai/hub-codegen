@@ -72,7 +72,7 @@ TypeScript:
 
 ```
 generated/
-├── types.ts            # protocol types: PlexusStreamItem, NeedsInput and ConfirmToken, errors
+├── types.ts            # protocol types: PlexusStreamItem, errors
 ├── rpc.ts              # RpcClient interface and stream helpers
 ├── transport.ts        # PlexusRpcClient — WebSocket transport, credentials
 ├── index.ts            # re-exports, one `export * as <Namespace>` per namespace
@@ -126,34 +126,13 @@ await rpc.connect();
 const greeter = Greeter.createGreeterClient(rpc);
 ```
 
-### A method that asks
+### No server-to-client requests
 
-A method whose IR says `mdAsks` (ASK-1: `#[method(asks)]`) may finish its
-call with a proposal in place of acting — an item `{ type: 'needs_input',
-summary, effects, fields, token, expires }`, then `done` — having done
-nothing. Its client takes an optional last parameter `confirm?:
-ConfirmToken`, and its item is `T | NeedsInput`; call it again with the same
-params, each field's value under its parameter's name, and the token:
-
-```typescript
-import { isNeedsInput } from './generated';
-
-const tickets = Tickets.createTicketsClient(rpc);
-for await (const ev of tickets.archive('label stale')) {
-  if (isNeedsInput(ev)) {
-    if (await askYesNo(ev.summary)) for await (const done of tickets.archive('label stale', ev.token)) show(done);
-  } else show(ev);
-}
-```
-
-`ConfirmToken` (a string), `NeedsInputField` (`name`, `options?`,
-`default?`, `help?`), `NeedsInput` and `isNeedsInput` are in the package's
-`types.ts`, once. In Rust the item is `Asking<T>` — `Item(T)` or
-`NeedsInput(NeedsInput)` — and `confirm` an `Option<ConfirmToken>`; the
-Python runtime yields a `NeedsInput` dataclass in place of the decoded item.
-A server never asks its caller mid-call: the bidirectional `request` item,
-`<backend>.respond` and `onBidirectionalRequest` are gone (ASK-1). An older
-IR's `bidirectional` reads as not asking.
+A server never asks its caller mid-call (ASK-1): the bidirectional `request`
+item, `<backend>.respond` and `onBidirectionalRequest` are gone, and an old
+server's `request` item is neither answered nor yielded. An older IR's
+`bidirectional` is read and ignored. A service that wants a caller's
+confirmation builds it as its own methods (a `dry_run`, a plan id).
 
 ## Development
 

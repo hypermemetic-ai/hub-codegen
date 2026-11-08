@@ -13,12 +13,6 @@ the caller stopped reading (synapse's frame). One reader task routes every
 notification to its call's bounded inbox; nothing new is sent that synapse
 does not send.
 
-A method that asks (ASK-1) may finish its call with a proposal: a ``data``
-item whose content is ``{"type": "needs_input", …}``, yielded as a
-``NeedsInput`` in place of the method's own item. Nothing was done; call the
-method again with the same params, each field's value under its name, and
-``confirm`` set to its ``token``.
-
 Embedded verbatim in every generated package by service-codegen (PYTHON-4); it
 knows no backend's methods. PYTHON-7 extends ``Service._open``, ``Service._send`` and
 ``MethodStream._control`` for a call's input half.
@@ -50,8 +44,7 @@ from .errors import (
     error_from_rpc,
 )
 
-__all__ = ["Service", "MethodStream", "Page", "Progress", "Requirement", "ProgressHook", "ConfirmToken",
-           "NeedsInput", "NeedsInputField"]
+__all__ = ["Service", "MethodStream", "Page", "Progress", "Requirement", "ProgressHook"]
 
 E = TypeVar("E")
 E_co = TypeVar("E_co", covariant=True)
@@ -74,51 +67,6 @@ class Progress:
 
     message: str
     percentage: float | None = None
-
-
-ConfirmToken = str
-"""A proposal's token (ASK-1): opaque, sent back as ``confirm`` to go ahead."""
-
-
-@dataclass(frozen=True, slots=True)
-class NeedsInputField:
-    """A value a proposal needs: a parameter the method already declares; its value goes under ``name``."""
-
-    name: str
-    options: list[Any] | None = None
-    default: Any = None
-    help: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class NeedsInput:
-    """The proposal (``needs_input``) a method that asks answers with in place of acting (ASK-1).
-
-    Nothing was done. Call the method again with the same params, each field's
-    value under its name, and ``confirm=token``; past ``expires`` (RFC 3339) a
-    fresh proposal comes back instead.
-    """
-
-    summary: str
-    effects: list[Any]
-    fields: list[NeedsInputField]
-    token: ConfirmToken
-    expires: str
-
-    @staticmethod
-    def of(content: Any) -> NeedsInput | None:
-        """The proposal ``content`` is (``{"type": "needs_input", …}``), else None."""
-        if type(content) is not dict or content.get("type") != "needs_input":
-            return None
-        fields = content.get("fields") or []
-        return NeedsInput(
-            summary=str(content.get("summary", "")),
-            effects=list(content.get("effects") or []),
-            fields=[NeedsInputField(name=str(f.get("name", "")), options=f.get("options"), default=f.get("default"),
-                                    help=f.get("help")) for f in fields if isinstance(f, dict)],
-            token=str(content.get("token", "")),
-            expires=str(content.get("expires", "")),
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,7 +166,7 @@ class MethodStream(Generic[E_co]):
     """One call's items as an async iterator — lazy: nothing is sent until it is first read.
 
     ``async for ev in stream`` yields each ``data`` item's ``decode(content)``
-    — a proposal's as a ``NeedsInput`` (ASK-1) — and ends at ``done``; an ``error`` item, the call's last, raises its
+    and ends at ``done``; an ``error`` item, the call's last, raises its
     ``PlexusError`` (or is yielded, and the stream ends, under ``errors="yield"``); ``page`` and ``progress`` items are
     kept on ``.page`` / ``.progress``, not yielded. Leaving early — ``break``,
     ``aclose()``, or ``async with`` — unsubscribes. Hold the stream in a
@@ -279,9 +227,6 @@ class MethodStream(Generic[E_co]):
                     self.page = _page(content)
                     continue
                 self.items_seen += 1
-                proposal = NeedsInput.of(content)
-                if proposal is not None:
-                    return proposal  # type: ignore[return-value]  # a method that asks yields E | NeedsInput
                 return self._decode(content)
             if kind == "done":
                 self._finish()

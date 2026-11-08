@@ -67,7 +67,7 @@ The Rust generator ignores `GenerationOptions` and uses only `&IR` — it has no
 
 ### `src/types.rs`
 
-Contains the `PlexusStreamItem` enum — the universal wire-format envelope — and ASK-1's standard types: `ConfirmToken`, `NeedsInputField`, `NeedsInput` and `Asking<T>` (`Item(T)` or `NeedsInput(…)`), the item of a method that asks. The Rust equivalent of the TypeScript `types.ts`.
+Contains only the `PlexusStreamItem` enum — the universal wire-format envelope. This is the Rust equivalent of the TypeScript `types.ts`.
 
 ### `src/client.rs`
 

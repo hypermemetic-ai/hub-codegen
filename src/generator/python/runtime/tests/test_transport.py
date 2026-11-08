@@ -19,7 +19,7 @@ from runtime.errors import (
     TooManyCalls,
     Unauthenticated,
 )
-from runtime.transport import Service, Page, Progress, NeedsInput, NeedsInputField, Requirement
+from runtime.transport import Service, Page, Progress, Requirement
 
 from .mock_service import DONE, MockService, data, error_item
 
@@ -194,33 +194,8 @@ async def test_page_and_progress_not_yielded(mock: MockService) -> None:
         assert second.page == Page(next=None, remaining=0, first=1)
 
 
-PROPOSAL = {"type": "needs_input", "summary": "archive KILN-2 (1 not done)", "effects": [{"archive": "KILN-2"}],
-            "fields": [{"name": "children", "options": ["reparent", "delete"], "default": "reparent"}],
-            "token": "v1.1794100000.abc", "expires": "2026-11-07T12:00:00Z"}
-
-
-async def test_needs_input_is_yielded_and_nothing_is_answered(mock: MockService) -> None:
-    """ASK-1: a proposal is a data item yielded as a NeedsInput, never decoded as the method's item; the
-    answer is the same method again with `confirm` — and an old server's `request` item is no question."""
-    e1 = mock.expect_call("tickets.archive").reply([data(PROPOSAL), DONE])
-    async with Service(mock.url, backend="menger") as service:
-        # a method that asks yields its decoder's item or a NeedsInput (the decoder never sees a proposal)
-        got: list[Any] = await service.call("tickets.archive", {"filter": "label stale"},
-                                            decode=lambda c: ("item", c)).collect()
-        assert got == [NeedsInput(summary="archive KILN-2 (1 not done)", effects=[{"archive": "KILN-2"}],
-                                  fields=[NeedsInputField(name="children", options=["reparent", "delete"],
-                                                          default="reparent")],
-                                  token="v1.1794100000.abc", expires="2026-11-07T12:00:00Z")]
-        assert NeedsInput.of({"type": "archived", "id": "KILN-2"}) is None
-        e2 = mock.expect_call("tickets.archive").reply([data({"type": "archived", "id": "KILN-2"}), DONE])
-        token = got[0].token
-        done = await service.call("tickets.archive", {"filter": "label stale", "children": "reparent",
-                                                      "confirm": token}, decode=dict).collect()
-        assert done == [{"type": "archived", "id": "KILN-2"}]
-        assert e2.frame is not None and e2.frame["params"]["params"] == {"filter": "label stale", "children": "reparent",
-                                                                         "confirm": token}
-        assert e1.frame is not None and e1.frame["params"]["params"] == {"filter": "label stale"}
-
+async def test_a_request_item_is_neither_answered_nor_yielded(mock: MockService) -> None:
+    """ASK-1: bidir is gone; an old server's ``request`` item is no question and no item."""
     old = {"type": "request", "requestId": "r1", "requestData": {"type": "confirm", "message": "ok?"}, "timeoutMs": 5000}
     mock.expect_call("m.ask").reply([old, data({"n": 1}), DONE])
     async with Service(mock.url, backend="menger") as service:

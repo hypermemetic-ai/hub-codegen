@@ -31,7 +31,6 @@ fn minimal_ir() -> IR {
             md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_asks: false,
             md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     let mut ir_plugins = HashMap::new();
@@ -318,7 +317,6 @@ fn multi_ns_ir() -> IR {
             md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_asks: false,
             md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     ir_methods.insert(
@@ -331,7 +329,6 @@ fn multi_ns_ir() -> IR {
             md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("boolean".to_string(), None),
-            md_asks: false,
             md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     ir_methods.insert(
@@ -344,7 +341,6 @@ fn multi_ns_ir() -> IR {
             md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_asks: false,
             md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     let mut ir_plugins = HashMap::new();

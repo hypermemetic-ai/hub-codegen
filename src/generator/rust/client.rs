@@ -805,12 +805,7 @@ fn generate_dynamic_child_struct(method: &MethodDef, _ir: &IR, namespace: &str) 
 
 fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
     let method_name = to_snake(&method.md_name);
-    // ASK-1: a method that asks yields its item or a proposal.
-    let return_type = if method.md_asks {
-        format!("Asking<{}>", type_ref_to_rust(&method.md_returns, ir))
-    } else {
-        type_ref_to_rust(&method.md_returns, ir)
-    };
+    let return_type = type_ref_to_rust(&method.md_returns, ir);
 
     // Generate doc comment
     let mut doc_lines = vec![];
@@ -873,10 +868,6 @@ fn generate_method(method: &MethodDef, ir: &IR, _namespace: &str) -> String {
         .map(|p| {
             let param_name = escape_keyword(&to_snake(&p.pd_name));
             let param_type = type_ref_to_rust(&p.pd_type, ir);
-            // ASK-1: `confirm` is optional — `None` until a proposal's token is in hand.
-            if p.pd_type.is_confirm_token() {
-                return format!("{}: Option<{}>", param_name, param_type);
-            }
             format!("{}: {}", param_name, param_type)
         })
         .collect();
@@ -1044,7 +1035,6 @@ fn type_ref_to_rust(tr: &TypeRef, ir: &IR) -> String {
 
 fn primitive_to_rust(prim: &str, format: Option<&str>) -> String {
     match (prim, format) {
-        ("string", Some(crate::ir::CONFIRM_TOKEN_FORMAT)) => "ConfirmToken".to_string(), // ASK-1: the standard type
         ("string", Some("uuid")) => "String".to_string(),
         ("string", _) => "String".to_string(),
         ("integer", Some("int64")) => "i64".to_string(),

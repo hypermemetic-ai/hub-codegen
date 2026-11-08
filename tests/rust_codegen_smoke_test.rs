@@ -147,7 +147,6 @@ fn create_comprehensive_test_ir() -> IR {
                 qn_namespace: "echo".to_string(),
                 qn_local_name: "EchoResponse".to_string(),
             }),
-            md_asks: false,
             md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
 
@@ -180,7 +179,6 @@ fn create_comprehensive_test_ir() -> IR {
                 qn_namespace: "echo".to_string(),
                 qn_local_name: "EchoEvent".to_string(),
             }),
-            md_asks: false,
             md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
 

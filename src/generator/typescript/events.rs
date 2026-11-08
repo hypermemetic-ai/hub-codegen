@@ -64,7 +64,6 @@ pub fn generate_events(namespace: &str, methods: &[&MethodDef], ir: &IR, generat
     let mut cross: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut children: BTreeMap<String, String> = BTreeMap::new();
     let mut uses_result = false;
-    let mut uses_needs_input = false;
     let mut items: Vec<String> = Vec::new();
     let mut statics: Vec<String> = Vec::new();
     let mut dynamics: Vec<String> = Vec::new();
@@ -82,13 +81,6 @@ pub fn generate_events(namespace: &str, methods: &[&MethodDef], ir: &IR, generat
                         format!("Result<{ok}, {}>", err.to_ts_in_namespace(namespace))
                     }
                     None => ok,
-                };
-                // ASK-1: a method that asks may finish with a proposal.
-                let item = if m.md_asks {
-                    uses_needs_input = true;
-                    format!("{item} | NeedsInput")
-                } else {
-                    item
                 };
                 items.push(format!("  | {{ method: '{}'; event: {item} }}", m.md_name));
             }
@@ -111,9 +103,6 @@ pub fn generate_events(namespace: &str, methods: &[&MethodDef], ir: &IR, generat
     let mut imports = Vec::new();
     if uses_result {
         imports.push(format!("import type {{ Result }} from '{to_root}rpc';"));
-    }
-    if uses_needs_input {
-        imports.push(format!("import type {{ NeedsInput }} from '{to_root}types';"));
     }
     if !local.is_empty() {
         imports.push(format!("import type {{ {} }} from './types';", local.into_iter().collect::<Vec<_>>().join(", ")));

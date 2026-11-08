@@ -21,8 +21,6 @@
 mod common_naming;
 #[path = "support/returns_line.rs"]
 mod returns_line;
-#[path = "support/ask_line.rs"]
-mod ask_line;
 
 use service_codegen::generator::{GenerationOptions, TransportEnv};
 use service_codegen::{generate_rust, generate_typescript, IR};
@@ -201,14 +199,16 @@ fn existing_output_unchanged() {
         }
         let content = now.get(path).unwrap_or_else(|| panic!("{path} is no longer generated"));
         let content = &returns_line::before_returns46(path, content, &|p| now.contains_key(p));
-        let content = &ask_line::before_ask1(path, content);
         let content = if file == "client.ts" && !path.contains("-rust/") {
             to_main_spelling(content)
         } else if name == "types.ts" {
-            // POLYGLOT-12: the item types name the wire's fields; nothing else moved
+            // POLYGLOT-12: the item types name the wire's fields; nothing else moved.
+            // ASK-1 took bidir's `request` item and StandardRequest /
+            // StandardResponse out of it: the record's hash for the root
+            // types.ts was taken again then, with that the only change.
             content.replacen("  plexus_hash: string;", "  plexusHash: string;", 1)
                 .replacen("  content_type: string;", "  contentType: string;", 1)
-                .replacen("// These types define the wire format for all plexus streaming responses.\n// Field names are the wire's (plexus-wire spec/03): snake_case, but for the\n// request item's, which plexus-core sends in camelCase (POLYGLOT-12).\n", "// These types define the wire format for all plexus streaming responses.\n", 1)
+                .replacen("// These types define the wire format for all plexus streaming responses.\n// Field names are the wire's (plexus-wire spec/03): snake_case.\n", "// These types define the wire format for all plexus streaming responses.\n", 1)
         } else {
             content.clone()
         };

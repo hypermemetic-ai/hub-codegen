@@ -277,11 +277,6 @@ fn generate_namespace(
         ));
     }
 
-    // ASK-1: a method that asks takes a ConfirmToken and may answer a NeedsInput.
-    if flat_methods.iter().any(|m| m.md_asks) {
-        lines.push(format!("import type {{ ConfirmToken, NeedsInput }} from '{}types';", to_root));
-    }
-
     // BIDIR-19: the input half's runtime, for a namespace with a method that has one.
     if flat_methods.iter().any(|m| m.md_input.is_some()) {
         lines.push(format!("import {{ pullInput, pushInput }} from '{}input';", to_root));
@@ -441,7 +436,7 @@ fn generate_namespace(
         } else {
             params.clone()
         };
-        let return_type = item_ts(method, namespace);
+        let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Streaming methods return a MethodStream that carries their path
         // (RETURNS-17); non-streaming return Promise
@@ -611,7 +606,7 @@ fn generate_namespace(
         } else {
             generate_params(&sent, namespace)
         };
-        let return_type = item_ts(method, namespace);
+        let return_type = method.md_returns.to_ts_in_namespace(namespace);
 
         // Build params object for RPC call (SYNAPSE-CC-2: the sent ones only)
         let params_object = generate_params_object(&sent);
@@ -840,18 +835,6 @@ fn dynamic_child_handle_type(method: &MethodDef, ir: &IR) -> String {
 /// the child, which is a diagnosable condition higher up the pipeline.
 fn dynamic_child_target_type(method: &MethodDef, ir: &IR) -> String {
     dynamic_child_class_name(method, ir).unwrap_or_else(|| "unknown".to_string())
-}
-
-/// The item a method yields, as TypeScript: its `md_returns`, and for a
-/// method that asks (ASK-1) `| NeedsInput` — the proposal it may finish
-/// with in place of acting.
-pub(super) fn item_ts(method: &MethodDef, namespace: &str) -> String {
-    let item = method.md_returns.to_ts_in_namespace(namespace);
-    if method.md_asks {
-        format!("{item} | NeedsInput")
-    } else {
-        item
-    }
 }
 
 /// IR-9: Resolve the child client namespace for a DynamicChild method.

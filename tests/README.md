@@ -34,7 +34,6 @@ generated Rust client, and `ir9_dynamic_child_test` runs `tsc` when it is on
 | `returns23_deterministic_output_test.rs` | the output is deterministic: namespaces, warnings and file lists in a fixed order (RETURNS-23) |
 | `returns38_watch_test.rs` | `watch(a, b, c)` in the generated TS client (RETURNS-38) |
 | `bidir19_input_test.rs` | a method with an input half (`mdInput`): TS and Rust goldens in `golden/bidir19/`, every method without input byte-identical, `tsc --strict` with `ts_input/types.test.ts`, and `ts_input/live.test.ts` against a real service with `Input<Item>` / `Input<Bytes>` methods (`$BIDIR_FIXTURE_SERVER`; skipped without it unless `SERVICE_CODEGEN_REQUIRE_BIDIR=1`) (BIDIR-19) |
-| `ask4_needs_input_test.rs` | a method that asks (`mdAsks`, ASK-1): `confirm?: ConfirmToken` and `T \| NeedsInput` in TS, `Option<ConfirmToken>` and `Asking<T>` in Rust (goldens in `golden/ask4/`, the crate compiled and its decoding tested), the standard types once per package, bidir gone, an older IR's bidir read as not asking, IR 3.1 / 4.0 read; `tsc --strict` with `ts_ask4/types.test.ts` and `node --test ts_ask4/runtime.test.ts` (ASK-4) |
 | `tickets37_service_types_test.rs` | a type the protocol root declares is generated where it is used most and imported elsewhere (TICKETS-37) |
 | `json_keys.rs` | the JSON shared with synapse-cc reads the old keys and writes the new (NAMING-10) |
 | `naming_gate.rs` | `scripts/naming-gate.sh`: every name says service (NAMING-10) |

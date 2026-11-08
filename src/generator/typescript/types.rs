@@ -103,49 +103,6 @@ export function isPlexusStreamItemProgress(e: PlexusStreamItem): e is PlexusStre
 export function isPlexusStreamItemError(e: PlexusStreamItem): e is PlexusStreamItemError { return e.type === 'error'; }
 export function isPlexusStreamItemDone(e: PlexusStreamItem): e is PlexusStreamItemDone { return e.type === 'done'; }
 
-// === ASK-1: a method that asks ===
-//
-// A method that needs its caller's yes, or a value only planning can name,
-// finishes its call with a proposal — a `data` item whose content is a
-// NeedsInput, then `done` — and has done nothing. The caller calls the same
-// method again with the same params, each field's value under its own
-// parameter name, and `confirm` set to the proposal's token.
-
-/** A proposal's token: opaque to every client, sent back as `confirm`. */
-export type ConfirmToken = string;
-
-/** A value the proposal needs: a parameter the method already declares. */
-export interface NeedsInputField {
-  /** The parameter's name; its value goes under it in the answer call */
-  name: string;
-  /** The values it may take, when the method names them */
-  options?: unknown[];
-  /** The value it takes when the caller gives none */
-  default?: unknown;
-  /** What it is for */
-  help?: string;
-}
-
-/** The proposal a method that asks answers with in place of acting (`needs_input`). */
-export interface NeedsInput {
-  type: 'needs_input';
-  /** What the call would do, in a line */
-  summary: string;
-  /** What it would change, one entry each */
-  effects: unknown[];
-  /** The values it needs; none for a plain confirmation */
-  fields: NeedsInputField[];
-  /** Sent back as `confirm` to go ahead */
-  token: ConfirmToken;
-  /** When the token stops being taken (RFC 3339) */
-  expires: string;
-}
-
-/** The item is a proposal: nothing was done, and `token` confirms it. */
-export function isNeedsInput(e: unknown): e is NeedsInput {
-  return typeof e === 'object' && e !== null && (e as { type?: unknown }).type === 'needs_input';
-}
-
 /** Error thrown when a PlexusStreamItemError is received */
 export class PlexusError extends Error {
   readonly code: string | undefined;

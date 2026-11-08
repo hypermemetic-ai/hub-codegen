@@ -259,7 +259,6 @@ mod tests {
             md_cardinality: crate::ir::Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_asks: false,
             md_role: MethodRole::Rpc,
             md_deprecation: None,
             md_requires_credential: requires,

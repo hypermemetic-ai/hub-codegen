@@ -47,7 +47,6 @@ fn dynamic_child_ir(
             md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_asks: false,
             md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
 
@@ -93,7 +92,6 @@ fn dynamic_child_ir(
                 qn_namespace: "solar.body".to_string(),
                 qn_local_name: "CelestialBody".to_string(),
             }))),
-            md_asks: false,
             md_role: MethodRole::DynamicChild {
                 list_method: list_method.map(String::from),
                 search_method: search_method.map(String::from),
@@ -111,7 +109,6 @@ fn dynamic_child_ir(
                 md_cardinality: Cardinality::Many, md_error: None, md_progress: None,
                 md_params: vec![],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-                md_asks: false,
                 md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
         );
         solar_methods.push(name.to_string());
@@ -134,7 +131,6 @@ fn dynamic_child_ir(
                     pd_default: None, pd_deprecation: None, pd_source: None,
                 }],
                 md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-                md_asks: false,
                 md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
         );
         solar_methods.push(name.to_string());
@@ -329,7 +325,6 @@ fn test_pre_ir_regression_no_dynamic_child() {
             md_cardinality: Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_asks: false,
             md_role: MethodRole::Rpc, md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
     );
     ir.ir_plugins.insert("echo".to_string(), vec!["ping".to_string()]);
