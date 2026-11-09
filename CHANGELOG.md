@@ -5,6 +5,19 @@ NAMING-10's merge (0.5.1, the rename).
 
 ## Unreleased
 
+- ASK-4 (ASK-1): bidir goes, and nothing replaces it — Plexus has no
+  in-call or protocol-wide confirmation (ASK-1's `needs_input` / `ConfirmToken`
+  proposal was built and withdrawn before release). Gone: the `request` item
+  (`PlexusStreamItemRequest`), `StandardRequest` / `StandardResponse` /
+  `SelectOption` / `PlexusResponse`, `onBidirectionalRequest` /
+  `setBidirectionalHandler` and `<backend>.respond` in the TypeScript
+  transport, `test/bidir-smoke.test.ts` and `test:bidir`, the Python runtime's
+  `Request`, `RequestHook` and `on_request`, and `MethodDef.md_bidir_type`. An
+  older IR's `mdBidirType` / `bidirectional` is read and ignored, and generates
+  what an IR without it does; an old server's `request` item is neither
+  answered nor yielded. IR 3.1 (3.0 without the bidir keys) is read beside
+  2.0, 2.1 and 3.0. Input streams (BIDIR-19) are unchanged.
+
 - BIDIR-19: a method with an input half (`mdInput`, plexus-wire spec/10) is
   generated. TypeScript: the pull form takes the input last
   (`AsyncIterable<T> | Iterable<T>`, pulled only while the service's credit

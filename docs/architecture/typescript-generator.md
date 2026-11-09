@@ -15,7 +15,7 @@ When `--generate all` (default), the following files are produced:
 
 | File | Purpose | Static/Dynamic |
 |------|---------|----------------|
-| `types.ts` | Core protocol types (PlexusStreamItem, guards, bidirectional types) | Static |
+| `types.ts` | Core protocol types (PlexusStreamItem, guards, errors) | Static |
 | `rpc.ts` | RpcClient interface + helpers (`extractData`, `collectOne`) | Static |
 | `transport.ts` | WebSocket/browser transport implementation | Static (variant per `--transport`) |
 | `tsconfig.json` | TypeScript compiler config | Static (variant per `--transport`) |
@@ -25,7 +25,6 @@ When `--generate all` (default), the following files are produced:
 | `{ns}/index.ts` | Namespace barrel re-export | Dynamic |
 | `index.ts` | Root barrel re-export | Dynamic |
 | `test/smoke.test.ts` | Connectivity smoke test (bun:test) | Dynamic |
-| `test/bidir-smoke.test.ts` | Bidirectional smoke test (if bidir methods exist) | Dynamic |
 | `.codegen-metadata.json` | Toolchain versions + file hashes | Dynamic |
 
 Nested namespaces follow directory convention: `solar.earth.luna` → `solar/earth/luna/{types,client,index}.ts`.
@@ -40,11 +39,8 @@ Nested namespaces follow directory convention: `solar.earth.luna` → `solar/ear
 
 Entirely static (identical across all IR). Contains:
 
-- **`PlexusStreamItem`** discriminated union: `data | progress | error | done | request`
+- **`PlexusStreamItem`** discriminated union: `data | progress | error | done`
 - Type guards (`isPlexusStreamItemData`, etc.)
-- **`StandardRequest`** union: `confirm | prompt | select` (server→client bidirectional requests)
-- **`StandardResponse`** union: `confirmed | text | selected | cancelled`
-- **`PlexusResponse`**: wraps a response with `requestId` for correlation
 - **`PlexusError`** class: exception with `code`, `recoverable`, `metadata`
 
 ### `rpc.ts` — Layer 1: RPC Helpers
@@ -65,8 +61,8 @@ Entirely static. Contains:
 Static template with one conditional line: the `import WebSocket from 'ws'` is stripped for browser mode.
 
 Contents:
-- **`PlexusRpcConfig`**: `backend`, `url`, `connectionTimeout`, `debug`, `onBidirectionalRequest`
-- **`PlexusRpcClient`** class: implements `RpcClient`, manages JSON-RPC 2.0 subscriptions, handles bidirectional requests, connection lifecycle
+- **`PlexusRpcConfig`**: `backend`, `url`, `connectionTimeout`, `debug`, credentials
+- **`PlexusRpcClient`** class: implements `RpcClient`, manages JSON-RPC 2.0 subscriptions, connection lifecycle
 - **`createClient(config)`** factory
 
 ### `{namespace}/types.ts` — Layer 2: Domain Types

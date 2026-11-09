@@ -83,9 +83,6 @@ fn resolve_type_dependencies(ir: &IR, requested: &[String]) -> PluginPartition {
                 for param in &method.sent_params() {
                     collect_ns_refs_from_typeref(&param.pd_type, &mut new_deps);
                 }
-                if let Some(bidir) = &method.md_bidir_type {
-                    collect_ns_refs_from_typeref(bidir, &mut new_deps);
-                }
             }
         }
 
@@ -242,10 +239,6 @@ fn generate_code_files(
     files.insert("tsconfig.json".to_string(), package::generate_tsconfig(options.transport));
     files.insert("test/smoke.test.ts".to_string(), tests::generate_smoke_test(ir, options.transport, options.backend_url.as_deref()));
 
-    if tests::has_bidir_methods(ir) {
-        files.insert("test/bidir-smoke.test.ts".to_string(), tests::generate_bidir_smoke_test(ir, options.transport, options.backend_url.as_deref()));
-    }
-
     files
 }
 
@@ -262,8 +255,7 @@ fn generate_all(
     // plugin additions) changes.
     let mut files = generate_code_files(ir, options, emit_deprecation, deprecation_warnings);
     let version_hash = compute_plugin_hash(&files);
-    let has_bidir = tests::has_bidir_methods(ir);
-    files.insert("package.json".to_string(), package::generate_package_json(options.transport, has_bidir, &version_hash));
+    files.insert("package.json".to_string(), package::generate_package_json(options.transport, &version_hash));
     files
 }
 
@@ -340,9 +332,8 @@ fn generate_package_only(ir: &IR, options: &GenerationOptions) -> HashMap<String
     let mut scratch = Vec::new();
     let code_files = generate_code_files(ir, options, emit_deprecation, &mut scratch);
     let version_hash = compute_plugin_hash(&code_files);
-    let has_bidir = tests::has_bidir_methods(ir);
     let mut files = HashMap::new();
-    files.insert("package.json".to_string(), package::generate_package_json(options.transport, has_bidir, &version_hash));
+    files.insert("package.json".to_string(), package::generate_package_json(options.transport, &version_hash));
     files
 }
 

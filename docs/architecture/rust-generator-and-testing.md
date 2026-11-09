@@ -67,7 +67,7 @@ The Rust generator ignores `GenerationOptions` and uses only `&IR` — it has no
 
 ### `src/types.rs`
 
-Contains only the `PlexusStreamItem` enum — the universal wire-format envelope. This is the Rust equivalent of the TypeScript `types.ts` but much smaller (no `StandardRequest`/`StandardResponse` bidirectional types yet).
+Contains only the `PlexusStreamItem` enum — the universal wire-format envelope. This is the Rust equivalent of the TypeScript `types.ts`.
 
 ### `src/client.rs`
 

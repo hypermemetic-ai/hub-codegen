@@ -49,8 +49,8 @@ const TRANSPORT_HOOKS: &[(&str, &str)] = &[
         "    // BIDIR-19: an input half hears of it first — its onDisconnect, every time.\n    for (const [id, sub] of this.subscriptions) { sub.input?.lost(); sub.done = true;",
     ),
     (
-        "    if (item.type === 'request') { this.handleBidirectionalRequest(item as PlexusStreamItemRequest); return; }\n",
-        "    // BIDIR-19: credit, ack and input_closed are the input half's, never the caller's.\n    if (sub.input?.take(item)) return;\n    if (item.type === 'request') { this.handleBidirectionalRequest(item as PlexusStreamItemRequest); return; }\n",
+        "    if (item.type === 'done' || item.type === 'error') sub.done = true;\n",
+        "    // BIDIR-19: credit, ack and input_closed are the input half's, never the caller's.\n    if (sub.input?.take(item)) return;\n    if (item.type === 'done' || item.type === 'error') sub.done = true;\n",
     ),
     (
         "  async *call(method: string, params?: unknown): AsyncGenerator<PlexusStreamItem> {\n",
@@ -77,8 +77,8 @@ const TRANSPORT_HOOKS: &[(&str, &str)] = &[
         "      // Ended before its done / error: the server is still streaming.\n      input?.callEnded(); // BIDIR-19: nothing more is sent on a call that is over\n      unsubscribe();\n",
     ),
     (
-        "        if (msg.type === 'request') { this.handleBidirectionalRequest(msg as PlexusStreamItemRequest); continue; }\n",
-        "        if (input?.take(msg)) continue;\n        if (msg.type === 'request') { this.handleBidirectionalRequest(msg as PlexusStreamItemRequest); continue; }\n",
+        "        if (msg.type === 'done' || msg.type === 'error') sub.done = true;\n",
+        "        if (input?.take(msg)) continue;\n        if (msg.type === 'done' || msg.type === 'error') sub.done = true;\n",
     ),
 ];
 

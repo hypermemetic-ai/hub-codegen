@@ -86,7 +86,6 @@ impl TestIRBuilder {
                         pd_default: None, pd_deprecation: None, pd_source: None,
                     }],
                     md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-                    md_bidir_type: None,
                     md_role: Default::default(), md_deprecation: None, md_requires_credential: None, md_auth_posture: None, md_public: false, md_grant: None, md_target: None, md_long_description: None, md_input: None,},
             );
         }

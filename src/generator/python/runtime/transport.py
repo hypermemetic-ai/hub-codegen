@@ -9,9 +9,9 @@
 The wire is today's: ``<backend>.call {method, params}`` is answered with a
 subscription id; the call's items arrive as ``subscription`` notifications
 (``params.result``) until ``done``; ``<backend>.call_unsub [id]`` ends a call
-the caller stopped reading (synapse's frame); ``<backend>.respond`` answers a
-``request`` item. One reader task routes every notification to its call's
-bounded inbox; nothing new is sent that synapse does not send.
+the caller stopped reading (synapse's frame). One reader task routes every
+notification to its call's bounded inbox; nothing new is sent that synapse
+does not send.
 
 Embedded verbatim in every generated package by service-codegen (PYTHON-4); it
 knows no backend's methods. PYTHON-7 extends ``Service._open``, ``Service._send`` and
@@ -44,7 +44,7 @@ from .errors import (
     error_from_rpc,
 )
 
-__all__ = ["Service", "MethodStream", "Page", "Progress", "Request", "Requirement", "RequestHook", "ProgressHook"]
+__all__ = ["Service", "MethodStream", "Page", "Progress", "Requirement", "ProgressHook"]
 
 E = TypeVar("E")
 E_co = TypeVar("E_co", covariant=True)
@@ -70,17 +70,6 @@ class Progress:
 
 
 @dataclass(frozen=True, slots=True)
-class Request:
-    """A ``request`` item: the service asks the client something mid-call (bidirectional)."""
-
-    request_id: str
-    data: Any
-    timeout_ms: int
-    method: str
-    subscription: int
-
-
-@dataclass(frozen=True, slots=True)
 class Requirement:
     """What a method needs before it is sent (a generated client's ``PREFLIGHT`` table)."""
 
@@ -88,9 +77,6 @@ class Requirement:
     target: str | None = None
     credential: bool = False
 
-
-RequestHook = Callable[[Request], Awaitable[Any]]
-"""Answers a ``request`` item; its value is sent as ``response_data`` (None: ``{"type": "cancelled"}``)."""
 
 ProgressHook = Callable[[Progress], Any]
 """Hears each ``progress`` item as the caller reads past it; may be sync or async."""
@@ -329,13 +315,12 @@ class Service:
     """
 
     def __init__(self, url: str, *, backend: str, credentials: Credentials | None = None,
-                 on_request: RequestHook | None = None, on_progress: ProgressHook | None = None,
+                 on_progress: ProgressHook | None = None,
                  preflight: Mapping[str, Requirement] = {}, connect_timeout: float = 10.0,
                  max_queue: int = 4096) -> None:
         self.url = url
         self.backend = backend
         self._credentials = credentials
-        self._on_request = on_request
         self._on_progress = on_progress
         self._preflight = preflight
         self._connect_timeout = connect_timeout
@@ -539,9 +524,7 @@ class Service:
             self._lost_socket(reason)
 
     async def _deliver(self, sub: int, inbox: _Inbox, item: Any) -> None:
-        if type(item) is dict and item.get("type") == "request":
-            self._spawn(self._answer(sub, inbox.method, item))
-        elif len(inbox.items) < inbox.maxsize:
+        if len(inbox.items) < inbox.maxsize:
             inbox.push(item)
         else:
             await inbox.put(item)
@@ -549,7 +532,7 @@ class Service:
     async def _answered(self, msg: dict[str, Any]) -> None:
         entry = self._pending.pop(msg["id"], None)
         if entry is None:
-            return  # the answer to an unsubscribe or a respond: nobody waits on it
+            return  # the answer to an unsubscribe: nobody waits on it
         fut, inbox = entry
         err = msg.get("error")
         if err is not None:
@@ -568,28 +551,6 @@ class Service:
         fut.set_result(sub)
         for item in self._early.pop(sub, ()):
             await self._deliver(sub, inbox, item)
-
-    async def _answer(self, sub: int, method: str, item: Mapping[str, Any]) -> None:
-        raw_timeout = item.get("timeoutMs")
-        req = Request(request_id=str(item.get("requestId", "")), data=item.get("requestData"),
-                      timeout_ms=raw_timeout if isinstance(raw_timeout, int) else 0, method=method, subscription=sub)
-        answer: Any = None
-        hook = self._on_request
-        if hook is not None:
-            try:
-                if req.timeout_ms > 0:
-                    answer = await asyncio.wait_for(hook(req), req.timeout_ms / 1000)
-                else:
-                    answer = await hook(req)
-            except Exception:  # a failing or late hook answers cancelled, as the TypeScript client does
-                answer = None
-        if answer is None:
-            answer = {"type": "cancelled"}
-        try:
-            await self._send({"jsonrpc": "2.0", "id": next(self._ids), "method": f"{self.backend}.respond",
-                              "params": {"request_id": req.request_id, "response_data": answer}})
-        except PlexusError:
-            pass
 
     def _lost_socket(self, reason: str | None) -> None:
         end = _End(reason, self._closing)

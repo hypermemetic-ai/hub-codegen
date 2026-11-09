@@ -110,12 +110,7 @@ fn get_transport_template() -> String {
 //
 // Depends on ./types (protocol types) and ./rpc (RpcClient interface + helpers).
 import WebSocket from 'ws';
-import type {
-  PlexusStreamItem,
-  PlexusStreamItemRequest,
-  StandardRequest,
-  StandardResponse,
-} from './types';
+import type { PlexusStreamItem } from './types';
 import type { RpcClient } from './rpc';
 import { currentCallScope } from './watch';
 
@@ -249,7 +244,6 @@ export interface PlexusRpcConfig {
   url: string;
   connectionTimeout?: number;
   debug?: boolean;
-  onBidirectionalRequest?: BidirectionalRequestHandler;
   /**
    * Credentials for gated methods (CA-2): a static token, an async
    * supplier, or a pluggable store. Resolved at connect() time and attached
@@ -279,10 +273,6 @@ export interface PlexusRpcConfig {
    */
   authToken?: string;
 }
-
-export type BidirectionalRequestHandler = (
-  request: StandardRequest
-) => Promise<StandardResponse | undefined>;
 
 interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -384,11 +374,10 @@ export class PlexusRpcClient implements RpcClient {
   private pendingRequests = new Map<number, PendingRequest>();
   private subscriptions = new Map<number, ActiveSubscription>();
   private pendingSubscriptionMessages = new Map<number, PlexusStreamItem[]>();
-  private config: Omit<Required<PlexusRpcConfig>, 'onBidirectionalRequest' | 'credentials' | 'attachmentSite'>;
+  private config: Omit<Required<PlexusRpcConfig>, 'credentials' | 'attachmentSite'>;
   private credentials: Credentials | undefined;
   private attachmentSiteOverride: string | undefined;
   private connectionPromise: Promise<void> | null = null;
-  private onBidirectionalRequest?: BidirectionalRequestHandler;
 
   constructor(config: PlexusRpcConfig) {
     this.config = {
@@ -401,11 +390,6 @@ export class PlexusRpcClient implements RpcClient {
     };
     this.credentials = config.credentials;
     this.attachmentSiteOverride = config.attachmentSite;
-    this.onBidirectionalRequest = config.onBidirectionalRequest;
-  }
-
-  setBidirectionalHandler(handler: BidirectionalRequestHandler | undefined): void {
-    this.onBidirectionalRequest = handler;
   }
 
   private log(...args: unknown[]): void {
@@ -543,33 +527,10 @@ export class PlexusRpcClient implements RpcClient {
       this.pendingSubscriptionMessages.get(subscriptionId)!.push(item);
       return;
     }
-    if (item.type === 'request') { this.handleBidirectionalRequest(item as PlexusStreamItemRequest); return; }
     if (item.type === 'done' || item.type === 'error') sub.done = true;
     if (sub.waiting) { const w = sub.waiting; sub.waiting = null; w(item); }
     else { sub.queue.push(item); }
     if (sub.done && sub.queue.length === 0) this.subscriptions.delete(subscriptionId);
-  }
-
-  private async handleBidirectionalRequest(requestItem: PlexusStreamItemRequest): Promise<void> {
-    const { requestId, requestData, timeoutMs } = requestItem;
-    if (!this.onBidirectionalRequest) {
-      this.log('No bidirectional handler, auto-cancelling:', requestId);
-      await this.sendBidirectionalResponse(requestId, { type: 'cancelled' }); return;
-    }
-    const timeoutPromise = new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), timeoutMs));
-    try {
-      const response = await Promise.race([this.onBidirectionalRequest(requestData), timeoutPromise]);
-      await this.sendBidirectionalResponse(requestId, response ?? { type: 'cancelled' });
-    } catch (err) {
-      this.log('Bidirectional handler error:', err);
-      await this.sendBidirectionalResponse(requestId, { type: 'cancelled' });
-    }
-  }
-
-  private async sendBidirectionalResponse(requestId: string, response: StandardResponse): Promise<void> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) { this.log('Cannot send response, not connected'); return; }
-    const id = this.nextId++;
-    this.ws.send(JSON.stringify({ jsonrpc: '2.0', id, method: `${this.config.backend}.respond`, params: { request_id: requestId, response_data: response } }));
   }
 
   /**
@@ -662,8 +623,6 @@ export class PlexusRpcClient implements RpcClient {
     if (pendingMessages) {
       this.pendingSubscriptionMessages.delete(subscriptionId);
       for (const msg of pendingMessages) {
-        // POLYGLOT-12: a request that came before the id is answered, as one after it is
-        if (msg.type === 'request') { this.handleBidirectionalRequest(msg as PlexusStreamItemRequest); continue; }
         if (msg.type === 'done' || msg.type === 'error') sub.done = true;
         sub.queue.push(msg);
       }
@@ -726,7 +685,6 @@ mod tests {
             md_cardinality: crate::ir::Cardinality::One, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefPrimitive("string".to_string(), None),
-            md_bidir_type: None,
             md_role: Default::default(),
             md_deprecation: None,
             md_requires_credential: requires,

@@ -117,7 +117,9 @@ impl IR {
     /// IR 2.x derives it from `mdStreaming` ([`MethodDef::normalize_wire`]);
     /// an IR of any other version is left to [`check_ir_version`].
     pub fn check_cardinality(v: &serde_json::Value) -> Result<(), String> {
-        if v.get("irVersion").and_then(|x| x.as_str()) != Some("3.0") {
+        // 3.0 and 3.1 say it; 2.x derives it.
+        let Some(version) = v.get("irVersion").and_then(|x| x.as_str()) else { return Ok(()) };
+        if !SUPPORTED_IR_VERSIONS.contains(&version) || version.starts_with("2.") {
             return Ok(());
         }
         let Some(methods) = v.get("irMethods").and_then(|m| m.as_object()) else { return Ok(()) };
@@ -131,7 +133,7 @@ impl IR {
         }
         missing.sort();
         Err(format!(
-            "IR 3.0 says every method's mdCardinality; {} has none: {}",
+            "IR {version} says every method's mdCardinality; {} has none: {}",
             if missing.len() == 1 { "this method" } else { "these methods" },
             missing.join(", ")
         ))
@@ -616,9 +618,9 @@ impl Cardinality {
 }
 
 /// The IR versions this service-codegen reads: 2.0 (synapse ≤ 3.16), 2.1
-/// (synapse 3.17) and 3.0 (synapse after RETURNS-36). Every generator calls
-/// this first.
-pub const SUPPORTED_IR_VERSIONS: [&str; 3] = ["2.0", "2.1", "3.0"];
+/// (synapse 3.17), 3.0 (synapse after RETURNS-36) and 3.1 (3.0 without the
+/// bidir keys, ASK-1). Every generator calls this first.
+pub const SUPPORTED_IR_VERSIONS: [&str; 4] = ["2.0", "2.1", "3.0", "3.1"];
 
 /// Refuse an IR this service-codegen cannot read, naming what it reads.
 pub fn check_ir_version(version: &str) -> anyhow::Result<()> {
@@ -626,7 +628,7 @@ pub fn check_ir_version(version: &str) -> anyhow::Result<()> {
         return Ok(());
     }
     anyhow::bail!(
-        "IR {version} is not supported; service-codegen {} reads IR 2.0, 2.1 and 3.0 (synapse 3.16 through the one that writes 3.0)",
+        "IR {version} is not supported; service-codegen {} reads IR 2.0, 2.1, 3.0 and 3.1 (synapse 3.16 through the one that writes 3.1)",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -665,24 +667,9 @@ pub struct MethodDef {
     /// no progress, and always in an IR 2.x.
     #[serde(default)]
     pub md_progress: Option<TypeRef>,
-    /// Bidirectional channel type parameter T.
-    ///
-    /// When a method uses `BidirChannel<StandardRequest<T>, StandardResponse<T>>` or
-    /// `Arc<StandardBidirChannel>` (the T=Value default), this field describes T.
-    ///
-    /// - `None`  → the method is not bidirectional, OR it uses the default
-    ///             `T = serde_json::Value` (i.e., `StandardBidirChannel`)
-    /// - `Some(TypeRef::RefAny)` → bidirectional with T=Value (explicit marker)
-    /// - `Some(TypeRef::RefNamed(...))` → bidirectional with a specific T type
-    ///
-    /// # Schema field
-    ///
-    /// The synapse IR builder populates this from the `"bidirType"` field in the
-    /// method schema JSON (emitted when `bidirectional: true` in `MethodSchema`
-    /// with a non-Value `request_type`).  When the schema only has
-    /// `bidirectional: true` but no `bidir_type` field, `None` is emitted.
-    #[serde(default)]
-    pub md_bidir_type: Option<TypeRef>,
+    // An IR before 3.1 may say `mdBidirType` / `bidirectional` (a server
+    // asking its caller mid-call, which ASK-1 retired): read and dropped
+    // ([`MethodDef::normalize_wire`]).
 
     /// Method role classification (IR-9).
     ///
@@ -898,12 +885,18 @@ impl MethodDef {
     ///   true, else `"one"`; `mdStreaming` itself is dropped. An IR 3.0
     ///   method without it never gets here: [`IR::check_cardinality`]
     ///   refuses the IR first;
+    /// - `mdBidirType` and the other bidir keys of an IR before 3.1 are
+    ///   dropped (ASK-1: bidir is gone);
     /// - `mdInjected` (IR 2.1 / 3.0, SYNAPSE-CC-8: a param the server
     ///   supplies, out of `mdParams`): each is appended to `mdParams` with its
     ///   `pdSource`, so the generators leave it out of what is sent and
     ///   document it, as they do an IR 2.0's injected param.
     pub fn normalize_wire(v: &mut serde_json::Value) {
         let Some(o) = v.as_object_mut() else { return };
+        // ASK-1: bidir is gone; an older IR's bidir keys are read and dropped.
+        for k in ["mdBidirType", "mdBidirResponseType", "mdBidirResponseSchema", "bidirectional", "mdBidirectional"] {
+            o.remove(k);
+        }
         let streaming = o.remove("mdStreaming").and_then(|s| s.as_bool()).unwrap_or(false);
         if !o.contains_key("mdCardinality") {
             o.insert("mdCardinality".into(), serde_json::json!(if streaming { "many" } else { "one" }));
@@ -1178,78 +1171,19 @@ mod tests {
         assert!(!TypeRef::RefArray(Box::new(TypeRef::RefAny)).contains_unknown());
     }
 
-    /// Test that `md_bidir_type` is correctly deserialized from IR JSON.
-    ///
-    /// Verifies three cases:
-    /// 1. Field absent       → `None` (legacy IR / non-bidir method)
-    /// 2. `null`             → `None` (explicit null from synapse)
-    /// 3. `{"tag":"RefAny"}` → `Some(TypeRef::RefAny)` (T=Value bidir)
-    /// 4. `{"tag":"RefNamed",...}` → `Some(TypeRef::RefNamed(...))` (specific T)
+    /// ASK-1: an older IR's bidir keys are read and dropped: such a method
+    /// sends what it lists, and nothing of bidir is written back.
     #[test]
-    fn test_method_def_bidir_type_deserialization() {
-        // 1. Field absent → None (backward compatibility)
-        let json_no_field = r#"{
-            "mdName": "wizard",
-            "mdFullPath": "interactive.wizard",
-            "mdNamespace": "interactive",
-            "mdStreaming": true,
-            "mdParams": [],
-            "mdReturns": {"tag": "RefAny"}
-        }"#;
-        let method: MethodDef = serde_json::from_str(json_no_field).unwrap();
-        assert!(method.md_bidir_type.is_none(), "absent field should default to None");
-
-        // 2. Explicit null → None
-        let json_null = r#"{
-            "mdName": "wizard",
-            "mdFullPath": "interactive.wizard",
-            "mdNamespace": "interactive",
-            "mdStreaming": true,
-            "mdParams": [],
-            "mdReturns": {"tag": "RefAny"},
-            "mdBidirType": null
-        }"#;
-        let method: MethodDef = serde_json::from_str(json_null).unwrap();
-        assert!(method.md_bidir_type.is_none(), "null should deserialize to None");
-
-        // 3. RefAny → Some(TypeRef::RefAny)  (standard bidirectional, T=Value)
-        let json_ref_any = r#"{
-            "mdName": "wizard",
-            "mdFullPath": "interactive.wizard",
-            "mdNamespace": "interactive",
-            "mdStreaming": true,
-            "mdParams": [],
-            "mdReturns": {"tag": "RefAny"},
-            "mdBidirType": {"tag": "RefAny"}
-        }"#;
-        let method: MethodDef = serde_json::from_str(json_ref_any).unwrap();
-        assert!(
-            matches!(method.md_bidir_type, Some(TypeRef::RefAny)),
-            "RefAny tag should deserialize to Some(RefAny)"
-        );
-
-        // 4. RefNamed → Some(TypeRef::RefNamed(...))  (typed bidirectional)
-        let json_ref_named = r#"{
-            "mdName": "wizard",
-            "mdFullPath": "interactive.wizard",
-            "mdNamespace": "interactive",
-            "mdStreaming": true,
-            "mdParams": [],
-            "mdReturns": {"tag": "RefAny"},
-            "mdBidirType": {
-                "tag": "RefNamed",
-                "contents": {
-                    "qnNamespace": "interactive",
-                    "qnLocalName": "WizardRequest"
-                }
-            }
-        }"#;
-        let method: MethodDef = serde_json::from_str(json_ref_named).unwrap();
-        if let Some(TypeRef::RefNamed(qn)) = method.md_bidir_type {
-            assert_eq!(qn.qn_namespace, "interactive");
-            assert_eq!(qn.qn_local_name, "WizardRequest");
-        } else {
-            panic!("Expected Some(RefNamed(...)) for typed bidirectional");
+    fn test_method_def_old_bidir_keys_are_dropped() {
+        let json = r#"{"mdName": "wizard", "mdFullPath": "interactive.wizard", "mdNamespace": "interactive",
+            "mdStreaming": true, "mdReturns": {"tag": "RefAny"},
+            "mdParams": [{"pdName": "filter", "pdType": {"tag": "RefPrimitive", "contents": ["string", null]}, "pdRequired": true}],
+            "mdBidirType": {"tag": "RefAny"}, "mdBidirResponseType": null, "mdBidirResponseSchema": null, "bidirectional": true}"#;
+        let old: MethodDef = serde_json::from_str(json).unwrap();
+        assert_eq!(old.sent_params().len(), 1);
+        let back = serde_json::to_value(&old).unwrap();
+        for k in ["mdBidirType", "mdBidirResponseType", "mdBidirResponseSchema", "bidirectional"] {
+            assert!(back.get(k).is_none(), "{k}: {back}");
         }
     }
 

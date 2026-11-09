@@ -28,7 +28,7 @@ generated Rust client, and `ir9_dynamic_child_test` runs `tsc` when it is on
 | `req9_jsdoc_test.rs` | per-method JSDoc from each parameter's `pd_source` |
 | `auth9_grant_surface_test.rs` | each method's grant, target and long description in the generated docs (AUTH-9) |
 | `synapse_cc_2_injected_params_test.rs` | a parameter the server injects is never sent, only documented (SYNAPSE-CC-2) |
-| `polyglot12_wire_names_test.rs` | the TS transport's types name the wire's fields as the wire does (POLYGLOT-12) |
+| `polyglot12_wire_names_test.rs` | the TS transport's types name the wire's fields as the wire does (POLYGLOT-12), and answer no `request` item (ASK-1) |
 | `returns16_variant_tags_test.rs` | the Rust generator renames each variant to its exact wire tag (RETURNS-16) |
 | `returns17_method_stream_test.rs` | a streaming method returns `MethodStream<'ns.m', E>`; a failed call throws a typed `RemoteCallError` (RETURNS-17) |
 | `returns23_deterministic_output_test.rs` | the output is deterministic: namespaces, warnings and file lists in a fixed order (RETURNS-23) |

@@ -120,9 +120,9 @@ fn transport_declares_transport_error() {
         // the kit lifts transport.ts alone: no new import
         let imports: Vec<&str> = tr.lines().filter(|l| l.starts_with("import ")).collect();
         let expected: Vec<&str> = if t == TransportEnv::Ws {
-            vec!["import WebSocket from 'ws';", "import type {", "import type { RpcClient } from './rpc';", "import { currentCallScope } from './watch';"]
+            vec!["import WebSocket from 'ws';", "import type { PlexusStreamItem } from './types';", "import type { RpcClient } from './rpc';", "import { currentCallScope } from './watch';"]
         } else {
-            vec!["import type {", "import type { RpcClient } from './rpc';", "import { currentCallScope } from './watch';"]
+            vec!["import type { PlexusStreamItem } from './types';", "import type { RpcClient } from './rpc';", "import { currentCallScope } from './watch';"]
         };
         assert_eq!(imports, expected, "{t:?}");
     }
@@ -202,10 +202,13 @@ fn existing_output_unchanged() {
         let content = if file == "client.ts" && !path.contains("-rust/") {
             to_main_spelling(content)
         } else if name == "types.ts" {
-            // POLYGLOT-12: the item types name the wire's fields; nothing else moved
+            // POLYGLOT-12: the item types name the wire's fields; nothing else moved.
+            // ASK-1 took bidir's `request` item and StandardRequest /
+            // StandardResponse out of it: the record's hash for the root
+            // types.ts was taken again then, with that the only change.
             content.replacen("  plexus_hash: string;", "  plexusHash: string;", 1)
                 .replacen("  content_type: string;", "  contentType: string;", 1)
-                .replacen("// These types define the wire format for all plexus streaming responses.\n// Field names are the wire's (plexus-wire spec/03): snake_case, but for the\n// request item's, which plexus-core sends in camelCase (POLYGLOT-12).\n", "// These types define the wire format for all plexus streaming responses.\n", 1)
+                .replacen("// These types define the wire format for all plexus streaming responses.\n// Field names are the wire's (plexus-wire spec/03): snake_case.\n", "// These types define the wire format for all plexus streaming responses.\n", 1)
         } else {
             content.clone()
         };

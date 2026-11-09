@@ -408,7 +408,6 @@ mod tests {
             md_cardinality: crate::ir::Cardinality::Many, md_error: None, md_progress: None,
             md_params: vec![],
             md_returns: TypeRef::RefAny,
-            md_bidir_type: None,
             md_role: MethodRole::Rpc,
             md_deprecation: None,
             md_requires_credential: None,

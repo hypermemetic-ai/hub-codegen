@@ -182,8 +182,7 @@ pub struct Warning { pub location: String, pub message: String }
 ├── package.json                 # Written once; user-owned thereafter
 ├── tsconfig.json                # TypeScript config
 ├── test/
-│   ├── smoke.test.ts            # Schema walk smoke test
-│   └── bidir-smoke.test.ts      # Bidirectional smoke test (if applicable)
+│   └── smoke.test.ts            # Schema walk smoke test
 ├── <namespace>/
 │   ├── types.ts
 │   ├── client.ts

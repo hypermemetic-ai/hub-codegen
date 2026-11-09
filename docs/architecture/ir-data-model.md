@@ -111,7 +111,6 @@ pub struct MethodDef {
     pub md_returns: TypeRef,          // the item T (IR 2.x: the whole event type)
     pub md_error: Option<TypeRef>,    // E of a Result<T, E> item (IR 3.0)
     pub md_progress: Option<TypeRef>, // what its progress frames carry (IR 3.0)
-    pub md_bidir_type: Option<TypeRef>, // present if bidirectional
     // … role, deprecation, credentials, grant (see ir.rs)
 }
 ```
