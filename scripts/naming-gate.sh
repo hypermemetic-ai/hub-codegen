@@ -26,6 +26,7 @@ count_only=0
 # A line matching both has the line-regex's match taken out before the
 # check, so anything else on that line is still caught.
 ALLOW=$(cat <<'ALLOWED'
+^\.hyperforge/config\.toml$	repo_name = "hub-codegen"	the forge repository's own name (github.com/hypermemetic-ai/hub-codegen), written by hyperforge; it goes when the repository is renamed (NAMING-18)
 ALLOWED
 )
 
